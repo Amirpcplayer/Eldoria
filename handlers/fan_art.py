@@ -255,10 +255,14 @@ async def fan_art_view(
         fan_art.id,
     )
 
-    # Player-facing Fan Art details intentionally show only name and price.
+    # Show name, rarity, real-currency price, and its game-gold equivalent.
+    real_price_toman = int(fan_art.price)
+    game_price_gold = (real_price_toman * 2000) // 50000
     caption = (
-        f"🎨 {fan_art.name}\n"
-        f"💰 قیمت: {int(fan_art.price):,}"
+        f"🎨 نام: {fan_art.name}\n"
+        f"💎 رریتی: {RARITY_NAMES.get(fan_art.rarity, fan_art.rarity)}\n"
+        f"💵 قیمت به ارز واقعی: {real_price_toman:,} تومان\n"
+        f"🪙 قیمت به ارز بازی: {game_price_gold:,} گلد"
     )
 
     await show_photo(
