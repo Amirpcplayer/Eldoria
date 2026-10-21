@@ -31,6 +31,12 @@ def _reference_key(chat_id: int, owner_id: int) -> str:
     return f"eldoria:panel_reference:{chat_id}:{owner_id}"
 
 
+def _active_panel_key(chat_id: int, owner_id: int, panel_name: str) -> str:
+    # Separate per chat, player, and panel type: one player's shop navigation
+    # must never remove another player's panel or a combat/boss message.
+    return f"eldoria:active_panel:{chat_id}:{owner_id}:{panel_name}"
+
+
 async def _save_reference(
     chat_id: int,
     owner_id: int,
@@ -126,11 +132,7 @@ async def show_panel(
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
 ):
-    """Send a fresh panel message without deleting or editing earlier messages.
-
-    The only intentionally live-updated UI in the game is the group-boss
-    battle message; ordinary menu navigation keeps the chat history intact.
-    """
+    """Send a panel; shop navigation replaces only that player's previous shop panel."""
     message = callback.message
     if message is None:
         await callback.answer()
@@ -140,9 +142,29 @@ async def show_panel(
     chat_id = message.chat.id
     reference_message_id = await _get_reference(chat_id, owner_id)
     if reference_message_id is None:
-        # Save the first known message as the reply anchor, but never remove it.
         reference_message_id = message.message_id
         await _save_reference(chat_id, owner_id, reference_message_id)
+
+    # Only the shop is configured for replacement. The Redis key includes the
+    # owner ID, so a different player in the same group cannot delete this panel.
+    active_key = _active_panel_key(chat_id, owner_id, panel_name) if panel_name == "shop" else None
+    if active_key is not None:
+        try:
+            previous_value = await redis.get(active_key)
+            previous_id = int(previous_value) if previous_value else None
+        except (TypeError, ValueError):
+            previous_id = None
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not read active shop panel reference")
+            previous_id = None
+
+        if previous_id is not None:
+            try:
+                await message.bot.delete_message(chat_id=chat_id, message_id=previous_id)
+            except Exception:
+                # It may already be deleted or too old; don't block shop navigation.
+                pass
 
     keyboard = protect_keyboard(reply_markup, owner_id)
     image_path = get_panel_image(panel_name)
@@ -152,17 +174,26 @@ async def show_panel(
     }
 
     if image_path is not None:
-        return await message.answer_photo(
+        sent_message = await message.answer_photo(
             photo=FSInputFile(image_path),
             caption=text,
             reply_markup=keyboard,
             parse_mode=parse_mode,
             **send_kwargs,
         )
+    else:
+        sent_message = await message.answer(
+            text=text,
+            reply_markup=keyboard,
+            parse_mode=parse_mode,
+            **send_kwargs,
+        )
 
-    return await message.answer(
-        text=text,
-        reply_markup=keyboard,
-        parse_mode=parse_mode,
-        **send_kwargs,
-    )
+    if active_key is not None:
+        try:
+            await redis.set(active_key, str(sent_message.message_id), ex=PANEL_REFERENCE_TTL)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not save active shop panel reference")
+
+    return sent_message
