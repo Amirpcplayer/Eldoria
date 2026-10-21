@@ -632,7 +632,7 @@ async def use_scroll_handler(callback: CallbackQuery):
     reward_text = ""
     if kind in ("experience", "experience_small"):
         if character_level >= 100:
-            reward_text = "\\n\\n⭐ سطح قهرمان به حداکثر رسیده است؛ XP فوری قابل دریافت نیست."
+            reward_text = "\n\n⭐ سطح قهرمان به حداکثر رسیده است؛ XP فوری قابل دریافت نیست."
         else:
             xp_amount = max(1, character_level * int(SCROLLS[kind].get("instant_xp_per_level", 0)))
             xp_result = await add_character_xp(
@@ -641,12 +641,12 @@ async def use_scroll_handler(callback: CallbackQuery):
                 apply_scroll_bonus=False,
             )
             if xp_result[0]:
-                reward_text = f"\\n\\n✨ پاداش فوری: +{xp_amount:,} XP"
+                reward_text = f"\n\n✨ پاداش فوری: +{xp_amount:,} XP"
                 if xp_result[3] > 0:
-                    reward_text += f"\\n🎉 سطح جدید: {xp_result[2]}"
+                    reward_text += f"\n🎉 سطح جدید: {xp_result[2]}"
 
     await callback.answer("اسکرول فعال شد!")
-    await _show(callback, f"✨ <b>{item_name}</b> مصرف شد.\\n\\n{SCROLLS[kind]['description']}{reward_text}\\n\\n⏳ مدت اثر: ۲ ساعت", InlineKeyboardMarkup(inline_keyboard=[
+    await _show(callback, f"✨ <b>{item_name}</b> مصرف شد.\n\n{SCROLLS[kind]['description']}{reward_text}\n\n⏳ مدت اثر: ۲ ساعت", InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📜 اسکرول‌های صندوقچه", callback_data="inventory:scrolls")],
         [InlineKeyboardButton(text="🗃 بازگشت به صندوقچه", callback_data="menu:inventory")],
     ]))
