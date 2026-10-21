@@ -588,13 +588,28 @@ async def fan_art_receipt(
 
     await state.clear()
 
-    await message.answer(
+    receipt_confirmation = (
         "✅ رسید با موفقیت دریافت شد.\n\n"
         f"🆔 سفارش: {order.order_code}\n"
         f"🎨 Fan Art: {order.fan_art.name}\n\n"
         "رسید برای مدیریت ارسال شد.\n"
         "پس از بررسی، نتیجه به شما اعلام می‌شود."
     )
+
+    # Always confirm in the chat where the receipt was sent.
+    await message.answer(receipt_confirmation)
+
+    # If the player submitted the receipt in a group, also send the order
+    # number privately so they can keep it even if group messages get lost.
+    if message.chat.type in {"group", "supergroup"} and message.from_user is not None:
+        try:
+            await message.bot.send_message(
+                chat_id=message.from_user.id,
+                text=receipt_confirmation,
+            )
+        except Exception as exc:
+            # The player may not have opened the bot privately yet.
+            print("FAN ART PRIVATE CONFIRMATION ERROR:", repr(exc))
 
     try:
         await message.bot.send_photo(
