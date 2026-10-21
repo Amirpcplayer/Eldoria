@@ -16,6 +16,7 @@ from aiogram.exceptions import TelegramAPIError
 from datetime import datetime, timedelta, timezone
 from database.redis import redis
 from config.settings import settings as app_settings
+from utils.text_normalization import normalize_filter_text
 from sqlalchemy import func, select
 from database.database import AsyncSessionLocal
 from models.character import Character
@@ -40,17 +41,6 @@ UNMUTE = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_
 
 def group(chat):
     return chat.type in ("group", "supergroup")
-
-
-_FILTER_TRANSLATION = str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک", "ـ": ""})
-
-
-def normalize_filter_text(value: str) -> str:
-    """Normalize common Arabic/Persian spelling variants for group word filters."""
-    value = (value or "").casefold().translate(_FILTER_TRANSLATION)
-    value = re.sub(r"[\u064B-\u065F\u0670]", "", value)
-    value = value.replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "")
-    return re.sub(r"\s+", " ", value).strip()
 
 
 async def authorized(bot, chat_id, user_id):
