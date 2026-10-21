@@ -14,6 +14,7 @@ NOTICE = (
     "برای استفاده از امکانات بازی، ابتدا باید شخصیت خود را بسازی.\n"
     "⚔️ برای آغاز، دکمهٔ زیر را بزن."
 )
+ALLOWED_TEXT_COMMANDS = {"منو", "صندوقچه", "مهارت ها", "مهارت‌ها", "تجهیزات", "ماموریت ها", "ماموریت‌ها", "ماموریت", "ماجراجویی", "کرفتینگ", "ساخت", "پت", "حیوانات", "ایونت", "رویداد", "پارتی", "گیلد", "گیلـد", "بازار بازیکنان", "بازار", "آهنگری", "راهنما", "تبدیل", "صرافی", "تنظیمات", "فروشگاه"}
 ALLOWED_COMMANDS = {"start", "cancel", "admin", "myid", "profile", "sandoghche", "skills", "tajhizat", "mamoriah", "mamoriat", "majarajoyi", "majarajooei", "crafting", "pet", "event", "parti", "party", "guild", "player_shop", "ahangari", "help", "change", "setting", "settings", "shop", "menu", "guide", "arts", "mypet", "pvp", "bounty", "attack", "magic", "heal", "mana", "art", "boss_status", "dungeon", "market_items", "market_sell", "market_equipment", "market_sell_equipment", "market_equipment_items", "fanart_add", "remove_boss"}
 CREATE_CALLBACK_PREFIXES = ("gender:", "race:")
 CREATE_CALLBACKS = {"race:confirm", "race:back"}
@@ -36,6 +37,8 @@ class CharacterRequiredMiddleware(BaseMiddleware):
                 command = content.split()[0].split("@")[0][1:].lower()
                 if command in ALLOWED_COMMANDS:
                     return await handler(event, data)
+            elif content.casefold() in ALLOWED_TEXT_COMMANDS:
+                return await handler(event, data)
             elif event.chat.type != "private":
                 return await handler(event, data)
         elif isinstance(event, CallbackQuery):
