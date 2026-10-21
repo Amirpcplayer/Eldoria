@@ -35,6 +35,7 @@ class FilterWizard(StatesGroup):
 FLAGS = {"links": "🔗 ضد لینک", "spam": "🌊 ضد فلود", "bots": "🤖 ضد ربات", "words": "🚫 فیلتر کلمات", "welcome": "👋 خوشامدگویی"}
 DEFAULTS = {"links": False, "spam": False, "bots": False, "words": False, "welcome": False}
 WINDOW = defaultdict(deque)
+_WINDOW_CLEANUP_COUNTER = 0
 URL = re.compile(r"(?:https?://|www\.|t\.me/|telegram\.me/|(?:[\w-]+\.)+(?:com|net|org|ir|io|gg|me)(?:/|\b))", re.I)
 PERMISSIONS = ChatPermissions(can_send_messages=False)
 UNMUTE = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True, can_invite_users=True)
@@ -202,7 +203,21 @@ async def manage_action(
         return
     if command == "filters":
         words = sorted(await redis.smembers(f"guardian:{chat_id}:words"))
-        await message.answer("🚫 واژه‌های فیلترشده:\n" + (html.escape("، ".join(words)) if words else "موردی ثبت نشده است."))
+        if not words:
+            await message.answer("🚫 <b>واژه‌های فیلترشده</b>\nموردی ثبت نشده است.")
+            return
+        # Telegram text messages have a strict length limit. Send the list in
+        # bounded chunks so a large filter set never fails as one oversized message.
+        prefix = "🚫 <b>واژه‌های فیلترشده</b>\n"
+        chunk = prefix
+        for word in words:
+            item = html.escape(word) + "، "
+            if len(chunk) + len(item) > 3500:
+                await message.answer(chunk.rstrip("، "))
+                chunk = "🚫 <b>ادامهٔ فهرست واژه‌ها</b>\n"
+            chunk += item
+        if chunk.strip() not in (prefix.strip(), "🚫 <b>ادامهٔ فهرست واژه‌ها</b>"):
+            await message.answer(chunk.rstrip("، "))
         return
     if command in ("filteradd", "filterdel"):
         if not arg:
@@ -628,6 +643,7 @@ class GuardianMiddleware(BaseMiddleware):
             ):
                 violation = True
         if values["spam"]:
+            global _WINDOW_CLEANUP_COUNTER
             key = (chat_id, event.from_user.id)
             queue = WINDOW[key]
             now = time.monotonic()
@@ -636,6 +652,16 @@ class GuardianMiddleware(BaseMiddleware):
             queue.append(now)
             if len(queue) >= 6:
                 violation = True
+            # Remove inactive users' empty windows periodically so memory does
+            # not grow forever as different people pass through many groups.
+            _WINDOW_CLEANUP_COUNTER += 1
+            if _WINDOW_CLEANUP_COUNTER >= 256:
+                _WINDOW_CLEANUP_COUNTER = 0
+                for window_key, timestamps in list(WINDOW.items()):
+                    while timestamps and now - timestamps[0] > 8:
+                        timestamps.popleft()
+                    if not timestamps:
+                        WINDOW.pop(window_key, None)
         if violation and await bot_rights(event.bot, chat_id, "can_delete_messages"):
             try:
                 await event.delete()
