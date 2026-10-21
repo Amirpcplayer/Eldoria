@@ -74,7 +74,7 @@ async def _adventure_drop_preview(enemy, character) -> str:
         lines.append(f"• {name} — حدود {actual_chance * 100:.1f}٪")
     lines.append("")
     lines.append("💡 شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 async def show_adventure_menu(
