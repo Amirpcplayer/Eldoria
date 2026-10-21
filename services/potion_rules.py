@@ -8,10 +8,9 @@ POTION_SHOP_ITEMS = {
     "🧪 معجون مانای بزرگ": {"kind": "mana", "ratio": 0.40},
 }
 
-BIG_POTION_TOKENS = (
-    "بزرگ", "large", "ممتاز", "افسانه", "اسطوره", "کهن", "ابدی",
-    "قهرمان", "legendary", "mythic", "divine", "epic",
-)
+# Only the game's two defined tiers are valid: ordinary and large.
+# Legacy names such as "قهرمان" or "کهن" must not create extra potion tiers.
+BIG_POTION_TOKENS = ("بزرگ", "large")
 
 
 def potion_kind(name: str) -> str | None:
