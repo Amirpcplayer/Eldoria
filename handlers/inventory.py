@@ -988,9 +988,9 @@ async def trade_target_handler(
     )
 
     await message.answer(
-        "💰 قیمت پیشنهادی را به Gold وارد کنید.\n\n"
-        "مثال:\n"
-        "20",
+        "🔢 تعداد و قیمت هر عدد را به Gold وارد کنید.\n\n"
+        "قالب: تعداد قیمت_هر_عدد\n"
+        "مثال: 5 1300",
         reply_markup=ForceReply(
             selective=True
         ),
@@ -998,7 +998,7 @@ async def trade_target_handler(
 
 
 # ============================================================
-# Trade - Price
+# Trade - Quantity and Unit Price
 # ============================================================
 
 @router.message(
@@ -1008,137 +1008,96 @@ async def trade_price_handler(
     message: Message,
     state: FSMContext,
 ):
-    normalized_price = _normalize_digits(
-        message.text or ""
-    ).strip()
-
-    try:
-        price = int(
-            normalized_price
-        )
-
-    except (ValueError, TypeError):
-
+    # Format: quantity unit_price, e.g. 5 1300
+    parts = _normalize_digits(message.text or "").replace(",", " ").replace("،", " ").split()
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
         await message.answer(
-            "❌ قیمت باید فقط عدد باشد.\n\n"
-            "مثال:\n"
-            "20",
-            reply_markup=ForceReply(
-                selective=True
-            ),
+            "❌ تعداد و قیمت هر عدد را با هم وارد کنید.\n\n"
+            "قالب: تعداد قیمت_هر_عدد\n"
+            "مثال: 5 1300",
+            reply_markup=ForceReply(selective=True),
         )
         return
 
-    if price <= 0:
-
+    quantity, unit_price = int(parts[0]), int(parts[1])
+    if quantity <= 0 or unit_price <= 0:
         await message.answer(
-            "❌ قیمت باید بیشتر از صفر باشد.",
-            reply_markup=ForceReply(
-                selective=True
-            ),
+            "❌ تعداد و قیمت هر عدد باید بیشتر از صفر باشند.\n"
+            "مثال: 5 1300",
+            reply_markup=ForceReply(selective=True),
         )
         return
 
+    total_price = quantity * unit_price
     data = await state.get_data()
-
-    item_id = data.get(
-        "trade_item_id"
-    )
-
-    target_username = _normalize_username(
-        data.get("target_username")
-    )
+    item_id = data.get("trade_item_id")
+    target_username = _normalize_username(data.get("target_username"))
 
     if not item_id or not target_username:
-
         await state.clear()
-
         await message.answer(
-            "❌ اطلاعات معامله پیدا نشد.\n"
-            "لطفاً دوباره از صندوقچه شروع کنید."
+            "❌ اطلاعات معامله پیدا نشد.\nلطفاً دوباره از صندوقچه شروع کنید."
         )
         return
 
-    seller_telegram_id = (
-        message.from_user.id
-    )
+    seller_telegram_id = message.from_user.id
 
     async with AsyncSessionLocal() as session:
-
         seller = await session.scalar(
             select(Character).where(
                 Character.telegram_id == seller_telegram_id
-            )
+            ).with_for_update()
         )
-
         if seller is None:
-
             await state.clear()
-
-            await message.answer(
-                "❌ شخصیت شما پیدا نشد."
-            )
+            await message.answer("❌ شخصیت شما پیدا نشد.")
             return
 
-        seller_username = _normalize_username(
-            message.from_user.username
-        )
-
+        seller_username = _normalize_username(message.from_user.username)
         if seller_username:
             seller.telegram_username = seller_username
 
         target = await session.scalar(
-            select(Character).where(
-                Character.telegram_username == target_username
-            )
+            select(Character).where(Character.telegram_username == target_username)
         )
-
         if target is None:
-
             await message.answer(
                 "❌ بازیکنی با این username پیدا نشد.\n\n"
-                f"🔎 جستجو: @{target_username}"
+                f"🔎 جستجو: @{target_username}",
+                reply_markup=ForceReply(selective=True),
             )
             return
 
         if target.telegram_id == seller_telegram_id:
-
             await state.clear()
-
-            await message.answer(
-                "❌ نمی‌توانید به خودتان معامله پیشنهاد دهید."
-            )
+            await message.answer("❌ نمی‌توانید به خودتان معامله پیشنهاد دهید.")
             return
 
-        result = await session.execute(
-            select(
-                Inventory,
-                Item,
-            )
-            .join(
-                Item,
-                Inventory.item_id == Item.id,
-            )
+        row = (await session.execute(
+            select(Inventory, Item)
+            .join(Item, Inventory.item_id == Item.id)
             .where(
                 Inventory.character_id == seller.id,
                 Inventory.item_id == item_id,
                 Inventory.quantity > 0,
             )
             .with_for_update()
-        )
-
-        row = result.first()
+        )).first()
 
         if row is None:
-
             await state.clear()
-
-            await message.answer(
-                "❌ این آیتم دیگر در صندوقچه شما نیست."
-            )
+            await message.answer("❌ این آیتم دیگر در صندوقچه شما نیست.")
             return
 
         inventory_item, item = row
+        if quantity > inventory_item.quantity:
+            await message.answer(
+                "❌ تعداد درخواستی بیشتر از موجودی شماست.\n"
+                f"📦 موجودی فعلی: {inventory_item.quantity}\n"
+                "تعداد و قیمت هر عدد را دوباره بفرستید؛ مثال: 5 1300",
+                reply_markup=ForceReply(selective=True),
+            )
+            return
 
         existing_trade = await session.scalar(
             select(Trade).where(
@@ -1148,14 +1107,10 @@ async def trade_price_handler(
                 Trade.status == "pending",
             )
         )
-
         if existing_trade is not None:
-
             await state.clear()
-
             await message.answer(
-                "⚠️ برای این بازیکن، همین آیتم یک "
-                "پیشنهاد معامله فعال دارد."
+                "⚠️ برای این بازیکن، همین آیتم یک پیشنهاد معامله فعال دارد."
             )
             return
 
@@ -1163,99 +1118,59 @@ async def trade_price_handler(
             seller_telegram_id=seller_telegram_id,
             buyer_telegram_id=target.telegram_id,
             item_id=item.id,
-            quantity=1,
-            price=price,
+            quantity=quantity,
+            # Trade.price stores the total amount for the entire stack.
+            price=total_price,
             status="pending",
         )
-
         session.add(trade)
-
         await session.flush()
 
         item_name = item.name
         seller_name = seller.name
         target_telegram_id = target.telegram_id
-
         await session.commit()
-
         trade_id = trade.id
 
     await state.clear()
 
-    # ========================================================
-    # Seller Message
-    # ========================================================
-
     seller_message = await message.answer(
-        (
-            "✅ پیشنهاد معامله ایجاد شد.\n\n"
-            f"👤 خریدار: @{target_username}\n"
-            f"🗃 آیتم: {item_name}\n"
-            "🔢 تعداد: ۱\n"
-            f"💰 قیمت: {price} Gold\n\n"
-            "⏳ منتظر پاسخ خریدار..."
-        )
+        "✅ پیشنهاد معامله ایجاد شد.\n\n"
+        f"👤 خریدار: @{target_username}\n"
+        f"🗃 آیتم: {item_name}\n"
+        f"🔢 تعداد: {quantity}\n"
+        f"💰 قیمت هر عدد: {unit_price:,} Gold\n"
+        f"💳 مبلغ کل: {total_price:,} Gold\n\n"
+        "⏳ منتظر پاسخ خریدار..."
     )
 
-    # ========================================================
-    # Buyer Message
-    # ========================================================
-
     try:
-
         buyer_message = await bot.send_message(
             chat_id=target_telegram_id,
             text=(
                 "📨 پیشنهاد معامله جدید!\n\n"
                 f"👤 فروشنده: {seller_name}\n"
                 f"🗃 آیتم: {item_name}\n"
-                "🔢 تعداد: ۱\n"
-                f"💰 قیمت: {price} Gold"
+                f"🔢 تعداد: {quantity}\n"
+                f"💰 قیمت هر عدد: {unit_price:,} Gold\n"
+                f"💳 مبلغ کل: {total_price:,} Gold"
             ),
-            reply_markup=trade_request_keyboard(
-                trade_id
-            ),
+            reply_markup=trade_request_keyboard(trade_id),
         )
-
     except Exception:
-
         await message.answer(
-            "⚠️ معامله ساخته شد، اما ارسال پیام به خریدار "
-            "موفق نبود.\n\n"
+            "⚠️ معامله ساخته شد، اما ارسال پیام به خریدار موفق نبود.\n\n"
             "ممکن است خریدار هنوز ربات را Start نکرده باشد."
         )
-
         return
 
-    # ========================================================
-    # Save message IDs
-    # ========================================================
-
     async with AsyncSessionLocal() as session:
-
-        trade = await session.get(
-            Trade,
-            trade_id,
-        )
-
+        trade = await session.get(Trade, trade_id)
         if trade is not None:
-
-            trade.seller_message_id = (
-                seller_message.message_id
-            )
-
-            trade.seller_chat_id = (
-                message.chat.id
-            )
-
-            trade.buyer_message_id = (
-                buyer_message.message_id
-            )
-
-            trade.buyer_chat_id = (
-                target_telegram_id
-            )
-
+            trade.seller_message_id = seller_message.message_id
+            trade.seller_chat_id = message.chat.id
+            trade.buyer_message_id = buyer_message.message_id
+            trade.buyer_chat_id = target_telegram_id
             await session.commit()
 
 
@@ -1434,6 +1349,8 @@ async def trade_accept_handler(
         )
 
         price = trade.price
+        quantity = trade.quantity
+        unit_price = price // quantity if quantity else price
 
         seller_message_id = (
             trade.seller_message_id
@@ -1455,8 +1372,9 @@ async def trade_accept_handler(
             (
                 "✅ معامله با موفقیت انجام شد!\n\n"
                 f"🗃 آیتم: {item_name}\n"
-                "🔢 تعداد: ۱\n"
-                f"💰 مبلغ پرداخت‌شده: {price} Gold\n\n"
+                f"🔢 تعداد: {quantity}\n"
+                f"💰 قیمت هر عدد: {unit_price:,} Gold\n"
+                f"💳 مبلغ پرداخت‌شده: {price:,} Gold\n\n"
                 "🎉 آیتم به صندوقچه شما منتقل شد."
             ),
             reply_markup=None,
@@ -1479,8 +1397,9 @@ async def trade_accept_handler(
                 text=(
                     "✅ معامله با موفقیت انجام شد!\n\n"
                     f"🗃 آیتم: {item_name}\n"
-                    "🔢 تعداد: ۱\n"
-                    f"💰 مبلغ دریافتی: {price} Gold\n\n"
+                    f"🔢 تعداد: {quantity}\n"
+                    f"💰 قیمت هر عدد: {unit_price:,} Gold\n"
+                    f"💳 مبلغ دریافتی: {price:,} Gold\n\n"
                     "🎉 آیتم با موفقیت به خریدار منتقل شد."
                 ),
                 reply_markup=None,
@@ -1576,6 +1495,7 @@ async def trade_reject_handler(
         seller_message_id = (
             trade.seller_message_id
         )
+        quantity = trade.quantity
 
         await session.commit()
 
@@ -1589,7 +1509,7 @@ async def trade_reject_handler(
             (
                 "❌ معامله رد شد.\n\n"
                 f"🗃 آیتم: {item_name}\n"
-                "🔢 تعداد: ۱\n\n"
+                f"🔢 تعداد: {quantity}\n\n"
                 "این پیشنهاد دیگر فعال نیست."
             ),
             reply_markup=None,
@@ -1612,7 +1532,7 @@ async def trade_reject_handler(
                 text=(
                     "❌ پیشنهاد معامله رد شد.\n\n"
                     f"🗃 آیتم: {item_name}\n"
-                    "🔢 تعداد: ۱\n\n"
+                    f"🔢 تعداد: {quantity}\n\n"
                     "خریدار این پیشنهاد را رد کرد."
                 ),
                 reply_markup=None,
