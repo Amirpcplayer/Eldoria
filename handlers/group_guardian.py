@@ -84,8 +84,9 @@ def keyboard(chat_id, values, owner_id):
     rows += [[InlineKeyboardButton(text="🎨 تنظیم متن خوشامدگویی", callback_data=f"gap:welcome:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="👑 مدیران ثبت‌شده", callback_data=f"gap:admins:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}:{owner_id}")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-def panel(values):
-    return ("🛡️ <b>نگهبان اِلدوریا | مدیریت گروه</b>\n━━━━━━━━━━━━━━━━━━\n"
+def panel(values, group_title="گروه"):
+    safe_group_title = html.escape(group_title or "گروه")
+    return (f"🛡️ <b>نگهبان {safe_group_title} | مدیریت گروه</b>\n━━━━━━━━━━━━━━━━━━\n"
             "تنظیمات امنیتی این گروه مستقل از سایر گروه‌هاست.\n"
             "برای تغییر هر قابلیت، دکمهٔ آن را انتخاب کنید.\n\n"
             "⚔️ پیام‌های فرمان بازی از فیلتر لینک و فلود مستثنا هستند.\n"
@@ -100,7 +101,7 @@ async def gap(message: Message):
         await message.answer("⛔ دسترسی فقط برای مدیران گروه و مالک کل ربات مجاز است.")
         return
     values = await settings(message.chat.id)
-    await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
+    await message.answer(panel(values, message.chat.title), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
 
 @router.callback_query(F.data.startswith("gap:"))
 async def callback(callback: CallbackQuery, state: FSMContext):
@@ -164,7 +165,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("🎨 <b>تنظیم خوشامدگویی</b>\nابتدا عکس، ویدئو یا GIF را بفرست. برای بدون رسانه بنویس: بدون رسانه")
     elif action == "home":
         values = await settings(chat_id)
-        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
+        await callback.message.edit_text(panel(values, callback.message.chat.title), reply_markup=keyboard(chat_id, values, owner_id))
     elif action == "toggle" and len(parts) == 5 and parts[4] in FLAGS:
         key = parts[4]
         values = await settings(chat_id)
