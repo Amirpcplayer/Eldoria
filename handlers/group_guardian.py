@@ -203,7 +203,7 @@ async def manage_action(message: Message, command: str, arg: str):
     if command == "unban":
         # شناسه می‌تواند در خود دستور باشد، یا از پیام ریپلای‌شده گرفته شود.
         target_id = None
-        id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", arg)
+        id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", arg)
         if id_match:
             target_id = int(id_match.group(0))
         else:
@@ -220,7 +220,7 @@ async def manage_action(message: Message, command: str, arg: str):
                             break
                     if target_id is None:
                         replied_text = replied.text or replied.caption or ""
-                        id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
+                        id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", replied_text)
                         if id_match:
                             target_id = int(id_match.group(0))
         if target_id is None:
@@ -266,7 +266,7 @@ async def manage_action(message: Message, command: str, arg: str):
                     break
             if target_id is None:
                 replied_text = replied.text or replied.caption or ""
-                id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
+                id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", replied_text)
                 if id_match:
                     target_id = int(id_match.group(0))
                     try:
