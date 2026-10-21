@@ -15,6 +15,7 @@ from bot.bot import bot
 from middlewares.username_sync import UsernameSyncMiddleware
 from middlewares.panel_owner import PanelOwnerMiddleware
 from middlewares.character_required import CharacterRequiredMiddleware
+from middlewares.adventure_fight_lock import AdventureFightLockMiddleware
 
 from handlers.start import router as start_router
 from handlers.main_menu import router as main_menu_router
@@ -88,6 +89,7 @@ panel_owner = PanelOwnerMiddleware()
 
 dp.message.outer_middleware(CharacterRequiredMiddleware())
 dp.callback_query.outer_middleware(CharacterRequiredMiddleware())
+dp.callback_query.outer_middleware(AdventureFightLockMiddleware())
 dp.message.middleware(username_sync)
 dp.message.middleware(GroupBossRegistrationMiddleware())
 dp.callback_query.outer_middleware(panel_owner)
