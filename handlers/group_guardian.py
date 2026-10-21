@@ -300,7 +300,15 @@ async def manage_action(message: Message, command: str, arg: str):
                 await message.answer(f"⚠️ اخطار ثبت شد: {count}/3")
         elif command == "mute":
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=PERMISSIONS, until_date=datetime.now(timezone.utc) + timedelta(minutes=minutes))
-            await message.answer(f"🔇 عضو برای {minutes} دقیقه ساکت شد.")
+            minutes_fa = str(minutes).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+            await message.answer(
+                "🛡️ <b>فرمان نگهبان اجرا شد</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "🔇 <b>مُهر سکوت فعال شد</b>\n\n"
+                f"👤 <b>قهرمان:</b> {html.escape(target.full_name)}\n"
+                f"⏳ <b>مدت حکم:</b> {minutes_fa} دقیقه\n"
+                "⚖️ <i>آرامش گروه، قانون اِلدوریاست.</i>"
+            )
         elif command == "unmute":
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
             await message.answer("🔊 سکوت عضو برداشته شد.")
