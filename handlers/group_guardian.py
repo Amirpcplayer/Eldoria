@@ -80,7 +80,7 @@ def panel(values):
             "تنظیمات امنیتی این گروه مستقل از سایر گروه‌هاست.\n"
             "برای تغییر هر قابلیت، دکمهٔ آن را انتخاب کنید.\n\n"
             "⚔️ پیام‌های فرمان بازی از فیلتر لینک و فلود مستثنا هستند.\n"
-            "🔐 فقط مدیران همین گروه به پنل دسترسی دارند.")
+            "🔐 مدیران گروه و مالک کل ربات به پنل دسترسی دارند.")
 
 @router.message(Command("gap"))
 async def gap(message: Message):
@@ -88,7 +88,7 @@ async def gap(message: Message):
         await message.answer("🛡️ دستور /gap را در گروه اجرا کنید.")
         return
     if not await guardian_admin(message.bot, message.chat.id, message.from_user.id):
-        await message.answer("⛔ فقط مدیران گروه به این پنل دسترسی دارند.")
+        await message.answer("⛔ دسترسی فقط برای مدیران گروه و مالک کل ربات مجاز است.")
         return
     values = await settings(message.chat.id)
     await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
@@ -106,7 +106,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("🔒 این پنل برای مدیر دیگری است؛ پنل خودتان را با /gap باز کنید.", show_alert=True)
         return
     if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
-        await callback.answer("فقط مدیران ثبت‌شده همین گروه.", show_alert=True)
+        await callback.answer("دسترسی مدیر گروه یا مالک کل ربات لازم است.", show_alert=True)
         return
     action, chat_id, owner_id = parts[1], callback.message.chat.id, callback.from_user.id
     if action == "close":
