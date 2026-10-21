@@ -126,25 +126,27 @@ def apply_level_stats(
 async def add_character_xp(
     telegram_id: int,
     amount: int,
+    apply_scroll_bonus: bool = True,
 ) -> tuple[bool, int, int, int]:
 
     if amount <= 0:
         return False, 0, 0, 0
 
-    # Apply the strongest active XP-reward scroll. This affects actual XP
-    # awards (combat/adventure/quests), not just the displayed description.
-    try:
-        from services.scroll_service import get_buff
-        multipliers = []
-        for kind in ("experience", "experience_small", "explorer"):
-            buff = await get_buff(telegram_id, kind)
-            if buff:
-                multipliers.append(float(buff.get("xp_multiplier", 1.0)))
-        if multipliers:
-            amount = max(amount, int(amount * max(multipliers)))
-    except Exception:
-        # XP must still be awarded if Redis/buff lookup is temporarily down.
-        pass
+    # Apply the strongest active XP-reward scroll. Direct XP granted by
+    # consuming an XP scroll itself is excluded to avoid multiplying twice.
+    if apply_scroll_bonus:
+        try:
+            from services.scroll_service import get_buff
+            multipliers = []
+            for kind in ("experience", "experience_small", "explorer"):
+                buff = await get_buff(telegram_id, kind)
+                if buff:
+                    multipliers.append(float(buff.get("xp_multiplier", 1.0)))
+            if multipliers:
+                amount = max(amount, int(amount * max(multipliers)))
+        except Exception:
+            # XP must still be awarded if Redis/buff lookup is temporarily down.
+            pass
 
     async with AsyncSessionLocal() as session:
 
