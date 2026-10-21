@@ -57,6 +57,12 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
         if isinstance(chat_id, bool) or not isinstance(chat_id, int):
             return await make_request(bot, method)
 
+        # Fan Art and other standalone images must remain visible. Never register
+        # photo/media-group sends as temporary messages, even when their caption
+        # does not contain a protected keyword.
+        if method.__class__.__name__ in {"SendPhoto", "SendMediaGroup"}:
+            return await make_request(bot, method)
+
         # Keep each protected message independent: it is neither deleted nor tracked.
         if self._is_protected(method):
             return await make_request(bot, method)
