@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from database.database import AsyncSessionLocal
@@ -378,7 +378,47 @@ async def reject_order(order_id: int, reason: str) -> FanArtOrder | None:
         return result.scalar_one()
 
 
-async def get_orders(status: str | None = None) -> list[FanArtOrder]:
+async def get_order_for_admin(identifier: str) -> FanArtOrder | None:
+    """Find an order by its transfer/order code or numeric database ID."""
+    value = identifier.strip()
+    if not value:
+        return None
+    conditions = [FanArtOrder.order_code.ilike(value)]
+    if value.isdigit():
+        conditions.append(FanArtOrder.id == int(value))
+    async with AsyncSessionLocal() as session:
+        return await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(or_(*conditions))
+            .limit(1)
+        )
+
+
+async def admin_cancel_order(order_id: int) -> FanArtOrder | None:
+    """Soft-cancel an active order; preserve payment history."""
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            )
+        )
+        if order is None:
+            return None
+        order.status = CANCELLED
+        await session.commit()
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def get_orders(status: str | None = None, limit: int | None = None, offset: int = 0) -> list[FanArtOrder]:
     async with AsyncSessionLocal() as session:
         query = (
             select(FanArtOrder)
@@ -387,6 +427,10 @@ async def get_orders(status: str | None = None) -> list[FanArtOrder]:
         )
         if status is not None:
             query = query.where(FanArtOrder.status == status)
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
 
         result = await session.execute(query)
         return list(result.scalars().all())
