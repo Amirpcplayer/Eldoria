@@ -31,6 +31,7 @@ from config.settings import settings
 router = Router(name="group_boss")
 logger = logging.getLogger(__name__)
 
+
 # تومارهای ورود باس؛ پنج روایت برای هر باس عادی و پنجاه روایت برای نخستین اِلدوریا.
 BOSS_ENTRANCE_STORIES = [
     "زمین زیر پا لرزید؛ غبار از سنگ‌های کهن برخاست و آسمان، برای یک دم، رنگ خون گرفت. چیزی از آن‌سوی افق بیدار شده بود.",
