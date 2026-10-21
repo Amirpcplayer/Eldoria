@@ -17,6 +17,7 @@ from middlewares.panel_owner import PanelOwnerMiddleware
 from middlewares.character_required import CharacterRequiredMiddleware
 from middlewares.adventure_fight_lock import AdventureFightLockMiddleware
 
+from handlers.group_guardian import router as guardian_router, GuardianMiddleware
 from handlers.start import router as start_router
 from handlers.command_aliases import router as command_aliases_router
 from handlers.main_menu import router as main_menu_router
@@ -91,11 +92,13 @@ panel_owner = PanelOwnerMiddleware()
 dp.message.outer_middleware(CharacterRequiredMiddleware())
 dp.callback_query.outer_middleware(CharacterRequiredMiddleware())
 dp.callback_query.outer_middleware(AdventureFightLockMiddleware())
+dp.message.outer_middleware(GuardianMiddleware())
 dp.message.middleware(username_sync)
 dp.message.middleware(GroupBossRegistrationMiddleware())
 dp.callback_query.outer_middleware(panel_owner)
 dp.callback_query.middleware(username_sync)
 
+dp.include_router(guardian_router)
 dp.include_router(start_router)
 dp.include_router(character_creation_router)
 dp.include_router(race_router)
@@ -177,7 +180,8 @@ async def setup_bot_commands() -> None:
         BotCommand(command="cancel", description="لغو عملیات جاری"),
         BotCommand(command="myid", description="نمایش شناسه تلگرام"),
         BotCommand(command="remove_boss", description="حذف باس فعال (فقط ادمین)"),
-        BotCommand(command="admin", description="پنل مدیریت (فقط ادمین)"),
+        BotCommand(command="admin", description="پنل مدیریت بازی (فقط ادمین)"),
+        BotCommand(command="gap", description="پنل مدیریت گروه"),
     ]
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
     await bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
