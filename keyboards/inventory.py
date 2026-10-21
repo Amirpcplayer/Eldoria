@@ -62,7 +62,7 @@ def inventory_items_keyboard(items) -> InlineKeyboardMarkup:
         )
         # Scrolls can be read directly from the scroll list; the handler
         # validates ownership and enforces the two-hour effect cooldown.
-        if scroll_kind(item.name):
+        if getattr(item, "item_type", None) == "scroll":
             rows.append(
                 [
                     InlineKeyboardButton(
