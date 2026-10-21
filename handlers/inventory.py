@@ -368,7 +368,7 @@ async def inventory_category_handler(
                 text="🔙 بازگشت به صندوقچه",
                 callback_data="menu:inventory",
             )])
-            text = "\\n".join(text_lines)
+            text = "\n".join(text_lines)
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
         elif category == "equipment":
