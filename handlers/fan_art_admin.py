@@ -247,6 +247,25 @@ async def fanart_clear_active_orders(message: Message):
     )
 
 
+@router.callback_query(F.data == "admin:fanart:add")
+async def fanart_add_panel_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await state.clear()
+    await state.set_state(FanArtStates.add_image)
+    if callback.message:
+        await callback.message.answer(
+            "🎨 افزودن فن‌آرت به شاپ\n\n"
+            "۱) تصویر فن‌آرت را به‌صورت Photo ارسال کن.\n"
+            "بعد نام، رریتی، قیمت به تومان و موجودی را وارد می‌کنی.\n"
+            "قیمت گلد خودکار با نرخ ۵۰٬۰۰۰ تومان = ۲٬۰۰۰ گلد محاسبه می‌شود.\n\n"
+            "برای لغو: /cancel"
+        )
+    await callback.answer()
+
+
 @router.message(Command("fanart_add"))
 async def fanart_add_start(
     message: Message,
