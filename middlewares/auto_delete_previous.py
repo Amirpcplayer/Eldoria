@@ -16,6 +16,7 @@ PROTECTED_TERMS = (
     "مبارزه", "نبرد", "کامبت", "باس", "دانجن", "سیاهچال", "حمله",
     "جادو", "ضربه", "آسیب", "غنیمت", "جایزه", "پاداش", "دریافت پاداش",
     "هیل", "شفا داد", "ریکاوری", "معجون",
+    "fan art", "fanart", "فن ارت", "فن‌آرت", "فن آرت",
     "دفتر غنایم", "پیروزی", "شکست خورد", "جایزهٔ حمله", "جایزه شکار",
     "سیاهچال", "سیاه‌چال", "حمله به باس", "ریکاوری کرد", "خود را شفا داد",
 )
@@ -32,13 +33,30 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
     """Replace the previous ordinary bot reply, but preserve game/combat/reward messages."""
 
     def __init__(self) -> None:
-        self._last_temporary_messages: dict[int, int] = {}
-        self._locks: dict[int, asyncio.Lock] = {}
+        # Track temporary panels independently per chat AND panel owner. Without
+        # the owner dimension, one player's button press can delete another
+        # player's bot message in the same group.
+        self._last_temporary_messages: dict[tuple[int, int | None], int] = {}
+        self._locks: dict[tuple[int, int | None], asyncio.Lock] = {}
 
-    def _lock_for(self, chat_id: int) -> asyncio.Lock:
-        if chat_id not in self._locks:
-            self._locks[chat_id] = asyncio.Lock()
-        return self._locks[chat_id]
+    @staticmethod
+    def _panel_owner_id(method: Any) -> int | None:
+        markup = getattr(method, "reply_markup", None)
+        for row in getattr(markup, "inline_keyboard", None) or []:
+            for button in row:
+                data = getattr(button, "callback_data", None) or ""
+                parts = data.split(":")
+                if len(parts) >= 3 and parts[0] == "eo":
+                    try:
+                        return int(parts[1])
+                    except ValueError:
+                        continue
+        return None
+
+    def _lock_for(self, key: tuple[int, int | None]) -> asyncio.Lock:
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        return self._locks[key]
 
     @staticmethod
     def _message_text(method: Any) -> str:
@@ -67,8 +85,9 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
         if self._is_protected(method):
             return await make_request(bot, method)
 
-        async with self._lock_for(chat_id):
-            previous_id = self._last_temporary_messages.get(chat_id)
+        key = (chat_id, self._panel_owner_id(method))
+        async with self._lock_for(key):
+            previous_id = self._last_temporary_messages.get(key)
             if previous_id is not None:
                 try:
                     await make_request(bot, DeleteMessage(chat_id=chat_id, message_id=previous_id))
@@ -78,9 +97,9 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
                         chat_id, previous_id, exc_info=True,
                     )
                 finally:
-                    self._last_temporary_messages.pop(chat_id, None)
+                    self._last_temporary_messages.pop(key, None)
 
             result = await make_request(bot, method)
             if isinstance(result, Message):
-                self._last_temporary_messages[chat_id] = result.message_id
+                self._last_temporary_messages[key] = result.message_id
             return result
