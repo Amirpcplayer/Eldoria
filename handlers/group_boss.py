@@ -1469,8 +1469,9 @@ async def _show_potion_choices(target, telegram_id: int, mana: bool) -> None:
     # Adventure/PvP healing must use its battle panel so per-battle limits cannot be bypassed.
     try:
         from services.combat_service import has_active_battle
-        from services.pvp_service import _has_active_pvp
-        if await has_active_battle(telegram_id) or await _has_active_pvp(telegram_id):
+        # Block direct potion use only during adventure fights.
+        # Boss and player-vs-player combat are allowed to use this command.
+        if await has_active_battle(telegram_id):
             text = "⚔️ مبارزهٔ فعالی داری؛ برای رعایت محدودیت مصرف معجون، از دکمهٔ معجون داخل پنل همان مبارزه استفاده کن."
             if isinstance(target, Message): await target.reply(text)
             else: await target.answer(text, show_alert=True)
@@ -1562,8 +1563,9 @@ async def potion_consume_selected(cb: CallbackQuery):
         await cb.answer(alive_message or "💀 قهرمانت از پا افتاده است.", show_alert=True); return
     try:
         from services.combat_service import has_active_battle
-        from services.pvp_service import _has_active_pvp
-        if await has_active_battle(cb.from_user.id) or await _has_active_pvp(cb.from_user.id):
+        # Block direct potion use only during adventure fights.
+        # Boss and player-vs-player combat are allowed to use this command.
+        if await has_active_battle(cb.from_user.id):
             await cb.answer("⚔️ از دکمهٔ معجون داخل پنل مبارزه استفاده کن تا محدودیت‌ها رعایت شوند.", show_alert=True); return
     except Exception:
         logger.exception("Could not verify active battle before potion consumption")
