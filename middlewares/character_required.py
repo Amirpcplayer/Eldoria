@@ -15,7 +15,7 @@ NOTICE = (
     "⚔️ برای آغاز، دکمهٔ زیر را بزن."
 )
 ALLOWED_TEXT_COMMANDS = {"منو", "صندوقچه", "مهارت ها", "مهارت‌ها", "تجهیزات", "ماموریت ها", "ماموریت‌ها", "ماموریت", "ماجراجویی", "کرفتینگ", "ساخت", "پت", "حیوانات", "ایونت", "رویداد", "پارتی", "گیلد", "گیلـد", "بازار بازیکنان", "بازار", "آهنگری", "راهنما", "تبدیل", "صرافی", "تنظیمات", "فروشگاه"}
-ALLOWED_COMMANDS = {"start", "cancel", "admin", "myid", "profile", "sandoghche", "skills", "tajhizat", "mamoriah", "mamoriat", "majarajoyi", "majarajooei", "crafting", "pet", "event", "parti", "party", "guild", "player_shop", "ahangari", "help", "change", "setting", "settings", "shop", "menu", "guide", "arts", "mypet", "pvp", "bounty", "attack", "magic", "heal", "mana", "art", "boss_status", "dungeon", "market_items", "market_sell", "market_equipment", "market_sell_equipment", "market_equipment_items", "fanart_add", "remove_boss"}
+ALLOWED_COMMANDS = {"start", "cancel", "admin", "gap", "warn", "mute", "unmute", "ban", "unban", "kick", "warnings", "clearwarn", "filteradd", "filterdel", "filters", "rules", "myid", "profile", "sandoghche", "skills", "tajhizat", "mamoriah", "mamoriat", "majarajoyi", "majarajooei", "crafting", "pet", "event", "parti", "party", "guild", "player_shop", "ahangari", "help", "change", "setting", "settings", "shop", "menu", "guide", "arts", "mypet", "pvp", "bounty", "attack", "magic", "heal", "mana", "art", "boss_status", "dungeon", "market_items", "market_sell", "market_equipment", "market_sell_equipment", "market_equipment_items", "fanart_add", "remove_boss"}
 CREATE_CALLBACK_PREFIXES = ("gender:", "race:")
 CREATE_CALLBACKS = {"race:confirm", "race:back"}
 
@@ -43,7 +43,7 @@ class CharacterRequiredMiddleware(BaseMiddleware):
                 return await handler(event, data)
         elif isinstance(event, CallbackQuery):
             cb = event.data or ""
-            if cb in CREATE_CALLBACKS or cb.startswith(CREATE_CALLBACK_PREFIXES):
+            if cb.startswith("gap:") or cb in CREATE_CALLBACKS or cb.startswith(CREATE_CALLBACK_PREFIXES):
                 return await handler(event, data)
         else:
             return await handler(event, data)
