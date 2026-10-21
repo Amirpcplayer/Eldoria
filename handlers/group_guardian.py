@@ -226,6 +226,37 @@ async def manage_action(message: Message, command: str, arg: str):
                         id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", replied_text)
                         if id_match:
                             target_id = int(id_match.group(0))
+                        else:
+                            # مثل بن: اگر پیام ریپلای‌شده حاوی @username باشد،
+                            # ابتدا نگاشت گروه و سپس نام کاربری ذخیره‌شده در دیتابیس را بررسی کن.
+                            username_match = re.search(
+                                r"(?<![\\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])",
+                                replied_text,
+                            )
+                            if username_match:
+                                username = username_match.group(1).casefold()
+                                cached_id = await redis.get(
+                                    f"guardian:{chat_id}:username:{username}"
+                                )
+                                if cached_id and str(cached_id).lstrip("-").isdigit():
+                                    target_id = int(cached_id)
+                                else:
+                                    try:
+                                        async with AsyncSessionLocal() as session:
+                                            player = await session.scalar(
+                                                select(Character).where(
+                                                    func.lower(Character.telegram_username) == username
+                                                )
+                                            )
+                                            if player:
+                                                target_id = int(player.telegram_id)
+                                                await redis.set(
+                                                    f"guardian:{chat_id}:username:{username}",
+                                                    str(target_id),
+                                                    ex=60 * 60 * 24 * 90,
+                                                )
+                                    except Exception:
+                                        target_id = None
         if target_id is None:
             await message.answer("روی پیام عضو ریپلای کن؛ یا شناسهٔ عددی او را بنویس و روی همان پیام ریپلای کن. نمونه: /unban 123456789")
             return
