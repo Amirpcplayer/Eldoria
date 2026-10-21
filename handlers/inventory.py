@@ -562,22 +562,20 @@ async def item_details_handler(
             hours, minutes = divmod(remaining // 60, 60)
             text += f"\n\n⏳ <b>اثر فعال</b>: {hours} ساعت و {minutes} دقیقه باقی مانده است."
         rows = []
-        # Keep the scroll action alongside the sell/trade actions for this item.
+        # Put all three scroll actions together directly beneath this scroll's details.
         rows.append([
             InlineKeyboardButton(
-                text=("⏳ طومار فعال است" if active else "📖 خواندن و فعال‌سازی طومار"),
+                text=("⏳ فعال است" if active else "📖 فعال‌سازی"),
                 callback_data=("inventory:noop" if active else f"item:use_scroll:{item.id}"),
             ),
             InlineKeyboardButton(
                 text="💰 فروش به فروشگاه",
                 callback_data=f"item:sell:{item.id}",
             ),
-        ])
-        rows.append([
             InlineKeyboardButton(
-                text="👤 پیشنهاد به بازیکن",
+                text="👤 فروش به بازیکن",
                 callback_data=f"item:sell_player:{item.id}",
-            )
+            ),
         ])
         rows.extend([
             [InlineKeyboardButton(text="🔙 بازگشت به اسکرول‌ها", callback_data="inventory:scrolls")],
