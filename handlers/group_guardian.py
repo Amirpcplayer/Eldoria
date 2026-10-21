@@ -22,7 +22,7 @@ from models.character import Character
 
 router = Router()
 
-# مالک ثابت پنل نگهبان در تمام گروه‌ها
+# شناسهٔ مدیر اصلی از تنظیمات مرکزی پروژه خوانده می‌شود.
 
 class WelcomeWizard(StatesGroup):
     media = State()
