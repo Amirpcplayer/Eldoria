@@ -1,5 +1,9 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
+from sqlalchemy import select
+
+from database.database import AsyncSessionLocal
+from models.monster import Monster
 
 from keyboards.adventure import (
     adventure_main_keyboard,
@@ -24,6 +28,53 @@ from services.panel_image_service import show_panel
 
 
 router = Router()
+
+
+async def _adventure_drop_preview(enemy, character) -> str:
+    """Describe every item that can drop from this enemy, matching the real loot logic."""
+    family = "default"
+    if enemy.monster_id:
+        async with AsyncSessionLocal() as session:
+            monster = await session.scalar(
+                select(Monster).where(Monster.id == enemy.monster_id)
+            )
+        if monster:
+            family = (monster.family or "").lower()
+            variant = (monster.variant or "").lower()
+            if any(token in family or token in variant for token in ("dragon", "drake")):
+                family = "dragon"
+
+    family_drops = {
+        "wolf": ("🦴 پنجهٔ گرگ", 0.42),
+        "goblin": ("⛏️ تکه‌آهن گابلین", 0.36),
+        "golem": ("🗃 سنگ جادویی", 0.30),
+        "dragon": ("🔥 فلس اژدها", 0.16),
+        "default": ("🌿 گیاه اِلدوریا", 0.24),
+    }
+    family_name, family_chance = family_drops.get(family, family_drops["default"])
+    luck_bonus = 1 + min(int(getattr(character, "luck", 0) or 0), 100) / 250
+    family_chance = min(0.8, family_chance * luck_bonus)
+
+    # The real reward logic chooses one of these five materials at random per fight.
+    gathering_drops = [
+        ("🪵 چوب اِلدوری", 0.12),
+        ("⛓️ سنگ آهن", 0.12),
+        ("💎 کریستال جادویی", 0.055),
+        ("🌿 گیاه اِلدوریا", 0.16),
+        ("🗃 سنگ جادویی", 0.08 if family == "golem" else 0.025),
+    ]
+    lines = [
+        "🎁 <b>غنیمت‌های احتمالی این مبارزه</b>",
+        f"• {family_name} — احتمال پایه: حدود {family_chance * 100:.1f}٪",
+        "",
+        "🔎 <b>مواد جانبی</b> (در هر مبارزه یکی انتخاب می‌شود):",
+    ]
+    for name, chance in gathering_drops:
+        actual_chance = chance / len(gathering_drops)
+        lines.append(f"• {name} — حدود {actual_chance * 100:.1f}٪")
+    lines.append("")
+    lines.append("💡 شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.")
+    return "\\n".join(lines)
 
 
 async def show_adventure_menu(
@@ -442,17 +493,19 @@ async def adventure_enemy_details(
         )
         return
 
+    drop_preview = await _adventure_drop_preview(enemy, character)
     text = (
-        f" <b>{enemy.name}</b>\n"
+        f"⚔️ <b>{enemy.name}</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"📖 {enemy.description}\n\n"
         f"⭐ Level: {enemy.level}\n"
-        f"❤️ HP: {enemy.hp}\n"
-        f"⚔️ Attack: {enemy.attack}\n"
-        f"🛡️ Defense: {enemy.defense}\n\n"
+        f"❤️ HP: {enemy.hp:,}\n"
+        f"⚔️ Attack: {enemy.attack:,}\n"
+        f"🛡️ Defense: {enemy.defense:,}\n\n"
         "🎁 <b>پاداش پیروزی</b>\n"
-        f"✨ XP: +{enemy.xp_reward}\n"
-        f"💰 Gold: +{enemy.gold_reward}"
+        f"✨ XP: +{enemy.xp_reward:,}\n"
+        f"💰 Gold: +{enemy.gold_reward:,}\n\n"
+        f"{drop_preview}"
     )
 
     await show_panel(
