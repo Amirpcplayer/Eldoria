@@ -1111,6 +1111,12 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
             scaled_attack = boss_level_stats(cfg, int(getattr(boss, "boss_level", 1) or 1))["attack"]
             boss_move = random.choice(boss_attack_family(boss.boss_key))
             retaliation = max(1, int(scaled_attack * float(boss_move["multiplier"]) * random.uniform(0.92, 1.08)) - defense // 3)
+            try:
+                from services.scroll_service import has_buff
+                if await has_buff(telegram_id, "defense"):
+                    retaliation = max(1, int(retaliation * 0.80))
+            except Exception:
+                logger.exception("Could not apply defense scroll to group boss retaliation")
             char.hp = max(0, int(char.hp or 0) - retaliation)
             if char.hp <= 0:
                 char.dead_until = datetime.utcnow() + timedelta(minutes=10)
