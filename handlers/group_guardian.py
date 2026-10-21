@@ -302,12 +302,11 @@ async def manage_action(message: Message, command: str, arg: str):
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=PERMISSIONS, until_date=datetime.now(timezone.utc) + timedelta(minutes=minutes))
             minutes_fa = str(minutes).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
             await message.answer(
-                "🛡️ <b>فرمان نگهبان اجرا شد</b>\n"
+                "✅ <b>سکوت کاربر فعال شد</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                "🔇 <b>مُهر سکوت فعال شد</b>\n\n"
-                f"👤 <b>قهرمان:</b> {html.escape(target.full_name)}\n"
-                f"⏳ <b>مدت حکم:</b> {minutes_fa} دقیقه\n"
-                "⚖️ <i>آرامش گروه، قانون اِلدوریاست.</i>"
+                f"👤 <b>کاربر:</b> {html.escape(target.full_name)}\n"
+                f"⏱ <b>مدت سکوت:</b> {minutes_fa} دقیقه\n"
+                "🔔 کاربر پس از پایان این مدت می‌تواند دوباره پیام بفرستد."
             )
         elif command == "unmute":
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
