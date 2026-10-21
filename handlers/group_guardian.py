@@ -28,6 +28,9 @@ class WelcomeWizard(StatesGroup):
     media = State()
     text = State()
     confirm = State()
+
+class FilterWizard(StatesGroup):
+    word = State()
 FLAGS = {"links": "🔗 ضد لینک", "spam": "🌊 ضد فلود", "bots": "🤖 ضد ربات", "words": "🚫 فیلتر کلمات", "welcome": "👋 خوشامدگویی"}
 DEFAULTS = {"links": False, "spam": False, "bots": False, "words": False, "welcome": False}
 WINDOW = defaultdict(deque)
@@ -171,9 +174,16 @@ async def callback(callback: CallbackQuery, state: FSMContext):
 async def manage(message: Message):
     if not message.text:
         return
-    await manage_action(message, message.text.split()[0].split("@")[0][1:].lower(), message.text.partition(" ")[2].strip())
+    await manage_action(
+        message,
+        message.text.split()[0].split("@")[0][1:].lower(),
+        message.text.partition(" ")[2].strip(),
+        state,
+    )
 
-async def manage_action(message: Message, command: str, arg: str):
+async def manage_action(
+    message: Message, command: str, arg: str, state: FSMContext | None = None
+):
     if not group(message.chat) or not message.from_user:
         return
     chat_id = message.chat.id
@@ -193,15 +203,36 @@ async def manage_action(message: Message, command: str, arg: str):
         await message.answer("🚫 واژه‌های فیلترشده:\n" + (html.escape("، ".join(words)) if words else "موردی ثبت نشده است."))
         return
     if command in ("filteradd", "filterdel"):
-        if not arg or len(arg) > 60:
-            await message.answer("یک واژه یا عبارت حداکثر ۶۰ کاراکتری وارد کنید.")
+        if not arg:
+            if state is None:
+                await message.answer(
+                    "✍️ واژه یا عبارت موردنظر را همراه دستور وارد کن.\n"
+                    "نمونه: /filteradd تبلیغ"
+                )
+                return
+            await state.clear()
+            await state.update_data(
+                guardian_filter_chat_id=chat_id,
+                guardian_filter_command=command,
+                guardian_filter_user_id=message.from_user.id,
+            )
+            await state.set_state(FilterWizard.word)
+            prompt = "➕ واژه یا عبارت حداکثر ۶۰ نویسه‌ای را بفرست تا فیلتر شود." if command == "filteradd" else "➖ واژه یا عبارت حداکثر ۶۰ نویسه‌ای را بفرست تا از فیلتر حذف شود."
+            await message.answer(prompt)
+            return
+        if len(arg) > 60:
+            await message.answer("❌ واژه یا عبارت باید حداکثر ۶۰ نویسه باشد.")
             return
         key = f"guardian:{chat_id}:words"
         if command == "filteradd":
             await redis.sadd(key, arg.casefold())
+            await message.answer(f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد.")
         else:
-            await redis.srem(key, arg.casefold())
-        await message.answer("✅ فیلتر به‌روزرسانی شد.")
+            removed = await redis.srem(key, arg.casefold())
+            await message.answer(
+                f"✅ واژهٔ «{html.escape(arg)}» از فیلتر گروه حذف شد."
+                if removed else f"ℹ️ واژهٔ «{html.escape(arg)}» در فهرست فیلتر نبود."
+            )
         return
     if command == "unban":
         # شناسه می‌تواند در خود دستور باشد، یا از پیام ریپلای‌شده گرفته شود.
@@ -693,6 +724,47 @@ async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer("ذخیره شد.")
     await callback.message.answer("✅ خوشامدگویی ذخیره و فعال شد.")
 
+@router.message(FilterWizard.word, F.text)
+async def receive_filter_word(message: Message, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get("guardian_filter_chat_id")
+    owner_id = data.get("guardian_filter_user_id")
+    command = data.get("guardian_filter_command")
+    if (
+        not message.from_user
+        or not group(message.chat)
+        or message.chat.id != chat_id
+        or message.from_user.id != owner_id
+        or not await guardian_admin(message.bot, message.chat.id, message.from_user.id)
+    ):
+        await state.clear()
+        return
+    word = (message.text or "").strip()
+    if word in ("لغو", "انصراف", "/cancel"):
+        await state.clear()
+        await message.answer("❎ عملیات فیلتر لغو شد.")
+        return
+    if not word or len(word) > 60:
+        await message.answer("❌ واژه یا عبارت باید بین ۱ تا ۶۰ نویسه باشد. دوباره بفرست یا «لغو» بنویس.")
+        return
+    key = f"guardian:{chat_id}:words"
+    if command == "filteradd":
+        added = await redis.sadd(key, word.casefold())
+        await message.answer(
+            f"✅ واژهٔ «{html.escape(word)}» به فیلتر گروه اضافه شد."
+            if added else f"ℹ️ واژهٔ «{html.escape(word)}» از قبل در فیلتر بود."
+        )
+    elif command == "filterdel":
+        removed = await redis.srem(key, word.casefold())
+        await message.answer(
+            f"✅ واژهٔ «{html.escape(word)}» از فیلتر گروه حذف شد."
+            if removed else f"ℹ️ واژهٔ «{html.escape(word)}» در فهرست فیلتر نبود."
+        )
+    else:
+        await message.answer("❌ درخواست فیلتر معتبر نیست.")
+    await state.clear()
+
+
 @router.message(F.text.regexp(r"^(اخطار|سکوت|حذف سکوت|حذف‌سکوت|بن|حذف بن|حذف‌بن|اخطارها|پاک کردن اخطارها|فیلترها|قوانین)"))
 async def persian_moderation_alias(message: Message):
     if not group(message.chat) or not message.from_user:
@@ -702,5 +774,5 @@ async def persian_moderation_alias(message: Message):
     for phrase, command in aliases:
         if raw == phrase or raw.startswith(phrase + " "):
             arg = raw[len(phrase):].strip()
-            await manage_action(message, command, arg)
+            await manage_action(message, command, arg, state)
             return
