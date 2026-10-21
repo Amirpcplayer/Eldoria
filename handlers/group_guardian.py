@@ -201,15 +201,40 @@ async def manage_action(message: Message, command: str, arg: str):
         await message.answer("✅ فیلتر به‌روزرسانی شد.")
         return
     if command == "unban":
-        if not arg.lstrip("-").isdigit():
-            await message.answer("نمونه: /unban 123456789")
+        # شناسه می‌تواند در خود دستور باشد، یا از پیام ریپلای‌شده گرفته شود.
+        target_id = None
+        id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", arg)
+        if id_match:
+            target_id = int(id_match.group(0))
+        else:
+            replied = message.reply_to_message
+            if replied:
+                # ریپلای مستقیم به پیام عضو، حتی اگر اکنون بن شده باشد.
+                if replied.from_user and replied.from_user.id != message.from_user.id:
+                    target_id = replied.from_user.id
+                else:
+                    entities = list(replied.entities or []) + list(replied.caption_entities or [])
+                    for entity in entities:
+                        if entity.type == "text_mention" and entity.user:
+                            target_id = entity.user.id
+                            break
+                    if target_id is None:
+                        replied_text = replied.text or replied.caption or ""
+                        id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
+                        if id_match:
+                            target_id = int(id_match.group(0))
+        if target_id is None:
+            await message.answer("روی پیام عضو ریپلای کن؛ یا شناسهٔ عددی او را بنویس و روی همان پیام ریپلای کن. نمونه: /unban 123456789")
+            return
+        if target_id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID):
+            await message.answer("⛔ نمی‌توان بن خودت یا مالک کل ربات را از این مسیر تغییر داد.")
             return
         if not await bot_rights(message.bot, chat_id, "can_restrict_members"):
-            await message.answer("ربات مجوز مسدودسازی ندارد.")
+            await message.answer("ربات مجوز رفع مسدودسازی ندارد.")
             return
         try:
-            await message.bot.unban_chat_member(chat_id, int(arg), only_if_banned=True)
-            await message.answer("✅ رفع مسدودسازی انجام شد.")
+            await message.bot.unban_chat_member(chat_id, target_id, only_if_banned=True)
+            await message.answer(f"✅ رفع بن برای شناسهٔ <code>{target_id}</code> انجام شد.")
         except TelegramAPIError as exc:
             await message.answer("❌ عملیات ناموفق بود: " + html.escape(str(exc)))
         return
