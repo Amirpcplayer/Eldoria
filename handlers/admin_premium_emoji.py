@@ -38,10 +38,17 @@ def _home_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _group_keyboard(group: str) -> InlineKeyboardMarkup:
+GROUP_PAGE_SIZE = 6
+
+
+def _group_keyboard(group: str, page: int = 0) -> InlineKeyboardMarkup:
     data = load()
+    keys = GROUPS[group]
+    total_pages = max(1, (len(keys) + GROUP_PAGE_SIZE - 1) // GROUP_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * GROUP_PAGE_SIZE
     rows = []
-    for key in GROUPS[group]:
+    for key in keys[start:start + GROUP_PAGE_SIZE]:
         fallback = DEFAULTS.get(key, "✨")
         title = KEY_TITLES.get(key, key.replace("_", " "))
         status = "✅" if str(data.get("ids", {}).get(key, "")).isdigit() else "➕"
@@ -49,6 +56,14 @@ def _group_keyboard(group: str) -> InlineKeyboardMarkup:
             _btn(f"{fallback} {title} · {status}", f"admin:emoji:set:{key}"),
             _btn("🗑 حذف", f"admin:emoji:delete:{key}"),
         ])
+    if total_pages > 1:
+        navigation = []
+        if page > 0:
+            navigation.append(_btn("⬅️ قبلی", f"admin:emoji:group:{group}:{page - 1}"))
+        navigation.append(_btn(f"صفحه {page + 1}/{total_pages}", f"admin:emoji:group:{group}:{page}"))
+        if page + 1 < total_pages:
+            navigation.append(_btn("بعدی ➡️", f"admin:emoji:group:{group}:{page + 1}"))
+        rows.append(navigation)
     rows.append([_btn("⬅️ دسته‌بندی‌ها", "admin:emoji:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -79,15 +94,23 @@ async def group_page(c: CallbackQuery):
     if c.from_user.id != settings.admin_id:
         await c.answer("دسترسی ندارید", show_alert=True)
         return
-    group = (c.data or "").rsplit(":", 1)[-1]
+    parts = (c.data or "").split(":")
+    group = parts[3] if len(parts) > 3 else ""
+    try:
+        page = int(parts[4]) if len(parts) > 4 else 0
+    except ValueError:
+        page = 0
     if group not in GROUPS:
         await c.answer("دسته‌بندی نامعتبر است.", show_alert=True)
         return
+    page = max(0, page)
+    total_pages = max(1, (len(GROUPS[group]) + GROUP_PAGE_SIZE - 1) // GROUP_PAGE_SIZE)
+    page = min(page, total_pages - 1)
     if c.message is not None:
         await c.message.edit_text(
-            f"👑 <b>{GROUP_TITLES[group]}</b>\n\n"
+            f"👑 <b>{GROUP_TITLES[group]}</b> · صفحهٔ {page + 1}/{total_pages}\n\n"
             "برای ثبت یا تغییر، نام مورد را انتخاب کن؛ برای حذف شناسهٔ ذخیره‌شده، «حذف» را بزن.",
-            reply_markup=_group_keyboard(group),
+            reply_markup=_group_keyboard(group, page),
             parse_mode="HTML",
         )
     await c.answer()
