@@ -279,7 +279,7 @@ async def manage_action(message: Message, command: str, arg: str):
                             target_id = None
                 else:
                     # یوزرنیم فقط وقتی قابل تبدیل است که ربات قبلاً آن را از پیام عضو دیده باشد.
-                    username_match = re.search(r"(?<![\\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])", replied_text)
+                    username_match = re.search(r"(?<![\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])", replied_text)
                     if username_match:
                         cached_id = await redis.get(f"guardian:{chat_id}:username:{username_match.group(1).casefold()}")
                         if cached_id and str(cached_id).lstrip("-").isdigit():
