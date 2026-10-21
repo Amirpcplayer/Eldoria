@@ -457,35 +457,8 @@ async def replace_with_text_panel(
 # SHOW PROFILE
 # ============================================================
 
-async def show_profile(
-    callback: CallbackQuery,
-) -> None:
-    telegram_id = callback.from_user.id
-
-    character = await get_character(telegram_id)
-
-    if character is None:
-        await callback.answer(
-            "❌ قهرمان پیدا نشد.",
-            show_alert=True,
-        )
-        return
-
-    stats = await get_profile_stats(
-        telegram_id,
-        character,
-    )
-
-    active_fan_art = await get_active_fan_art(
-        telegram_id,
-    )
-
-    text = build_profile_text(
-        character,
-        active_fan_art,
-        stats,
-    )
-
+async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
+    """Use identical social and active-scroll details for all profile entry points."""
     async with AsyncSessionLocal() as session:
         guild_row = (await session.execute(
             select(Guild.name, Guild.tag)
@@ -519,7 +492,39 @@ async def show_profile(
         scroll_block = f"{emoji('profile_scrolls')} <b>اسکرول‌های فعال</b>\n" + "\n".join(buff_lines)
     else:
         scroll_block = f"{emoji('profile_scrolls')} <b>اسکرول‌های فعال</b>\n{emoji('profile_no_scrolls')} هیچ اسکرولی فعال نیست."
-    text += "\n\n━━━━━━━━ 🛡️ پیوندهای قهرمان ⚔️ ━━━━━━━━\n" + guild_line + "\n" + party_line + "\n\n" + scroll_block
+    return text + "\n\n━━━━━━━━ 🛡️ پیوندهای قهرمان ⚔️ ━━━━━━━━\n" + guild_line + "\n" + party_line + "\n\n" + scroll_block
+
+
+async def show_profile(
+    callback: CallbackQuery,
+) -> None:
+    telegram_id = callback.from_user.id
+
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    stats = await get_profile_stats(
+        telegram_id,
+        character,
+    )
+
+    active_fan_art = await get_active_fan_art(
+        telegram_id,
+    )
+
+    text = build_profile_text(
+        character,
+        active_fan_art,
+        stats,
+    )
+
+    text = await append_profile_social_and_scrolls(text, telegram_id)
 
     keyboard = owned_keyboard(
         profile_keyboard(),
@@ -877,6 +882,7 @@ async def profile_command(message: Message):
         stats = await get_profile_stats(target_user.id, character)
         active_fan_art = await get_active_fan_art(target_user.id)
         text = build_profile_text(character, active_fan_art, stats)
+        text = await append_profile_social_and_scrolls(text, target_user.id)
     except Exception:
         logger.exception(
             "Failed to render /profile for telegram_id=%s",
