@@ -310,7 +310,12 @@ async def manage_action(message: Message, command: str, arg: str):
             )
         elif command == "unmute":
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
-            await message.answer("🔊 سکوت عضو برداشته شد.")
+            await message.answer(
+                "✅ <b>سکوت کاربر برداشته شد</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>کاربر:</b> {html.escape(target.full_name)}\n"
+                "💬 کاربر اکنون می‌تواند دوباره در گروه پیام بفرستد."
+            )
         elif command == "ban":
             await message.bot.ban_chat_member(chat_id, target.id)
             await message.answer("⛔ عضو مسدود شد.")
