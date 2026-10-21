@@ -27,6 +27,12 @@ def profile_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="📜 اسکرول‌ها",
+                    callback_data="inventory:scrolls",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎨 Fan Art پروفایل",
                     callback_data="profile:fanart",
                 ),
