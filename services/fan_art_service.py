@@ -437,7 +437,11 @@ async def get_orders(status: str | None = None, limit: int | None = None, offset
 
 
 async def sell_owned_fan_art(telegram_id: int, fan_art_id: int) -> tuple[bool, str]:
-    """Sell an owned Fan Art for its configured in-game gold value."""
+    """Sell an owned Fan Art for the gold equivalent of its real price.
+    
+    Conversion rate: 50,000 toman = 2,000 gold. This intentionally derives
+    the value from price so older records cannot retain a mismatched value_gold.
+    """
     async with AsyncSessionLocal() as session:
         character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id).with_for_update())
         if character is None: return False, "قهرمان پیدا نشد."
@@ -445,8 +449,8 @@ async def sell_owned_fan_art(telegram_id: int, fan_art_id: int) -> tuple[bool, s
         if ownership is None: return False, "این فن‌آرت در مجموعهٔ تو نیست."
         fan_art = await session.scalar(select(FanArt).where(FanArt.id == fan_art_id).with_for_update())
         if fan_art is None: return False, "فن‌آرت پیدا نشد."
-        value = max(0, int(fan_art.value_gold or 0))
-        if value <= 0: return False, "برای این فن‌آرت ارزش اقتصادی تعیین نشده است."
+        value = max(0, (int(fan_art.price) * 2000) // 50000)
+        if value <= 0: return False, "قیمت این فن‌آرت برای تبدیل به طلا کافی نیست."
         old_gold = int(character.gold or 0)
         character.gold = min(2_147_483_647, old_gold + value)
         received = int(character.gold) - old_gold
