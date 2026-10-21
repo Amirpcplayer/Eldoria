@@ -15,7 +15,7 @@ from models.inventory import Inventory
 from models.social_systems import Pet, CharacterPet
 from models.world_systems import WorldBossContribution, WorldBoss, PvpRating
 from services.panel_image_service import show_panel
-from services.world_progression_service import (list_market_page, get_bestiary, ensure_world_boss, attack_world_boss, list_market, buy_market_listing, create_market_listing, create_equipment_market_listing, evolve_active_pet, upgrade_equipment, get_notifications, mark_notifications_read, cancel_market_listing, get_owned_market_listings, get_inventory_item_ids, get_inventory_equipment_ids, update_market_listing_price)
+from services.world_progression_service import (list_market_page, get_bestiary, ensure_world_boss, attack_world_boss, buy_market_listing, create_market_listing, create_equipment_market_listing, evolve_active_pet, upgrade_equipment, get_notifications, mark_notifications_read, cancel_market_listing, get_owned_market_listings, get_inventory_item_ids, get_inventory_equipment_ids, update_market_listing_price)
 from services.social_service import active_pets, activate_pet
 router=Router(name='advanced_world')
 
@@ -89,11 +89,11 @@ async def world_boss_attack(cb:CallbackQuery):
 
 @router.callback_query(F.data == 'menu:marketplace')
 async def marketplace_menu(cb: CallbackQuery):
-    listings = await list_market()
+    _, active_market_count = await list_market_page(page=0, page_size=1)
     own = await get_owned_market_listings(cb.from_user.id)
     text = (
         '🏪 <b>بازار بازیکنان اِلدوریا</b>\n\n'
-        f'🛒 آگهی‌های فعال قابل مشاهده: <b>{len(listings)}</b>\n'
+        f'🛒 آگهی‌های فعال قابل مشاهده: <b>{active_market_count:,}</b>\n'
         f'📦 آگهی‌های فعال خودت: <b>{len(own)}</b>\n\n'
         'از بخش «آگهی‌های بازار» برای خرید و از «آگهی‌های من» برای ویرایش قیمت یا لغو آگهی استفاده کن.\n'
         'لغو آگهی، آیتم‌های فروخته‌نشده را به صندوقچه برمی‌گرداند.'
