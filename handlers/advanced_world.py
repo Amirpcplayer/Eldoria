@@ -213,12 +213,18 @@ async def marketplace_edit_start(cb: CallbackQuery, state: FSMContext):
     await state.clear()
     await state.update_data(market_edit_listing_id=listing_id)
     await state.set_state(MarketSellStates.waiting_edit_price)
-    await cb.message.answer(f'✏️ قیمت جدید برای آگهی #{listing_id} را به گلد برای هر عدد ارسال کن.\nقیمت فعلی: {listing.unit_price:,}\nبرای لغو، /cancel را بفرست.')
+    await cb.message.answer(f'✏️ قیمت جدید آگهی #{listing_id} را به گلد برای هر عدد بفرست.\nقیمت فعلی: {listing.unit_price:,}\nبرای لغو این کار، عبارت «لغو» را بفرست.')
     await cb.answer()
 
 
 @router.message(Command('cancel'), MarketSellStates.waiting_edit_price)
 async def marketplace_edit_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer('ویرایش قیمت لغو شد.')
+
+
+@router.message(F.text.func(lambda text: bool(text) and text.strip() in {"لغو", "انصراف"}), MarketSellStates.waiting_edit_price)
+async def marketplace_edit_cancel_text(message: Message, state: FSMContext):
     await state.clear()
     await message.answer('ویرایش قیمت لغو شد.')
 
@@ -285,7 +291,7 @@ async def marketplace_sell_choose(cb: CallbackQuery, state: FSMContext):
         '<code>تعداد قیمت_هر_عدد</code>\n'
         'مثال: <code>5 1300</code>\n'
         'یعنی ۵ عدد، هر عدد ۱۳۰۰ گلد.\n\n'
-        'برای لغو عملیات: /cancel',
+        'برای لغو عملیات، عبارت «لغو» را بفرست.',
         parse_mode='HTML'
     )
 
@@ -293,6 +299,12 @@ async def marketplace_sell_choose(cb: CallbackQuery, state: FSMContext):
 async def marketplace_sell_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer('ثبت آگهی لغو شد.')
+
+@router.message(F.text.func(lambda text: bool(text) and text.strip() in {"لغو", "انصراف"}), MarketSellStates.waiting_quantity_price)
+async def marketplace_sell_cancel_text(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer('ثبت آگهی لغو شد.')
+
 
 @router.message(MarketSellStates.waiting_quantity_price)
 async def marketplace_sell_submit(message: Message, state: FSMContext):
@@ -521,11 +533,11 @@ async def game_guide(cb: CallbackQuery):
         "<b>🗺 ماجراجویی و 🏰 دانجن</b>\nبا هیولاها بجنگ و XP، گلد و مواد به دست بیاور. دانجن گروهی برای همکاری با اعضای پارتی است.\n\n"
         "<b>📜 مأموریت‌ها</b>\nپیشرفت مأموریت‌ها را دنبال کن و پس از تکمیل، پاداش را دریافت کن. هر پاداش فقط یک بار قابل دریافت است.\n\n"
         "<b>🐾 پت‌ها</b>\nپت بخر، یکی را فعال کن و برای تقویت آن تمرین بده. هر پت هر ۶۰ دقیقه یک بار قابل تمرین است.\n\n"
-        "<b>🏪 بازار بازیکنان</b>\nبرای فروش، شناسهٔ آیتم را از /market_items یا شناسهٔ تجهیز را از /market_equipment_items بگیر. سپس از دستورهای /market_sell یا /market_sell_equipment استفاده کن. قیمت هر عدد را تعیین می‌کنی؛ خرید از آگهی فعال انجام می‌شود و پول به فروشنده می‌رسد.\n\n"
+        "<b>🏪 بازار بازیکنان</b>\nاز دکمهٔ «بازار بازیکنان» وارد شو. برای فروش، «ثبت آگهی از صندوقچه» را بزن، نوع کالا و سپس خود کالا را انتخاب کن و تعداد و قیمت هر عدد را در یک پیام بنویس؛ مثلاً <code>3 500</code> یعنی ۳ عدد، هرکدام ۵۰۰ گلد. برای خرید، آگهی‌های بازار را ببین. از «آگهی‌های من» هم می‌توانی قیمت را تغییر بدهی یا آگهی را لغو کنی. برای فروش تجهیزات، آن‌ها باید از تن خارج شده باشند.\n\n"
         "<b>💱 گلد و جم</b>\nگلد برای خریدهای معمولی و جم برای تجهیزات ویژه است. در بخش تبدیل ارز، نرخ و مقدار دریافتی را پیش از تأیید می‌بینی.\n\n"
         "<b>👥 پارتی، 🛡 گیلد، 🏆 رتبه‌بندی و ⚔️ PvP</b>\nبرای بازی گروهی، عضویت در گیلد، دیدن رتبه‌ها و مبارزه با بازیکنان از این بخش‌ها استفاده کن.\n\n"
         "<b>🎨 فن‌آرت و ⚙️ تنظیمات</b>\nفن‌آرت‌های خودت را مدیریت کن و تنظیمات قابل‌دسترسی حساب را تغییر بده.\n\n"
-        "<b>⌨️ دستورات اصلی</b>\n/start ساخت حساب یا پیام وضعیت حساب · /profile نمایش پروفایل · /menu منوی اصلی"
+        "<b>🧭 کار با ربات</b>\nبرای ورود به بخش‌ها از دکمه‌های منو یا نوشتن نام فارسی بخش استفاده کن؛ مثلاً «بازار بازیکنان»."
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💱 تبدیل گلد به جم", callback_data="menu:exchange")],
@@ -633,12 +645,24 @@ async def exchange_confirm(cb: CallbackQuery):
 @router.callback_query(F.data == "market:help")
 async def marketplace_help(cb: CallbackQuery):
     text = (
-        "❓ <b>راهنمای بازار بازیکنان</b>\n\n"
-        "۱) برای فروش مواد و آیتم‌ها، دستور /market_items را بزن و شناسهٔ آیتم را پیدا کن.\n"
-        "۲) برای فروش تجهیز، دستور /market_equipment_items را بزن؛ تجهیز باید از تن خارج شده باشد.\n"
-        "۳) دستور فروش را با شناسه، تعداد و قیمت هر عدد وارد کن. مثال: /market_sell 12 3 500\n"
-        "۴) آگهی در بازار نمایش داده می‌شود. خریدار قیمت کل را می‌پردازد و آیتم‌ها را می‌گیرد؛ گلد مستقیم به فروشنده می‌رسد.\n"
-        "۵) از «آگهی‌های من» می‌توانی قیمت هر آگهی را ویرایش یا آن را لغو کنی؛ آیتم‌های لغوشده به صندوقچه برمی‌گردند.\n\n"
-        "خرید آگهی خودت ممکن نیست. قیمت را با توجه به سطح و کمیابی آیتم تعیین کن."
+        "❓ <b>راهنمای بازار بازیکنان</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🛍 <b>چطور چیزی بفروشم؟</b>\n"
+        "۱) دکمهٔ «ثبت آگهی از صندوقچه» را بزن.\n"
+        "۲) «فروش آیتم‌ها و مواد» یا «فروش تجهیزات» را انتخاب کن.\n"
+        "۳) روی کالایی که می‌خواهی بفروشی بزن. موجودی قابل فروش همان‌جا نشان داده می‌شود.\n"
+        "۴) وقتی از تو خواسته شد، تعداد و قیمت هر عدد را در <b>یک پیام</b> بفرست. مثال: <code>3 500</code> یعنی ۳ عدد با قیمت ۵۰۰ گلد برای هر عدد.\n"
+        "۵) آگهی ثبت می‌شود و در فهرست بازار قرار می‌گیرد. تجهیزات باید از تن خارج شده باشند و تجهیزات ارتقایافته قابل ثبت نیستند.\n\n"
+        "🛒 <b>چطور بخرم؟</b>\n"
+        "وارد «آگهی‌های بازار» شو، قیمت هر عدد و قیمت کل را بررسی کن و دکمهٔ خرید همان آگهی را بزن. گلد از تو کم و کالا به صندوقچه‌ات اضافه می‌شود؛ گلد فروشنده نیز واریز می‌شود. خرید آگهی خودت امکان‌پذیر نیست.\n\n"
+        "✏️ <b>ویرایش یا لغو آگهی</b>\n"
+        "در «آگهی‌های من» می‌توانی قیمت هر عدد را تغییر بدهی یا آگهی را لغو کنی. با لغو، کالاهای فروش‌نرفته به صندوقچه برمی‌گردند. برای انصراف از واردکردن تعداد یا قیمت، فقط بنویس «لغو».\n\n"
+        "💡 <b>نکته</b>\n"
+        "قیمت کل برابر تعداد × قیمت هر عدد است؛ پیش از خرید، هر دو مبلغ را بررسی کن."
     )
-    await panel(cb, text, InlineKeyboardMarkup(inline_keyboard=[back_row('menu:marketplace')]), panel_name='shop')
+    await panel(cb, text, InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='🛒 دیدن آگهی‌های بازار', callback_data='market:browse')],
+        [InlineKeyboardButton(text='➕ ثبت آگهی از صندوقچه', callback_data='market:sell:home')],
+        [InlineKeyboardButton(text='📦 آگهی‌های من', callback_data='market:mine')],
+        back_row('menu:marketplace'),
+    ]), panel_name='shop')
