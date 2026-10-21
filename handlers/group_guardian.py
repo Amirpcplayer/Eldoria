@@ -42,6 +42,18 @@ UNMUTE = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_
 def group(chat):
     return chat.type in ("group", "supergroup")
 
+
+_FILTER_TRANSLATION = str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک", "ـ": ""})
+
+
+def normalize_filter_text(value: str) -> str:
+    """Normalize common Arabic/Persian spelling variants for group word filters."""
+    value = (value or "").casefold().translate(_FILTER_TRANSLATION)
+    value = re.sub(r"[\u064B-\u065F\u0670]", "", value)
+    value = value.replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "")
+    return re.sub(r"\s+", " ", value).strip()
+
+
 async def authorized(bot, chat_id, user_id):
     member = await bot.get_chat_member(chat_id, user_id)
     return member.status in ("creator", "administrator")
@@ -225,11 +237,21 @@ async def manage_action(
             await message.answer("❌ واژه یا عبارت باید حداکثر ۶۰ نویسه باشد.")
             return
         key = f"guardian:{chat_id}:words"
+        normalized_word = normalize_filter_text(arg)
+        if not normalized_word:
+            await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+            return
         if command == "filteradd":
-            await redis.sadd(key, arg.casefold())
-            await message.answer(f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد.")
+            added = await redis.sadd(key, normalized_word)
+            await message.answer(
+                f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد."
+                if added else f"ℹ️ واژهٔ «{html.escape(arg)}» از قبل در فیلتر بود."
+            )
         else:
-            removed = await redis.srem(key, arg.casefold())
+            # Also remove older entries saved before Persian text normalization.
+            stored_words = await redis.smembers(key)
+            matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+            removed = await redis.srem(key, *matches) if matches else 0
             await message.answer(
                 f"✅ واژهٔ «{html.escape(arg)}» از فیلتر گروه حذف شد."
                 if removed else f"ℹ️ واژهٔ «{html.escape(arg)}» در فهرست فیلتر نبود."
@@ -600,7 +622,12 @@ class GuardianMiddleware(BaseMiddleware):
             violation = True
         if values["words"]:
             words = await redis.smembers(f"guardian:{chat_id}:words")
-            if any(word and word in content.casefold() for word in words):
+            normalized_content = normalize_filter_text(content)
+            if any(
+                (normalized_word := normalize_filter_text(word))
+                and normalized_word in normalized_content
+                for word in words
+            ):
                 violation = True
         if values["spam"]:
             key = (chat_id, event.from_user.id)
@@ -749,14 +776,21 @@ async def receive_filter_word(message: Message, state: FSMContext):
         await message.answer("❌ واژه یا عبارت باید بین ۱ تا ۶۰ نویسه باشد. دوباره بفرست یا «لغو» بنویس.")
         return
     key = f"guardian:{chat_id}:words"
+    normalized_word = normalize_filter_text(word)
+    if not normalized_word:
+        await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+        return
     if command == "filteradd":
-        added = await redis.sadd(key, word.casefold())
+        added = await redis.sadd(key, normalized_word)
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» به فیلتر گروه اضافه شد."
             if added else f"ℹ️ واژهٔ «{html.escape(word)}» از قبل در فیلتر بود."
         )
     elif command == "filterdel":
-        removed = await redis.srem(key, word.casefold())
+        # Also remove older entries saved before Persian text normalization.
+        stored_words = await redis.smembers(key)
+        matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+        removed = await redis.srem(key, *matches) if matches else 0
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» از فیلتر گروه حذف شد."
             if removed else f"ℹ️ واژهٔ «{html.escape(word)}» در فهرست فیلتر نبود."
