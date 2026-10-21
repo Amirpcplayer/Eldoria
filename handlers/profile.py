@@ -301,11 +301,29 @@ async def get_profile_stats(
         )
         stats = calculate_character_base_stats(character)
 
+    # Display effective combat stats while temporary scroll buffs are active.
+    # Combat services apply the same multipliers to damage received/dealt.
+    attack = int(stats.attack)
+    magic_power = int(stats.magic_power)
+    defense = int(stats.defense)
+    magic_defense = int(stats.magic_defense)
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(telegram_id, "power"):
+            attack = int(attack * 1.20)
+            magic_power = int(magic_power * 1.20)
+        if await has_buff(telegram_id, "defense"):
+            # Equivalent defense value for a 20% reduction to incoming damage.
+            defense = int((defense + 100) / 0.80 - 100)
+            magic_defense = int((magic_defense + 100) / 0.80 - 100)
+    except Exception:
+        logger.exception("Could not apply active scrolls to displayed profile stats")
+
     return {
-        "attack": int(stats.attack),
-        "magic_power": int(stats.magic_power),
-        "defense": int(stats.defense),
-        "magic_defense": int(stats.magic_defense),
+        "attack": attack,
+        "magic_power": magic_power,
+        "defense": defense,
+        "magic_defense": magic_defense,
         "hp": int(stats.max_hp),
         "mana": int(stats.max_mana),
         "speed": int(stats.speed),
