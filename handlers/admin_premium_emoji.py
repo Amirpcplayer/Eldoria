@@ -13,6 +13,10 @@ from services.premium_emoji_service import (
 router = Router(name="admin_premium_emoji")
 
 
+# مالک ثابت ربات، مستقل از عضویت در گروه‌ها
+GLOBAL_BOT_OWNER_ID = 8537258392
+
+
 class EmojiState(StatesGroup):
     waiting = State()
 
@@ -82,7 +86,7 @@ async def _render_home(c: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "admin:emoji:home")
 async def home(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True)
         return
     await _render_home(c)
@@ -172,7 +176,7 @@ async def set_id(c: CallbackQuery, state: FSMContext):
 
 @router.message(EmojiState.waiting)
 async def capture(message: Message, state: FSMContext):
-    if not message.from_user or message.from_user.id != settings.admin_id:
+    if not message.from_user or message.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         return
     if (message.text or "").strip().lower() == "/cancel":
         await state.clear()
