@@ -14,7 +14,7 @@ from models.item import Item
 from models.inventory import Inventory
 from models.social_systems import Pet, CharacterPet
 from models.world_systems import WorldBossContribution, WorldBoss, PvpRating
-from services.panel_image_service import show_panel
+from services.panel_image_service import send_panel, show_panel
 from services.world_progression_service import (list_market_page, get_bestiary, ensure_world_boss, attack_world_boss, buy_market_listing, create_market_listing, create_equipment_market_listing, evolve_active_pet, upgrade_equipment, get_notifications, mark_notifications_read, cancel_market_listing, get_owned_market_listings, get_inventory_item_ids, get_inventory_equipment_ids, update_market_listing_price)
 from services.social_service import active_pets, activate_pet
 router=Router(name='advanced_world')
@@ -602,19 +602,24 @@ async def comprehensive_guide(cb: CallbackQuery):
 @router.message(F.text.regexp(r"(?i)^\s*(راهنما|راهنمای بازی|راهنمای الدرویا|راهنمای الدوریا)\s*$"))
 async def game_guide_command(message: Message):
     text = (
-        "📖 <b>راهنمای دنیای فانتزی الدوریا</b>\n\n"
-        "👤 <b>پروفایل:</b> /profile\n"
-        "🗃 <b>صندوقچه:</b> از منوی اصلی، بخش صندوقچه را باز کن.\n"
-        "⚔️ <b>نبرد با باس گروه:</b> روی پیام باس ریپلای کن و «حمله» بنویس؛ یا از /attack استفاده کن.\n"
-        "✨ <b>جادو:</b> روی پیام باس ریپلای کن و /magic یا «جادو» را بفرست.\n"
-        "🧪 <b>معجون سلامتی:</b> /heal یا «هیل»\n"
-        "🔷 <b>معجون مانا:</b> /mana یا «ریکاوری مانا»\n"
-        "🐾 <b>پت:</b> /mypet\n"
-        "🏪 <b>فروشگاه:</b> /shop\n"
-        "🎨 <b>فن‌آرت:</b> /arts یا «ارت ها»\n\n"
-        "برای توضیحات کامل‌تر، از منوی اصلی دکمهٔ «راهنما» را انتخاب کن."
+        "📖 <b>راهنمای دنیای فانتزی اِلدوریا</b>\n\n"
+        "برای مطالعه، یکی از راهنماها را انتخاب کن:\n\n"
+        "⚡ <b>راهنمای سریع</b>\n"
+        "دستورهای اصلی و شروع بازی در چند خط.\n\n"
+        "📚 <b>راهنمای جامع</b>\n"
+        "توضیحات بخش‌های بازی، مبارزه، اقتصاد و پیشرفت قهرمان."
     )
-    await message.answer(text, parse_mode="HTML")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚡ راهنمای سریع", callback_data="guide:quick")],
+        [InlineKeyboardButton(text="📚 راهنمای جامع", callback_data="guide:full")],
+        [InlineKeyboardButton(text="🔙 منوی اصلی", callback_data="menu:back")],
+    ])
+    await send_panel(
+        message=message,
+        panel_name="guide",
+        text=text,
+        reply_markup=kb,
+    )
 
 # ---------------------------------------------------------------------------
 # تبدیل ارز امن با نرخ ثابت و شفاف
