@@ -347,3 +347,107 @@ class GuardianMiddleware(BaseMiddleware):
             except TelegramAPIError:
                 pass
         return await handler(event, data)
+
+def _jalali_date(dt):
+    gy, gm, gd = dt.year, dt.month, dt.day
+    offsets = [0,31,59,90,120,151,181,212,243,273,304,334]
+    gy2 = gy + 1 if gm > 2 else gy
+    days = 355666 + 365*gy + (gy2+3)//4 - (gy2+99)//100 + (gy2+399)//400 + gd + offsets[gm-1]
+    jy = -1595 + 33*(days//12053)
+    days %= 12053
+    jy += 4*(days//1461)
+    days %= 1461
+    if days > 365:
+        jy += (days-1)//365
+        days = (days-1)%365
+    if days < 186:
+        jm, jd = 1 + days//31, 1 + days%31
+    else:
+        jm, jd = 7 + (days-186)//30, 1 + (days-186)%30
+    return f"{jy:04d}/{jm:02d}/{jd:02d}"
+
+def _welcome_text(template, title, member_name):
+    import random
+    now = datetime.now(ZoneInfo("Asia/Tehran"))
+    values = {"اسم_گروه": title, "ایموجی": random.choice(["✨","🌟","⚔️","🌿","🦋","🔥","🌙","💎"]), "تاریخ": _jalali_date(now), "ساعت": now.strftime("%H:%M:%S"), "اسم_عضو": member_name}
+    for key, value in values.items():
+        template = template.replace("{" + key + "}", html.escape(str(value)))
+    return template
+
+@router.message(WelcomeWizard.media)
+async def welcome_media_step(message: Message, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get("guardian_chat_id")
+    if not message.from_user or not chat_id or message.chat.id != chat_id or not await guardian_admin(message.bot, chat_id, message.from_user.id):
+        await state.clear()
+        return
+    media_type, media_id = "none", ""
+    if message.photo:
+        media_type, media_id = "photo", message.photo[-1].file_id
+    elif message.video:
+        media_type, media_id = "video", message.video.file_id
+    elif message.animation:
+        media_type, media_id = "animation", message.animation.file_id
+    elif (message.text or "").strip() not in ("بدون رسانه", "بدون‌ رسانه"):
+        await message.answer("عکس، ویدئو، GIF یا عبارت «بدون رسانه» را بفرست.")
+        return
+    await state.update_data(welcome_media_type=media_type, welcome_media_id=media_id)
+    await state.set_state(WelcomeWizard.text)
+    await message.answer("✍️ متن خوشامدگویی را بفرست. متغیرها: {اسم_گروه}، {ایموجی}، {تاریخ}، {ساعت}، {اسم_عضو}")
+
+@router.message(WelcomeWizard.text)
+async def welcome_text_step(message: Message, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get("guardian_chat_id")
+    if not message.from_user or not chat_id or message.chat.id != chat_id or not await guardian_admin(message.bot, chat_id, message.from_user.id):
+        await state.clear()
+        return
+    template = (message.text or "").strip()
+    if not template or len(template) > 3500:
+        await message.answer("متن خوشامدگویی باید بین ۱ تا ۳۵۰۰ نویسه باشد.")
+        return
+    await state.update_data(welcome_template=template)
+    preview = _welcome_text(template, message.chat.title or "گروه اِلدوریا", "قهرمان تازه‌وارد")
+    markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ ذخیره و فعال‌سازی", callback_data=f"gapwelcome:save:{chat_id}:{message.from_user.id}"), InlineKeyboardButton(text="❌ لغو", callback_data=f"gapwelcome:cancel:{chat_id}:{message.from_user.id}")]])
+    media_type, media_id = data.get("welcome_media_type"), data.get("welcome_media_id")
+    if media_type == "photo" and media_id:
+        await message.answer_photo(media_id, caption=preview, reply_markup=markup)
+    elif media_type == "video" and media_id:
+        await message.answer_video(media_id, caption=preview, reply_markup=markup)
+    elif media_type == "animation" and media_id:
+        await message.answer_animation(media_id, caption=preview, reply_markup=markup)
+    else:
+        await message.answer("👁 <b>پیش‌نمایش خوشامدگویی</b>\\n\\n" + preview, reply_markup=markup)
+    await state.set_state(WelcomeWizard.confirm)
+
+@router.callback_query(F.data.startswith("gapwelcome:"))
+async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
+    parts = (callback.data or "").split(":")
+    if len(parts) != 4 or not callback.message or not group(callback.message.chat):
+        await callback.answer("درخواست نامعتبر است.", show_alert=True)
+        return
+    _, action, raw_chat, raw_owner = parts
+    if not raw_chat.lstrip("-").isdigit() or not raw_owner.isdigit() or int(raw_chat) != callback.message.chat.id:
+        await callback.answer("گروه نامعتبر است.", show_alert=True)
+        return
+    if callback.from_user.id != int(raw_owner):
+        await callback.answer("🔒 فقط سازنده این تنظیم می‌تواند آن را تأیید کند.", show_alert=True)
+        return
+    if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
+        await callback.answer("دسترسی مدیر لازم است.", show_alert=True)
+        return
+    if action == "cancel":
+        await state.clear()
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer("لغو شد.")
+        return
+    data = await state.get_data()
+    if data.get("guardian_chat_id") != callback.message.chat.id or data.get("guardian_owner_id") != callback.from_user.id or await state.get_state() != WelcomeWizard.confirm.state:
+        await callback.answer("این فرایند منقضی شده؛ از پنل دوباره شروع کن.", show_alert=True)
+        return
+    await redis.hset(f"guardian:{callback.message.chat.id}:welcome", mapping={"media_type": data.get("welcome_media_type", "none"), "media_id": data.get("welcome_media_id") or "", "template": data.get("welcome_template", "👋 به {اسم_گروه} خوش آمدی {ایموجی}")})
+    await redis.hset(f"guardian:{callback.message.chat.id}:settings", "welcome", "1")
+    await state.clear()
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer("ذخیره شد.")
+    await callback.message.answer("✅ خوشامدگویی ذخیره و فعال شد.")
