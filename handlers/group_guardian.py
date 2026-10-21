@@ -7,6 +7,9 @@ import time
 from collections import defaultdict, deque
 
 from aiogram import BaseMiddleware, F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from zoneinfo import ZoneInfo
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup, Message, TelegramObject
 from aiogram.exceptions import TelegramAPIError
@@ -14,6 +17,11 @@ from datetime import datetime, timedelta, timezone
 from database.redis import redis
 
 router = Router()
+
+class WelcomeWizard(StatesGroup):
+    media = State()
+    text = State()
+    confirm = State()
 FLAGS = {"links": "🔗 ضد لینک", "spam": "🌊 ضد فلود", "bots": "🤖 ضد ربات", "words": "🚫 فیلتر کلمات", "welcome": "👋 خوشامدگویی"}
 DEFAULTS = {"links": False, "spam": False, "bots": False, "words": False, "welcome": False}
 WINDOW = defaultdict(deque)
@@ -79,7 +87,7 @@ async def gap(message: Message):
     await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
 
 @router.callback_query(F.data.startswith("gap:"))
-async def callback(callback: CallbackQuery):
+async def callback(callback: CallbackQuery, state: FSMContext):
     if not callback.message or not group(callback.message.chat):
         await callback.answer("پنل فقط در گروه معتبر است.", show_alert=True)
         return
@@ -116,6 +124,21 @@ async def callback(callback: CallbackQuery):
             "/gap — بازگشت به پنل\n\n"
             "برای حذف پیام و محدودکردن اعضا، دسترسی حذف پیام و مسدودسازی به ربات بدهید.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
+    elif action == "admins":
+        ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
+        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>", "♛ شاه: مالک واقعی گروه"]
+        for item in ids:
+            try:
+                member = await callback.bot.get_chat_member(chat_id, int(item))
+                lines.append(f"🛡️ {html.escape(member.user.full_name)} — <code>{item}</code>")
+            except TelegramAPIError:
+                lines.append(f"🛡️ <code>{item}</code>")
+        await callback.message.edit_text("\\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
+    elif action == "welcome":
+        await state.clear()
+        await state.update_data(guardian_chat_id=chat_id, guardian_owner_id=owner_id)
+        await state.set_state(WelcomeWizard.media)
+        await callback.message.answer("🎨 <b>تنظیم خوشامدگویی</b>\\nابتدا عکس، ویدئو یا GIF را بفرست. برای بدون رسانه بنویس: بدون رسانه")
     elif action == "home":
         values = await settings(chat_id)
         await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
