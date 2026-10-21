@@ -1,5 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from services.scroll_service import scroll_kind
+
 
 def inventory_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -60,7 +62,7 @@ def inventory_items_keyboard(items) -> InlineKeyboardMarkup:
         )
         # Scrolls can be read directly from the scroll list; the handler
         # validates ownership and enforces the two-hour effect cooldown.
-        if getattr(item, "item_type", None) == "scroll":
+        if scroll_kind(item.name):
             rows.append(
                 [
                     InlineKeyboardButton(
