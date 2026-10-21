@@ -216,6 +216,42 @@ async def add_character_xp_for_character_id(character_id:int,xp:int):
         else:return
     await add_character_xp(tid,xp)
 
+async def list_market_page(page: int = 0, page_size: int = 6, item_kind: str | None = None):
+    """Fetch a stable, paginated market page with batched item lookups."""
+    from sqlalchemy import func
+    from models.equipment import Equipment
+
+    page = max(0, int(page))
+    page_size = max(1, min(10, int(page_size)))
+    filters = [MarketListing.status == 'active']
+    if item_kind in {'item', 'equipment'}:
+        filters.append(MarketListing.item_kind == item_kind)
+
+    async with AsyncSessionLocal() as session:
+        total = int(await session.scalar(select(func.count(MarketListing.id)).where(*filters)) or 0)
+        listings = list((await session.scalars(
+            select(MarketListing)
+            .where(*filters)
+            .order_by(MarketListing.created_at.desc(), MarketListing.id.desc())
+            .offset(page * page_size)
+            .limit(page_size)
+        )).all())
+        item_ids = {row.item_id for row in listings if row.item_kind == 'item'}
+        equipment_ids = {row.item_id for row in listings if row.item_kind == 'equipment'}
+        item_map = {}
+        equipment_map = {}
+        if item_ids:
+            item_map = {obj.id: obj for obj in (await session.scalars(select(Item).where(Item.id.in_(item_ids)))).all()}
+        if equipment_ids:
+            equipment_map = {obj.id: obj for obj in (await session.scalars(select(Equipment).where(Equipment.id.in_(equipment_ids)))).all()}
+        result = []
+        for listing in listings:
+            obj = item_map.get(listing.item_id) if listing.item_kind == 'item' else equipment_map.get(listing.item_id)
+            if obj is not None:
+                result.append((listing, obj))
+        return result, total
+
+
 async def list_market():
     async with AsyncSessionLocal() as session:
         rows=(await session.execute(select(MarketListing).where(MarketListing.status=='active').order_by(MarketListing.created_at.desc()).limit(20))).scalars().all()
