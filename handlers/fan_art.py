@@ -433,9 +433,9 @@ async def fan_art_paid(
 
             await callback.message.answer(
                 "⚠️ شما یک سفارش فعال دارید.\n\n"
-                f"🆔 سفارش: {active_order.order_code}\n"
                 f"🎨 Fan Art: {active_order.fan_art.name}\n"
-                f"📌 وضعیت: {status_text}"
+                f"📌 وضعیت: {status_text}\n\n"
+                "جزئیات و شماره سفارش فقط در پی‌وی ربات نمایش داده می‌شود."
             )
             return
 
@@ -477,10 +477,10 @@ async def fan_art_paid(
 
         await callback.message.answer(
             "📷 ارسال رسید پرداخت\n\n"
-            f"🆔 شماره سفارش: {order.order_code}\n"
             f"🎨 Fan Art: {order.fan_art.name}\n"
             f"💰 مبلغ: {int(order.price_snapshot):,}\n\n"
-            "حالا تصویر رسید پرداخت را به صورت Photo ارسال کن.",
+            "حالا تصویر رسید پرداخت را به صورت Photo ارسال کن.\n"
+            "شماره سفارش و فاکتور نهایی فقط پس از ارسال رسید، در پی‌وی ربات برایت فرستاده می‌شود.",
             reply_markup=None,
         )
 
