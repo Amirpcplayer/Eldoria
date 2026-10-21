@@ -31,6 +31,9 @@ from config.settings import settings
 router = Router(name="group_boss")
 logger = logging.getLogger(__name__)
 
+# ریشهٔ پروژه برای پیدا کردن تصاویر باس و فایل‌های دارایی.
+ROOT = Path(__file__).resolve().parent.parent
+
 # تومارهای ورود باس؛ پنج روایت برای هر باس عادی و پنجاه روایت برای نخستین اِلدوریا.
 BOSS_ENTRANCE_STORIES = [
     "زمین زیر پا لرزید؛ غبار از سنگ‌های کهن برخاست و آسمان، برای یک دم، رنگ خون گرفت. چیزی از آن‌سوی افق بیدار شده بود.",
