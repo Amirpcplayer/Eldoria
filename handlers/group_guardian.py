@@ -249,36 +249,70 @@ async def manage_action(message: Message, command: str, arg: str):
             return
 
     target = None
+    target_id = None
     replied = message.reply_to_message
     if replied:
-        # حالت عادی: ریپلای مستقیم به پیام عضو.
+        # ریپلای مستقیم به پیام عضو.
         if replied.from_user and replied.from_user.id != message.from_user.id:
             target = replied.from_user
+            target_id = target.id
         else:
-            # اگر خود مدیر پیامی شامل شناسهٔ عضو فرستاده و به آن ریپلای کرده،
-            # شناسهٔ داخل پیام را پیدا کن و عضو واقعی گروه را هدف بگیر.
+            # ریپلای به پیام خود مدیر که شناسهٔ کاربر داخل آن نوشته شده است.
             entities = list(replied.entities or []) + list(replied.caption_entities or [])
             for entity in entities:
                 if entity.type == "text_mention" and entity.user:
                     target = entity.user
+                    target_id = target.id
                     break
-            if target is None:
+            if target_id is None:
                 replied_text = replied.text or replied.caption or ""
-                id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", replied_text)
+                id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
                 if id_match:
+                    target_id = int(id_match.group(0))
                     try:
-                        member = await message.bot.get_chat_member(chat_id, int(id_match.group(0)))
+                        member = await message.bot.get_chat_member(chat_id, target_id)
                         if member.status not in ("left", "kicked"):
                             target = member.user
                     except TelegramAPIError:
-                        target = None
-    if not target:
-        await message.answer("روی پیام عضو ریپلای کن؛ یا اگر پیام خودت است، شناسهٔ عددی عضو را داخل آن بنویس.")
+                        # برای بن، شناسه به‌تنهایی کافی است.
+                        if command != "ban":
+                            target_id = None
+    if target_id is None:
+        await message.answer("روی پیام عضو ریپلای کن؛ یا یک پیام شامل شناسهٔ عددی او بفرست و روی همان پیام دستور «بن» را اجرا کن.")
         return
-    if target.is_bot or target.id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID) or await authorized(message.bot, chat_id, target.id):
-        await message.answer("⛔ این عملیات روی ربات‌ها، خودتان یا مدیران مجاز نیست.")
+    if target_id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID):
+        await message.answer("⛔ امکان اجرای این عملیات روی خودت یا مالک کل ربات وجود ندارد.")
         return
-    key = f"guardian:{chat_id}:warn:{target.id}"
+    if target and target.is_bot:
+        await message.answer("⛔ این عملیات روی ربات‌ها مجاز نیست.")
+        return
+    try:
+        if await authorized(message.bot, chat_id, target_id):
+            await message.answer("⛔ این عملیات روی مدیران گروه مجاز نیست.")
+            return
+    except TelegramAPIError:
+        if command != "ban" or target is not None:
+            await message.answer("❌ نتوانستم وضعیت این کاربر را در گروه بررسی کنم.")
+            return
+    if command == "ban" and target is None:
+        if not await bot_rights(message.bot, chat_id, "can_restrict_members"):
+            await message.answer("❌ برای مسدودکردن کاربران، دسترسی محدودکردن اعضا را به ربات بده.")
+            return
+        try:
+            await message.bot.ban_chat_member(chat_id, target_id)
+            await message.answer(
+                "✅ <b>کاربر با موفقیت مسدود شد</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 <b>شناسه کاربر:</b> <code>{target_id}</code>\n"
+                "🚫 دسترسی کاربر به این گروه مسدود شد."
+            )
+        except (TelegramAPIError, ValueError) as exc:
+            await message.answer("❌ <b>مسدودسازی انجام نشد</b>\n" + html.escape(str(exc)))
+        return
+    if target is None:
+        await message.answer("❌ اطلاعات این کاربر در دسترس نیست.")
+        return
+    key = f"guardian:{chat_id}:warn:{target_id}"
     if command == "warnings":
         await message.answer(f"⚠️ اخطارهای این عضو: {int(await redis.get(key) or 0)}/3")
         return
@@ -318,7 +352,13 @@ async def manage_action(message: Message, command: str, arg: str):
             )
         elif command == "ban":
             await message.bot.ban_chat_member(chat_id, target.id)
-            await message.answer("⛔ عضو مسدود شد.")
+            await message.answer(
+                "✅ <b>کاربر با موفقیت مسدود شد</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>کاربر:</b> {html.escape(target.full_name)}\n"
+                f"🆔 <b>شناسه:</b> <code>{target.id}</code>\n"
+                "🚫 دسترسی کاربر به این گروه مسدود شد."
+            )
         elif command == "kick":
             await message.bot.ban_chat_member(chat_id, target.id)
             await message.bot.unban_chat_member(chat_id, target.id, only_if_banned=True)
