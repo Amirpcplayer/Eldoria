@@ -479,35 +479,37 @@ def boss_death_dialogue(cfg: dict) -> str:
     ]
     return random.choice(variants)
 
-def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
-    """Render the royal-fantasy boss panel while preserving existing battle commands."""
+def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None, next_spawn_at: datetime | None = None) -> str:
+    """Render an alert-style world-boss notice while preserving existing battle commands."""
     story = html.escape(boss_entrance_story(cfg))
     boss_name = html.escape(str(cfg.get("name", "سالار ناشناخته")))
     weak = (
-        f"\n✦ <b>ضعف پنهان:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
+        f"\\n⚡ <b>WEAKNESS:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
         if weakness else ""
     )
+    if next_spawn_at:
+        seconds = max(0, int((next_spawn_at - datetime.utcnow()).total_seconds()))
+        next_spawn = f"{seconds // 60} min"
+    else:
+        next_spawn = "about 60 min"
     return (
-        "༺═━━ 🜲 ━━═༻\n"
-        "<b>📜 طومار بیداری باس</b>\n"
-        "<i>مُهرهای کهن شکسته‌اند؛ آزمون قهرمانان آغاز می‌شود.</i>\n"
-        "༺════════════༻\n\n"
-        f"⚔️ <b>{boss_name}</b> · <b>Lv.{level}</b>\n"
-        f"📜 <i>{story}</i>\n\n"
-        f"❤️ <b>نیروی حیات:</b> <b>{hp:,} / {hp:,}</b>\n"
-        f"🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩  <b>100%</b>"
-        f"{weak}\n\n"
-        "༺═ ✦ <b>پیمان جنگجویان</b> ✦ ═༻\n"
-        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\n"
-        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\n"
-        "💚 برای معجون سلامتی، <code>هیل</code> را بدون ریپلای بفرست.\n"
-        "🔷 برای معجون مانا، <code>ریکاوری مانا</code> را بدون ریپلای بفرست.\n\n"
-        "🏆 غنیمت بر اساس مشارکت تقسیم می‌شود؛ ضربهٔ آخر جایزهٔ ویژه دارد.\n"
-        "༺════════════༻"
+        "🚨 <b>WORLD BOSS SPAWNED!</b> 🚨\\n"
+        "━━━━━━━━━━━━━━━━━━\\n"
+        f"💀 <b>{boss_name}</b>  |  <b>Lv.{level}</b>\\n"
+        f"📖 <i>{story}</i>\\n\\n"
+        f"❤️ <b>HP:</b> <code>{hp:,} / {hp:,}</code>\\n"
+        "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 <b>100%</b>"
+        f"{weak}\\n"
+        "━━━━━━━━━━━━━━━━━━\\n"
+        "⚔️ <b>BATTLE COMMANDS</b>\\n"
+        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\\n"
+        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\\n"
+        "💚 معجون سلامتی: <code>هیل</code> (بدون ریپلای)\\n"
+        "🔷 معجون مانا: <code>ریکاوری مانا</code> (بدون ریپلای)\\n\\n"
+        "🏆 پاداش بر اساس مشارکت محاسبه می‌شود؛ آخرین ضربه جایزهٔ ویژه دارد.\\n"
+        f"⏱️ <b>NEXT SPAWN CHECK:</b> {html.escape(next_spawn)}\\n"
+        "━━━━━━━━━━━━━━━━━━"
     )
-
-ROOT = Path(__file__).resolve().parent.parent
-
 
 def resolve_boss_image(cfg: dict) -> Path | None:
     """Resolve boss artwork from one shared path for automatic and admin spawns."""
@@ -728,7 +730,7 @@ async def boss_scheduler() -> None:
                     row.next_spawn_at = datetime.utcnow() + timedelta(hours=1)
                     row.message_id = None
                     await session.commit()
-                caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg))
+                caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg), row.next_spawn_at)
                 sent = None
                 image_path = resolve_boss_image(cfg)
                 try:
