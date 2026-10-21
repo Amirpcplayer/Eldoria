@@ -44,8 +44,12 @@ def _fan_art_panel_key(chat_id: int, owner_id: int) -> str:
     return f"eldoria:fanart_panel:{chat_id}:{owner_id}"
 
 
-async def _replace_previous_fan_art_panel(callback: CallbackQuery) -> None:
-    """Delete only this player's previous Fan Art navigation panel."""
+async def _replace_previous_fan_art_panel(
+    callback: CallbackQuery,
+    *,
+    preserve_current: bool = False,
+) -> None:
+    """Delete this player's previous Fan Art panel, including the clicked panel."""
     message = callback.message
     if message is None:
         return
@@ -53,15 +57,18 @@ async def _replace_previous_fan_art_panel(callback: CallbackQuery) -> None:
     try:
         previous = await redis.get(key)
         if previous:
-            previous_id = int(previous)
-            if previous_id != message.message_id:
-                try:
+            try:
+                previous_id = int(previous)
+                # Navigation sends a new message, so even the clicked panel
+                # must be removed. Payment instead edits the clicked panel.
+                if not (preserve_current and previous_id == message.message_id):
                     await message.bot.delete_message(
                         chat_id=message.chat.id,
                         message_id=previous_id,
                     )
-                except Exception:
-                    pass
+            except Exception:
+                # The message may already be deleted or Telegram may reject deletion.
+                pass
         await redis.delete(key)
     except Exception:
         import logging
@@ -337,8 +344,8 @@ async def fan_art_buy(
         )
         return
 
-    # Keep payment details in chat history, outside navigation-panel cleanup.
-    await _replace_previous_fan_art_panel(callback)
+    # Payment details reuse the clicked panel, so do not delete that message.
+    await _replace_previous_fan_art_panel(callback, preserve_current=True)
 
     payment_info = settings.fanart_payment_info
 
@@ -805,9 +812,19 @@ async def fan_art_text_entry(message: Message):
             message.from_user.id,
             message.bot,
         )
-    await message.answer(
+    sent = await message.answer(
         "🎨 <b>تالار فن‌آرت اِلدوریا</b>\n\n"
         "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین.",
-        reply_markup=fan_art_main_keyboard(),
+        reply_markup=protect_keyboard(fan_art_main_keyboard(), message.from_user.id if message.from_user else 0),
         parse_mode="HTML",
     )
+    if message.from_user is not None:
+        try:
+            await redis.set(
+                _fan_art_panel_key(message.chat.id, message.from_user.id),
+                str(sent.message_id),
+                ex=FAN_ART_PANEL_TTL,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not save initial Fan Art panel reference")
