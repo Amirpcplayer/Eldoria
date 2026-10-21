@@ -213,9 +213,42 @@ async def manage_action(message: Message, command: str, arg: str):
         except TelegramAPIError as exc:
             await message.answer("❌ عملیات ناموفق بود: " + html.escape(str(exc)))
         return
-    target = message.reply_to_message.from_user if message.reply_to_message else None
+    # برای سکوت، مدت باید صریحاً وارد شود؛ سکوت بدون عدد نباید به ۶۰ دقیقه تبدیل شود.
+    if command == "mute":
+        if not arg.isdigit():
+            await message.answer("⏱️ مدت سکوت را به دقیقه وارد کن. نمونه: سکوت 20")
+            return
+        minutes = int(arg)
+        if not 1 <= minutes <= 525600:
+            await message.answer("مدت سکوت باید بین ۱ تا ۵۲۵۶۰۰ دقیقه باشد.")
+            return
+
+    target = None
+    replied = message.reply_to_message
+    if replied:
+        # حالت عادی: ریپلای مستقیم به پیام عضو.
+        if replied.from_user and replied.from_user.id != message.from_user.id:
+            target = replied.from_user
+        else:
+            # اگر خود مدیر پیامی شامل شناسهٔ عضو فرستاده و به آن ریپلای کرده،
+            # شناسهٔ داخل پیام را پیدا کن و عضو واقعی گروه را هدف بگیر.
+            entities = list(replied.entities or []) + list(replied.caption_entities or [])
+            for entity in entities:
+                if entity.type == "text_mention" and entity.user:
+                    target = entity.user
+                    break
+            if target is None:
+                replied_text = replied.text or replied.caption or ""
+                id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
+                if id_match:
+                    try:
+                        member = await message.bot.get_chat_member(chat_id, int(id_match.group(0)))
+                        if member.status not in ("left", "kicked"):
+                            target = member.user
+                    except TelegramAPIError:
+                        target = None
     if not target:
-        await message.answer("روی پیام عضو موردنظر ریپلای کنید.")
+        await message.answer("روی پیام عضو ریپلای کن؛ یا اگر پیام خودت است، شناسهٔ عددی عضو را داخل آن بنویس.")
         return
     if target.is_bot or target.id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID) or await authorized(message.bot, chat_id, target.id):
         await message.answer("⛔ این عملیات روی ربات‌ها، خودتان یا مدیران مجاز نیست.")
@@ -241,10 +274,6 @@ async def manage_action(message: Message, command: str, arg: str):
             else:
                 await message.answer(f"⚠️ اخطار ثبت شد: {count}/3")
         elif command == "mute":
-            minutes = int(arg) if arg.isdigit() else 60
-            if not 1 <= minutes <= 525600:
-                await message.answer("مدت سکوت باید بین ۱ تا ۵۲۵۶۰۰ دقیقه باشد.")
-                return
             await message.bot.restrict_chat_member(chat_id, target.id, permissions=PERMISSIONS, until_date=datetime.now(timezone.utc) + timedelta(minutes=minutes))
             await message.answer(f"🔇 عضو برای {minutes} دقیقه ساکت شد.")
         elif command == "unmute":
