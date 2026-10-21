@@ -553,9 +553,9 @@ async def item_details_handler(
         f"💰 قیمت فروش: {item.sell_price:,} Gold"
     )
 
-    if scroll_kind(item.name):
+    if item.item_type == "scroll":
         kind = scroll_kind(item.name)
-        active_buff = await get_buff(telegram_id, kind)
+        active_buff = await get_buff(telegram_id, kind) if kind else None
         active = active_buff is not None
         if active_buff:
             remaining = max(1, int(float(active_buff.get("expires_at", 0)) - datetime.utcnow().timestamp()))
@@ -565,7 +565,7 @@ async def item_details_handler(
         # Put all three scroll actions together directly beneath this scroll's details.
         rows.append([
             InlineKeyboardButton(
-                text=("⏳ فعال است" if active else "📖 فعال‌سازی"),
+                text=("⏳ فعال است" if active else "📖 خواندن و فعال‌سازی"),
                 callback_data=("inventory:noop" if active else f"item:use_scroll:{item.id}"),
             ),
             InlineKeyboardButton(
