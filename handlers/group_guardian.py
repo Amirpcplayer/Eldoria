@@ -15,6 +15,9 @@ from aiogram.types import CallbackQuery, ChatPermissions, InlineKeyboardButton, 
 from aiogram.exceptions import TelegramAPIError
 from datetime import datetime, timedelta, timezone
 from database.redis import redis
+from sqlalchemy import func, select
+from database.database import AsyncSessionLocal
+from models.character import Character
 
 router = Router()
 
@@ -278,17 +281,37 @@ async def manage_action(message: Message, command: str, arg: str):
                         if command != "ban":
                             target_id = None
                 else:
-                    # یوزرنیم فقط وقتی قابل تبدیل است که ربات قبلاً آن را از پیام عضو دیده باشد.
-                    username_match = re.search(r"(?<![\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])", replied_text)
+                    # ابتدا کش گروه و سپس یوزرنیم ذخیره‌شدهٔ قهرمان در دیتابیس را بررسی کن.
+                    username_match = re.search(r"(?<![\\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])", replied_text)
                     if username_match:
-                        cached_id = await redis.get(f"guardian:{chat_id}:username:{username_match.group(1).casefold()}")
+                        username = username_match.group(1).casefold()
+                        cached_id = await redis.get(f"guardian:{chat_id}:username:{username}")
                         if cached_id and str(cached_id).lstrip("-").isdigit():
                             target_id = int(cached_id)
+                        else:
+                            try:
+                                async with AsyncSessionLocal() as session:
+                                    player = await session.scalar(
+                                        select(Character).where(
+                                            func.lower(Character.telegram_username) == username
+                                        )
+                                    )
+                                    if player:
+                                        target_id = int(player.telegram_id)
+                                        await redis.set(
+                                            f"guardian:{chat_id}:username:{username}",
+                                            str(target_id),
+                                            ex=60 * 60 * 24 * 90,
+                                        )
+                            except Exception:
+                                target_id = None
+                        if target_id is not None:
                             try:
                                 member = await message.bot.get_chat_member(chat_id, target_id)
                                 if member.status not in ("left", "kicked"):
                                     target = member.user
                             except TelegramAPIError:
+                                # بن با شناسهٔ ذخیره‌شده قابل اجراست؛ سکوت نیازمند عضویت فعال است.
                                 if command != "ban":
                                     target_id = None
     if target_id is None:
@@ -449,11 +472,27 @@ class GuardianMiddleware(BaseMiddleware):
         chat_id = event.chat.id
         # نگاشت یوزرنیم اعضایی که ربات پیامشان را می‌بیند؛ برای دستور بن روی پیام حاوی @username.
         if event.from_user and event.from_user.username:
+            username = event.from_user.username.casefold()
             await redis.set(
-                f"guardian:{chat_id}:username:{event.from_user.username.casefold()}",
+                f"guardian:{chat_id}:username:{username}",
                 str(event.from_user.id),
                 ex=60 * 60 * 24 * 90,
             )
+            # همگام‌سازی کم‌تکرار یوزرنیم قهرمان با دیتابیس برای استفاده از گروه‌های دیگر.
+            sync_key = f"guardian:username_sync:{event.from_user.id}"
+            if not await redis.get(sync_key):
+                try:
+                    async with AsyncSessionLocal() as session:
+                        player = await session.scalar(
+                            select(Character).where(Character.telegram_id == event.from_user.id)
+                        )
+                        if player and player.telegram_username != username:
+                            player.telegram_username = username
+                            await session.commit()
+                    await redis.set(sync_key, "1", ex=60 * 60 * 24)
+                except Exception:
+                    # خطای همگام‌سازی نباید مدیریت گروه را متوقف کند.
+                    pass
         values = await settings(chat_id)
         if event.new_chat_members:
             if values["bots"] and await bot_rights(event.bot, chat_id, "can_restrict_members"):
