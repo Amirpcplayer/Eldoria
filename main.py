@@ -18,6 +18,7 @@ from middlewares.character_required import CharacterRequiredMiddleware
 from middlewares.adventure_fight_lock import AdventureFightLockMiddleware
 
 from handlers.start import router as start_router
+from handlers.command_aliases import router as command_aliases_router
 from handlers.main_menu import router as main_menu_router
 from handlers.character_creation import router as character_creation_router
 from handlers.race import router as race_router
@@ -108,6 +109,7 @@ dp.include_router(fan_art_gifts_router)
 
 dp.include_router(group_boss_router)
 dp.include_router(group_link_router)
+dp.include_router(command_aliases_router)
 dp.include_router(main_menu_router)
 dp.include_router(shop_router)
 dp.include_router(inventory_router)
@@ -138,6 +140,21 @@ async def setup_bot_commands() -> None:
         BotCommand(command="guide", description="راهنمای دنیای فانتزی اِلدوریا"),
         BotCommand(command="arts", description="تالار فن‌آرت اِلدوریا"),
         BotCommand(command="profile", description="نمایش پروفایل قهرمان"),
+        BotCommand(command="sandoghche", description="صندوقچه"),
+        BotCommand(command="skills", description="مهارت‌ها"),
+        BotCommand(command="tajhizat", description="تجهیزات"),
+        BotCommand(command="mamoriah", description="مأموریت‌ها"),
+        BotCommand(command="majarajoyi", description="ماجراجویی"),
+        BotCommand(command="crafting", description="کرفتینگ"),
+        BotCommand(command="pet", description="پت"),
+        BotCommand(command="event", description="ایونت‌ها"),
+        BotCommand(command="parti", description="پارتی"),
+        BotCommand(command="guild", description="گیلد"),
+        BotCommand(command="player_shop", description="بازار بازیکنان"),
+        BotCommand(command="ahangari", description="آهنگری"),
+        BotCommand(command="help", description="راهنما"),
+        BotCommand(command="change", description="تبدیل گلد به جم"),
+        BotCommand(command="setting", description="تنظیمات"),
         BotCommand(command="shop", description="فروشگاه اِلدوریا"),
         BotCommand(command="mypet", description="اطلاعات پت و سهمیه حمله"),
         BotCommand(command="pvp", description="حمله مستقیم به بازیکن با ریپلای"),
