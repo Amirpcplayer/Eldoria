@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -77,6 +79,40 @@ def keyboard(*rows: list[InlineKeyboardButton]) -> InlineKeyboardMarkup:
 
 async def render_command_panel(message: Message, section: str) -> None:
     user_id = message.from_user.id
+
+    # Guild is stateful: never show the generic create/join screen blindly.
+    # Resolve the caller's actual membership before rendering /guild or the
+    # Persian text alias, just as the menu:guild callback does.
+    if section == "guild":
+        from middlewares.panel_owner import protect_keyboard
+        from services.guild_service import get_guild_for_player
+        from handlers.guild import guild_home_keyboard
+
+        guild = await get_guild_for_player(user_id)
+        if guild:
+            progress = min(100, int(guild["xp"] * 100 / max(1, guild["next_level_xp"])))
+            bar = "🟩" * (progress // 10) + "⬜" * (10 - progress // 10)
+            text = (
+                "🛡️ <b>تالار گیلد اِلدوریا</b>\\n\\n"
+                f"🏰 <b>{html.escape(guild['name'])}</b>  <code>[{html.escape(guild['tag'])}]</code>\\n"
+                f"🆔 شناسه: <code>{guild['id']}</code>\\n"
+                f"⭐ سطح گیلد: <b>{guild['level']}</b>\\n"
+                f"👥 اعضا: <b>{guild['member_count']}/{guild['max_members']}</b>\\n"
+                f"✨ تجربه: {guild['xp']:,}/{guild['next_level_xp']:,}\\n{bar}\\n\\n"
+                f"{'👑 رهبر گیلد هستی.' if guild['role'] == 'owner' else '🤝 عضو گیلد هستی.'}"
+            )
+        else:
+            text = (
+                "🛡️ <b>تالار گیلدهای اِلدوریا</b>\\n\\n"
+                "گیلد بساز، به گیلد بپیوند یا گیلدها را بررسی کن."
+            )
+        markup = protect_keyboard(
+            guild_home_keyboard(bool(guild), bool(guild and guild["role"] == "owner")),
+            user_id,
+        )
+        await send_panel(message=message, panel_name="guild", text=text, reply_markup=markup)
+        return
+
     panel_name = "main_menu"
     texts = {
         "main_menu": ("🎮 <b>منوی اصلی اِلدوریا</b>\n\n🌌 ماجراجویی تو در اِلدوریا ادامه دارد...", keyboard([button("🗺️ ماجراجویی", "menu:adventure")], [button("🏪 فروشگاه", "menu:shop")], [button("🔙 منوی اصلی", "menu:back")]), "main_menu"),
