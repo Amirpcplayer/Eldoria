@@ -59,6 +59,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="🧾 سفارش‌های فن‌آرت",
+                    callback_data="admin:fanart:orders",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="💰 دادن گلد به پلیر",
                     callback_data="admin:gold:start",
                 )
