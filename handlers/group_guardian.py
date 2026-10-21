@@ -55,9 +55,9 @@ async def settings(chat_id):
     values = await redis.hgetall(f"guardian:{chat_id}:settings")
     return {k: values.get(k, "1" if v else "0") == "1" for k, v in DEFAULTS.items()}
 
-def keyboard(chat_id, values):
-    rows = [[InlineKeyboardButton(text=f"{label}: {'✅' if values[key] else '❌'}", callback_data=f"gap:toggle:{chat_id}:{key}")] for key, label in FLAGS.items()]
-    rows += [[InlineKeyboardButton(text="🎨 تنظیم متن خوشامدگویی", callback_data=f"gap:welcome:{chat_id}")], [InlineKeyboardButton(text="👑 مدیران ثبت‌شده", callback_data=f"gap:admins:{chat_id}")], [InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}")]]
+def keyboard(chat_id, values, owner_id):
+    rows = [[InlineKeyboardButton(text=f"{label}: {'✅' if values[key] else '❌'}", callback_data=f"gap:toggle:{chat_id}:{owner_id}:{key}")] for key, label in FLAGS.items()]
+    rows += [[InlineKeyboardButton(text="🎨 تنظیم متن خوشامدگویی", callback_data=f"gap:welcome:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="👑 مدیران ثبت‌شده", callback_data=f"gap:admins:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}:{owner_id}")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def panel(values):
@@ -76,7 +76,7 @@ async def gap(message: Message):
         await message.answer("⛔ فقط مدیران گروه به این پنل دسترسی دارند.")
         return
     values = await settings(message.chat.id)
-    await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values))
+    await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
 
 @router.callback_query(F.data.startswith("gap:"))
 async def callback(callback: CallbackQuery):
@@ -84,13 +84,16 @@ async def callback(callback: CallbackQuery):
         await callback.answer("پنل فقط در گروه معتبر است.", show_alert=True)
         return
     parts = (callback.data or "").split(":")
-    if len(parts) < 3 or not parts[2].lstrip("-").isdigit() or int(parts[2]) != callback.message.chat.id:
+    if len(parts) < 4 or not parts[2].lstrip("-").isdigit() or int(parts[2]) != callback.message.chat.id or not parts[3].isdigit():
         await callback.answer("پنل متعلق به این گروه نیست.", show_alert=True)
         return
-    if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
-        await callback.answer("فقط مدیران گروه.", show_alert=True)
+    if int(parts[3]) != callback.from_user.id:
+        await callback.answer("🔒 این پنل برای مدیر دیگری است؛ پنل خودتان را با /gap باز کنید.", show_alert=True)
         return
-    action, chat_id = parts[1], callback.message.chat.id
+    if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
+        await callback.answer("فقط مدیران ثبت‌شده همین گروه.", show_alert=True)
+        return
+    action, chat_id, owner_id = parts[1], callback.message.chat.id, callback.from_user.id
     if action == "close":
         await callback.message.edit_reply_markup(reply_markup=None)
     elif action == "help":
@@ -112,12 +115,12 @@ async def callback(callback: CallbackQuery):
             "/rules — نمایش قوانین\n"
             "/gap — بازگشت به پنل\n\n"
             "برای حذف پیام و محدودکردن اعضا، دسترسی حذف پیام و مسدودسازی به ربات بدهید.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}")]]))
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
     elif action == "home":
         values = await settings(chat_id)
-        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values))
-    elif action == "toggle" and len(parts) == 4 and parts[3] in FLAGS:
-        key = parts[3]
+        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
+    elif action == "toggle" and len(parts) == 5 and parts[4] in FLAGS:
+        key = parts[4]
         values = await settings(chat_id)
         values[key] = not values[key]
         await redis.hset(f"guardian:{chat_id}:settings", key, "1" if values[key] else "0")
