@@ -480,21 +480,32 @@ def boss_death_dialogue(cfg: dict) -> str:
     return random.choice(variants)
 
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
+    """Render the royal-fantasy boss panel while preserving existing battle commands."""
     story = html.escape(boss_entrance_story(cfg))
-    weak = f"\n╟─ 🜂 <b>نقطه‌ضعف:</b> {ELEMENTS.get(weakness, weakness)}" if weakness else ""
-    return (f"╔══════ 🜲 <b>طومار بیداری باس</b> 🜲 ══════╗\n\n"
-            f"📜 <i>{story}</i>\n\n"
-            f"╟─ ⚔️ <b>{html.escape(cfg['name'])}</b> · <b>Lv.{level}</b>\n"
-            f"╟─ ❤️ <b>جانِ باس</b>  <b>{hp:,} / {hp:,}</b>\n"
-            f"╟─ {boss_hp_bar(hp, hp)}{weak}\n\n"
-            "╠═══════ ✦ <b>فرامین نبرد</b> ✦ ═══════╣\n"
-            "🗡️ برای حمله روی <b>BOSS</b> ریپلای کنید و از دستورهای زیر استفاده کنید.\n"
-            "➤ برای اتک دادن عبارت <code>&lt; حمله &gt;</code> ریپلای کنید.\n"
-            "✨ برای استفاده از جادو عبارت <code>&lt; جادو &gt;</code> ریپلای کنید.\n"
-            "💚 برای استفاده از معجون سلامتی عبارت <code>&lt; هیل &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n"
-            "🔷 برای استفاده از معجون مانا عبارت <code>&lt; ریکاوری مانا &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n\n"
-            "🏆 پاداش بر اساس مشارکت محاسبه می‌شود و ضربهٔ آخر جایزهٔ ویژه دارد.\n"
-            "╚══════════════════════════════════════╝")
+    boss_name = html.escape(str(cfg.get("name", "سالار ناشناخته")))
+    weak = (
+        f"\n✦ <b>ضعف پنهان:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
+        if weakness else ""
+    )
+    return (
+        "༺═━━ 🜲 ━━═༻\n"
+        "<b>📜 طومار بیداری باس</b>\n"
+        "<i>مُهرهای کهن شکسته‌اند؛ آزمون قهرمانان آغاز می‌شود.</i>\n"
+        "༺════════════༻\n\n"
+        f"⚔️ <b>{boss_name}</b> · <b>Lv.{level}</b>\n"
+        f"📜 <i>{story}</i>\n\n"
+        f"❤️ <b>نیروی حیات:</b> <b>{hp:,} / {hp:,}</b>\n"
+        f"🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩  <b>100%</b>"
+        f"{weak}\n\n"
+        "༺═ ✦ <b>پیمان جنگجویان</b> ✦ ═༻\n"
+        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\n"
+        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\n"
+        "💚 برای معجون سلامتی، <code>هیل</code> را بدون ریپلای بفرست.\n"
+        "🔷 برای معجون مانا، <code>ریکاوری مانا</code> را بدون ریپلای بفرست.\n\n"
+        "🏆 غنیمت بر اساس مشارکت تقسیم می‌شود؛ ضربهٔ آخر جایزهٔ ویژه دارد.\n"
+        "༺════════════༻"
+    )
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
