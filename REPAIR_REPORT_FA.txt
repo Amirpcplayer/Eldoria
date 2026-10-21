@@ -1,0 +1,20 @@
+World Eldoria — Repair Round 1
+
+Changes in this package:
+- Fixed missing import for claim_guild_leader_reward in guild handler.
+- Added server-side _require_guild guard in quest handler, preserving membership checks and showing a clear no-guild message.
+- Registered the marketplace router earlier so its FSM input handler can receive the "quantity price" message before broad handlers.
+- Improved marketplace input parsing for separators, explicit error logging on transaction exceptions, and removed duplicate back button in item-selection list.
+- Expanded premium emoji catalog into categories; added category views, search, all-items list, safe JSON replacement writes, and filtering to known keys/numeric IDs.
+
+Validation:
+- Python syntax compilation passed for main.py and the five changed modules.
+- Full bot integration tests and live Telegram/DB behavior were not run in this environment.
+
+Important remaining work:
+- Item drops need to be tied to actual per-region drop configuration before listing them on each adventure region; the current code records monster/progression drops but does not expose a trustworthy per-area drop table in the inspected models.
+- The profile handler in the supplied ZIP already constructs a guild name/tag line; if it is absent in Telegram, verify the running deployment uses this source and inspect runtime output.
+- Boss-reply routing, the full callback/button audit, and the requested guild item-sale flow are not yet verified/fixed in this round.
+- Premium custom emoji IDs are checked for numeric format and known keys; Telegram's rendering must still be tested with real IDs in the target bot.
+
+Security: .env, Git history, virtual environments, Python caches, and local database/log files were excluded from the package.

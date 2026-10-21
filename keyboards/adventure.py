@@ -26,27 +26,21 @@ def adventure_areas_keyboard(
     buttons = []
 
     for area in areas:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=area.name,
-                    callback_data=f"adventure:area:{area.id}",
-                )
-            ]
-        )
-
-    buttons.append(
-        [
+        buttons.append([
             InlineKeyboardButton(
-                text="🔙 بازگشت به ماجراجویی",
-                callback_data="adventure:menu",
+                text=area.name,
+                callback_data=f"adventure:area:{area.id}",
             )
-        ]
-    )
+        ])
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 بازگشت به ماجراجویی",
+            callback_data="adventure:menu",
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def adventure_area_keyboard(
@@ -56,27 +50,21 @@ def adventure_area_keyboard(
     buttons = []
 
     if unlocked:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text="⚔️ ورود به منطقه",
-                    callback_data=f"adventure:start:{area_id}",
-                )
-            ]
-        )
-
-    buttons.append(
-        [
+        buttons.append([
             InlineKeyboardButton(
-                text="🔙 بازگشت به مناطق",
-                callback_data="adventure:areas",
+                text="⚔️ ورود به منطقه",
+                callback_data=f"adventure:start:{area_id}",
             )
-        ]
-    )
+        ])
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 بازگشت به مناطق",
+            callback_data="adventure:areas",
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def adventure_encounter_keyboard(
@@ -107,27 +95,21 @@ def adventure_enemies_keyboard(
     buttons = []
 
     for enemy in enemies:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"👾 {enemy.name} • Lv.{enemy.level}",
-                    callback_data=f"adventure:enemy:{enemy.id}",
-                )
-            ]
-        )
-
-    buttons.append(
-        [
+        buttons.append([
             InlineKeyboardButton(
-                text="🔙 بازگشت به منطقه",
-                callback_data=f"adventure:area:{area_id}",
+                text=f" {enemy.name} • Lv.{enemy.level}",
+                callback_data=f"adventure:enemy:{enemy.id}",
             )
-        ]
-    )
+        ])
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
-    )
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 بازگشت به منطقه",
+            callback_data=f"adventure:area:{area_id}",
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def adventure_enemy_keyboard(

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import random
 import uuid
+import logging
+import json
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -35,7 +38,10 @@ from services.skill_service import (
     get_skill_power,
 )
 from services.xp_service import add_character_xp
+from services.potion_rules import potion_restore_ratio, potion_kind
 
+
+logger = logging.getLogger(__name__)
 
 BATTLE_TTL = 3600
 
@@ -43,8 +49,8 @@ DEFEND_MULTIPLIER = 1.5
 REWARD_LOCK_TTL = 30
 
 POTION_HEAL = {
-    "🧪 معجون سلامتی": 40,
-    "🧪 معجون سلامتی بزرگ": 80,
+    "🧪 معجون سلامتی": 5_000,
+    "🧪 معجون سلامتی بزرگ": 25_000,
 }
 
 
@@ -359,6 +365,39 @@ async def save_battle(
         BATTLE_TTL,
     )
 
+    # Keep the canonical character HP/Mana in PostgreSQL in sync with battle state.
+    try:
+        telegram_id = int(battle.get("telegram_id") or 0)
+        if telegram_id:
+            async with AsyncSessionLocal() as session:
+                character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id).with_for_update())
+                if character is not None:
+                    character.hp = max(0, min(int(battle.get("player_hp", character.hp) or 0), int(battle.get("player_max_hp", character.max_hp) or character.max_hp or 100)))
+                    character.mana = max(0, min(int(battle.get("player_mana", character.mana) or 0), int(battle.get("player_max_mana", character.max_mana) or character.max_mana or 100)))
+                    character.max_hp = max(1, int(battle.get("player_max_hp", character.max_hp) or character.max_hp or 100))
+                    character.max_mana = max(1, int(battle.get("player_max_mana", character.max_mana) or character.max_mana or 100))
+                    if character.hp <= 0 and character.dead_until is None:
+                        character.dead_until = datetime.utcnow() + timedelta(minutes=10)
+                    await session.commit()
+    except Exception:
+        logger.exception("Could not sync adventure battle HP/Mana to character row")
+
+
+
+
+async def sync_character_vitals_to_battles(telegram_id: int, hp: int, mana: int) -> None:
+    """Update an active Adventure battle cache after an out-of-panel recovery action."""
+    async for key in redis.scan_iter(match="eldoria:battle:*"):
+        if isinstance(key, bytes): key = key.decode("utf-8")
+        if str(key).startswith("eldoria:battle_reward:"): continue
+        raw = await redis.hgetall(key)
+        if not raw: continue
+        stored = raw.get("telegram_id", 0)
+        if isinstance(stored, bytes): stored = stored.decode("utf-8")
+        if int(stored or 0) != int(telegram_id): continue
+        max_hp = int(raw.get("player_max_hp", hp) or hp)
+        max_mana = int(raw.get("player_max_mana", mana) or mana)
+        await redis.hset(key, mapping={"player_hp": str(min(int(hp), max_hp)), "player_mana": str(min(int(mana), max_mana))})
 
 async def delete_battle(
     battle_id: str,
@@ -473,6 +512,7 @@ async def get_character_skills(
             .where(
                 CharacterSkill.character_id == character_id,
                 CharacterSkill.unlocked.is_(True),
+                CharacterSkill.slot.is_not(None),
                 Skill.is_active.is_(True),
             )
             .order_by(
@@ -509,6 +549,7 @@ async def get_character_skill(
                 CharacterSkill.character_id == character_id,
                 CharacterSkill.skill_id == skill_id,
                 CharacterSkill.unlocked.is_(True),
+                CharacterSkill.slot.is_not(None),
                 Skill.is_active.is_(True),
             )
         )
@@ -647,6 +688,11 @@ async def create_battle(
     str,
     dict[str, Any] | None,
 ]:
+
+    from services.death_service import ensure_character_alive
+    alive, alive_message = await ensure_character_alive(telegram_id)
+    if not alive:
+        return False, alive_message, None
 
     if await has_active_battle(
         telegram_id
@@ -850,14 +896,14 @@ async def create_battle(
 
         "player_level": character.level,
 
-        "player_hp": character_stats.hp,
+        "player_hp": min(max(0, int(character.hp or 0)), int(character_stats.hp)),
         "player_max_hp": character_stats.hp,
 
         "player_attack": character_stats.attack,
         "player_magic_power": character_stats.magic_power,
         "player_defense": character_stats.defense,
         "player_magic_defense": character_stats.magic_defense,
-        "player_mana": character_stats.mana,
+        "player_mana": min(max(0, int(character.mana or 0)), int(character_stats.mana)),
         "player_max_mana": character_stats.mana,
         "player_speed": character_stats.speed,
         "player_accuracy": character_stats.accuracy,
@@ -881,7 +927,7 @@ async def create_battle(
         True,
         (
             f"⚔️ مبارزه آغاز شد!\n\n"
-            f"👾 {monster.name}\n"
+            f" {monster.name}\n"
             f"⭐ Level {effective_level}\n"
             f"🧬 Variant: {variant_name}"
         ),
@@ -951,6 +997,12 @@ async def player_attack(
     )
 
     damage = result.damage
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(int(battle["telegram_id"]), "power"):
+            damage = int(damage * 1.20)
+    except Exception:
+        logger.exception("Could not apply power scroll to normal attack")
 
     battle["enemy_hp"] = max(
         0,
@@ -1074,6 +1126,12 @@ async def player_skill(
         battle,
         attack_element,
     )
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(int(battle["telegram_id"]), "resistance"):
+            resistance = 0.0
+    except Exception:
+        logger.exception("Could not apply resistance scroll")
 
     is_critical = roll_critical(
         battle["player_critical"]
@@ -1094,6 +1152,12 @@ async def player_skill(
     )
 
     damage = result.damage
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(int(battle["telegram_id"]), "power"):
+            damage = int(damage * 1.20)
+    except Exception:
+        logger.exception("Could not apply power scroll to magic attack")
 
     battle["enemy_hp"] = max(
         0,
@@ -1159,11 +1223,15 @@ async def player_defend(
 
 async def get_healing_potions(
     character_id: int,
+    max_hp: int | None = None,
 ) -> list[
     tuple[Inventory, Item, int]
 ]:
 
     async with AsyncSessionLocal() as session:
+        if max_hp is None:
+            character = await session.scalar(select(Character).where(Character.id == character_id))
+            max_hp = int(getattr(character, "max_hp", 100) or 100)
 
         result = await session.execute(
             select(
@@ -1188,13 +1256,10 @@ async def get_healing_potions(
 
         for inventory_item, item in result.all():
 
-            heal_amount = POTION_HEAL.get(
-                item.name,
-                0,
-            )
-
-            if heal_amount <= 0:
+            name = str(item.name).lower()
+            if "مانا" in name or "mana" in name or not any(token in name for token in ("hp", "سلامتی", "health")):
                 continue
+            heal_amount = int(max(1, max_hp) * potion_restore_ratio(item.name))
 
             potions.append(
                 (
@@ -1277,10 +1342,11 @@ async def use_healing_potion(
 
         inventory_item, item = row
 
-        heal_amount = POTION_HEAL.get(
-            item.name,
-            0,
-        )
+        name_lower = str(item.name).lower()
+        if potion_kind(item.name) != "hp":
+            heal_amount = 0
+        else:
+            heal_amount = 1
 
         if heal_amount <= 0:
             return (
@@ -1290,11 +1356,15 @@ async def use_healing_potion(
                 battle,
             )
 
-        actual_heal = min(
-            heal_amount,
-            battle["player_max_hp"]
-            - battle["player_hp"],
-        )
+        max_hp = int(battle["player_max_hp"] or 100)
+        heal_amount = int(max_hp * potion_restore_ratio(item.name))
+        try:
+            from services.scroll_service import has_buff
+            if await has_buff(int(battle["telegram_id"]), "healing"):
+                heal_amount = int(heal_amount * 1.20)
+        except Exception:
+            logger.exception("Could not apply healing scroll")
+        actual_heal = min(heal_amount, max_hp - int(battle["player_hp"]))
 
         battle["player_hp"] += actual_heal
 
@@ -1389,6 +1459,12 @@ async def enemy_turn(
     )
 
     damage = result.damage
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(int(battle["telegram_id"]), "defense"):
+            damage = int(damage * 0.80)
+    except Exception:
+        logger.exception("Could not apply defense scroll")
 
     battle["player_hp"] = max(
         0,
@@ -1482,6 +1558,15 @@ async def finish_victory(
     gold_reward = battle[
         "enemy_gold"
     ]
+    try:
+        from services.scroll_service import has_buff
+        explorer_active = await has_buff(int(telegram_id), "explorer")
+    except Exception:
+        explorer_active = False
+    if explorer_active:
+        xp_reward = int(xp_reward * 1.30)
+        skill_xp_reward = int(skill_xp_reward * 1.30)
+        gold_reward = int(gold_reward * 1.30)
 
     try:
 
@@ -1543,14 +1628,28 @@ async def finish_victory(
             await session.commit()
 
         try:
-
             await record_enemy_kill(
                 telegram_id,
                 battle["enemy_id"],
             )
-
         except Exception:
             pass
+
+        # دفترچهٔ هیولاها، مأموریت روزانه و دراپ متریال‌ها از پیروزی واقعی
+        # تغذیه می‌شوند؛ قفل پاداش بالا مانع ثبت چندبارهٔ همین پیروزی است.
+        drops = []
+        try:
+            from services.world_progression_service import record_kill_and_drop
+            drops = await record_kill_and_drop(
+                telegram_id,
+                battle.get("monster_id"),
+                battle.get("enemy_variant"),
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Could not record progression/drop rewards")
+        # Consumed by the victory panel immediately after finish_victory returns.
+        await redis.set(f"eldoria:last_adventure_drops:{telegram_id}", json.dumps(drops, ensure_ascii=False), ex=300)
 
         await delete_battle(
             battle_id

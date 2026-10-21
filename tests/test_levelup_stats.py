@@ -33,7 +33,7 @@ async def main():
         )
 
         if character is None:
-            print("❌ هیچ کاراکتری در دیتابیس پیدا نشد.")
+            print("❌ هیچ قهرمانی در دیتابیس پیدا نشد.")
             return
 
         character_id = character.id

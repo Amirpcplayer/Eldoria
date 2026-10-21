@@ -282,7 +282,7 @@ async def main():
             f"({percentage:>5.1f}%)"
         )
 
-    print("\n👾 MONSTER IDS:")
+    print("\n MONSTER IDS:")
 
     if not monster_ids:
         print(

@@ -23,15 +23,12 @@ async def get_item_heal_amount(
     item: Item,
 ) -> int:
 
-    potion_heal = {
-        "🧪 معجون سلامتی": 40,
-        "🧪 معجون سلامتی بزرگ": 80,
-    }
-
-    return potion_heal.get(
-        item.name,
-        0,
-    )
+    # The final amount depends on the character's maximum HP and is computed
+    # at consumption time. This function is retained for legacy callers only.
+    from services.potion_rules import potion_kind, potion_restore_ratio
+    if potion_kind(item.name) != "hp":
+        return 0
+    return int(100 * potion_restore_ratio(item.name))
 
 
 async def get_healing_potions(
@@ -159,7 +156,7 @@ async def sell_item(
         return (
             True,
             f"✅ فروش {item.name} با موفقیت انجام شد.\n\n"
-            f"📦 تعداد: {quantity}\n"
+            f"🗃 تعداد: {quantity}\n"
             f"💰 +{gold_received} Gold\n"
             f"💰 Gold فعلی: {current_gold}",
         )

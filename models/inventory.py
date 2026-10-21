@@ -1,11 +1,10 @@
+# models/inventory.py
+
+from __future__ import annotations
+
 from datetime import datetime
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Integer,
-    UniqueConstraint,
-)
+from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.database import Base
@@ -30,26 +29,32 @@ class Inventory(Base):
 
     character_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("characters.id", ondelete="CASCADE"),
+        ForeignKey(
+            "characters.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
 
     item_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("items.id", ondelete="CASCADE"),
+        ForeignKey(
+            "items.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
 
     quantity: Mapped[int] = mapped_column(
         Integer,
-        default=1,
         nullable=False,
+        default=1,
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
         nullable=False,
+        default=datetime.utcnow,
     )

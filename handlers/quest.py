@@ -12,6 +12,7 @@ from services.quest_service import (
     QUEST_CATEGORIES,
     QUEST_STATUS,
     OBJECTIVE_TYPES,
+    get_character,
     ensure_character_quests,
     get_character_quests,
     get_character_quest,
@@ -19,8 +20,37 @@ from services.quest_service import (
     claim_quest,
 )
 
+from services.panel_image_service import show_panel
+from sqlalchemy import select
+from database.database import AsyncSessionLocal
+from models.social_systems import GuildMember
+
 
 router = Router()
+
+
+async def _require_guild(callback: CallbackQuery) -> bool:
+    """Server-side guild membership gate for every quest callback."""
+    async with AsyncSessionLocal() as session:
+        member = await session.scalar(
+            select(GuildMember.id).where(
+                GuildMember.telegram_id == callback.from_user.id
+            ).limit(1)
+        )
+    if member is not None:
+        return True
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=(
+            "🛡️ <b>مأموریت‌های گیلدی</b>\n\n"
+            "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.\n"
+            "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن."
+        ),
+        reply_markup=quest_main_keyboard(),
+    )
+    await callback.answer("ابتدا باید عضو گیلد شوی.", show_alert=True)
+    return False
 
 
 # ============================================================
@@ -49,17 +79,11 @@ def format_quest_progress(
 
 
 def format_quest_status(status: str) -> str:
-    return QUEST_STATUS.get(
-        status,
-        "❔ نامشخص",
-    )
+    return QUEST_STATUS.get(status, "❔ نامشخص")
 
 
 def format_objective_type(objective_type: str) -> str:
-    return OBJECTIVE_TYPES.get(
-        objective_type,
-        objective_type,
-    )
+    return OBJECTIVE_TYPES.get(objective_type, objective_type)
 
 
 def format_reward(quest) -> str:
@@ -69,7 +93,9 @@ def format_reward(quest) -> str:
         rewards.append(f"✨ {quest.reward_xp:,} XP")
 
     if quest.reward_skill_xp > 0:
-        rewards.append(f"🔮 {quest.reward_skill_xp:,} Skill XP")
+        rewards.append(
+            f"🔮 {quest.reward_skill_xp:,} Skill XP"
+        )
 
     if quest.reward_gold > 0:
         rewards.append(f"💰 {quest.reward_gold:,} Gold")
@@ -80,9 +106,18 @@ def format_reward(quest) -> str:
     if not rewards:
         return "🎁 بدون پاداش"
 
-    return "\n".join(
-        f"• {reward}"
-        for reward in rewards
+    return "\n".join(f"• {reward}" for reward in rewards)
+
+
+async def show_no_character(callback: CallbackQuery):
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=(
+            "❌ شخصیت بازی پیدا نشد.\n\n"
+            "لطفاً ابتدا شخصیت خود را بساز."
+        ),
+        reply_markup=quest_main_keyboard(),
     )
 
 
@@ -90,10 +125,12 @@ def format_reward(quest) -> str:
 # Quest Main Menu
 # ============================================================
 
-@router.callback_query(lambda callback: callback.data == "menu:quest")
+@router.callback_query(
+    lambda callback: callback.data == "menu:quest"
+)
 async def open_quest_menu(callback: CallbackQuery):
-    await callback.answer()
-
+    if not await _require_guild(callback):
+        return
     text = (
         "📜 <b>مأموریت‌های اِلدوریا</b>\n\n"
         "در این بخش می‌توانی مأموریت‌های خود را مشاهده و "
@@ -106,29 +143,39 @@ async def open_quest_menu(callback: CallbackQuery):
         "اهداف مهم و بلندمدت قهرمان"
     )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=text,
         reply_markup=quest_main_keyboard(),
     )
+
+    await callback.answer()
 
 
 # ============================================================
 # Quest Internal Menu
 # ============================================================
 
-@router.callback_query(lambda callback: callback.data == "quest:menu")
+@router.callback_query(
+    lambda callback: callback.data == "quest:menu"
+)
 async def quest_internal_menu(callback: CallbackQuery):
-    await callback.answer()
-
+    if not await _require_guild(callback):
+        return
     text = (
         "📜 <b>مأموریت‌ها</b>\n\n"
         "دسته‌بندی موردنظر خود را انتخاب کن:"
     )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=text,
         reply_markup=quest_main_keyboard(),
     )
+
+    await callback.answer()
 
 
 # ============================================================
@@ -142,23 +189,30 @@ async def quest_internal_menu(callback: CallbackQuery):
     )
 )
 async def quest_list(callback: CallbackQuery):
-    await callback.answer()
-
+    if not await _require_guild(callback):
+        return
     category = callback.data.split(":", 2)[2]
 
     if category not in QUEST_CATEGORIES:
-        await callback.message.edit_text(
-            "❌ دسته‌بندی مأموریت نامعتبر است.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text="❌ دسته‌بندی مأموریت نامعتبر است.",
             reply_markup=quest_main_keyboard(),
         )
+        await callback.answer()
         return
 
     telegram_id = callback.from_user.id
 
-    await ensure_character_quests(
-        telegram_id,
-        category,
-    )
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await show_no_character(callback)
+        await callback.answer()
+        return
+
+    await ensure_character_quests(telegram_id, category)
 
     quests = await get_character_quests(
         telegram_id,
@@ -168,11 +222,16 @@ async def quest_list(callback: CallbackQuery):
     category_name = QUEST_CATEGORIES[category]
 
     if not quests:
-        await callback.message.edit_text(
-            f"{category_name}\n\n"
-            "📭 در حال حاضر مأموریتی در این بخش وجود ندارد.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text=(
+                f"{category_name}\n\n"
+                "📭 در حال حاضر مأموریتی در این بخش وجود ندارد."
+            ),
             reply_markup=quest_main_keyboard(),
         )
+        await callback.answer()
         return
 
     text = (
@@ -181,13 +240,14 @@ async def quest_list(callback: CallbackQuery):
         "برای مشاهده جزئیات، یک مأموریت را انتخاب کن."
     )
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=quest_list_keyboard(
-            quests,
-            category,
-        ),
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=text,
+        reply_markup=quest_list_keyboard(quests, category),
     )
+
+    await callback.answer()
 
 
 # ============================================================
@@ -198,21 +258,21 @@ async def quest_list(callback: CallbackQuery):
     lambda callback: callback.data == "quest:current_list"
 )
 async def current_quests(callback: CallbackQuery):
-    await callback.answer()
-
+    if not await _require_guild(callback):
+        return
     telegram_id = callback.from_user.id
+
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await show_no_character(callback)
+        await callback.answer()
+        return
 
     all_quests = []
 
-    for category in (
-        "story",
-        "daily",
-        "achievement",
-    ):
-        await ensure_character_quests(
-            telegram_id,
-            category,
-        )
+    for category in ("story", "daily", "achievement"):
+        await ensure_character_quests(telegram_id, category)
 
         quests = await get_character_quests(
             telegram_id,
@@ -222,11 +282,16 @@ async def current_quests(callback: CallbackQuery):
         all_quests.extend(quests)
 
     if not all_quests:
-        await callback.message.edit_text(
-            "📌 <b>مأموریت‌های من</b>\n\n"
-            "📭 هنوز مأموریتی برای تو فعال نشده است.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text=(
+                "📌 <b>مأموریت‌های من</b>\n\n"
+                "📭 هنوز مأموریتی برای تو فعال نشده است."
+            ),
             reply_markup=quest_current_list_keyboard(),
         )
+        await callback.answer()
         return
 
     active = []
@@ -236,10 +301,8 @@ async def current_quests(callback: CallbackQuery):
     for character_quest, quest in all_quests:
         if character_quest.status == "active":
             active.append((character_quest, quest))
-
         elif character_quest.status == "completed":
             completed.append((character_quest, quest))
-
         elif character_quest.status == "claimed":
             claimed.append((character_quest, quest))
 
@@ -250,32 +313,38 @@ async def current_quests(callback: CallbackQuery):
 
     if active:
         lines.append("🟡 <b>فعال</b>")
+
         for character_quest, quest in active:
             lines.append(
-                f"• {quest.name} "
-                f"— {character_quest.progress}/{quest.required_amount}"
+                f"• {quest.name} — "
+                f"{character_quest.progress}/"
+                f"{quest.required_amount}"
             )
+
         lines.append("")
 
     if completed:
         lines.append("✅ <b>تکمیل‌شده و آماده دریافت</b>")
+
         for character_quest, quest in completed:
-            lines.append(
-                f"• {quest.name} 🎁"
-            )
+            lines.append(f"• {quest.name} 🎁")
+
         lines.append("")
 
     if claimed:
         lines.append("🎁 <b>دریافت‌شده</b>")
-        for character_quest, quest in claimed:
-            lines.append(
-                f"• {quest.name}"
-            )
 
-    await callback.message.edit_text(
-        "\n".join(lines),
+        for character_quest, quest in claimed:
+            lines.append(f"• {quest.name}")
+
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text="\n".join(lines),
         reply_markup=quest_current_list_keyboard(),
     )
+
+    await callback.answer()
 
 
 # ============================================================
@@ -289,49 +358,63 @@ async def current_quests(callback: CallbackQuery):
     )
 )
 async def quest_detail(callback: CallbackQuery):
-    await callback.answer()
-
+    if not await _require_guild(callback):
+        return
     try:
-        quest_id = int(
-            callback.data.split(":", 2)[2]
-        )
+        quest_id = int(callback.data.split(":", 2)[2])
     except (ValueError, IndexError):
-        await callback.message.edit_text(
-            "❌ شناسه مأموریت نامعتبر است.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text="❌ شناسه مأموریت نامعتبر است.",
             reply_markup=quest_main_keyboard(),
         )
+        await callback.answer()
         return
 
     telegram_id = callback.from_user.id
 
+    # شناسه تلگرام با شناسه داخلی شخصیت در دیتابیس متفاوت است.
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await show_no_character(callback)
+        await callback.answer()
+        return
+
     quest = await get_quest(quest_id)
 
     if quest is None or not quest.is_active:
-        await callback.message.edit_text(
-            "❌ این مأموریت دیگر فعال نیست.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text="❌ این مأموریت دیگر فعال نیست.",
             reply_markup=quest_main_keyboard(),
         )
+        await callback.answer()
         return
 
+    # اصلاح اصلی: استفاده از character.id به‌جای telegram_id
     character_quest = await get_character_quest(
-        telegram_id,
+        character.id,
         quest_id,
     )
 
     if character_quest is None:
-        await callback.message.edit_text(
-            "❌ این مأموریت برای قهرمان تو فعال نشده است.",
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text=(
+                "❌ این مأموریت برای قهرمان تو فعال نشده است.\n\n"
+                "به فهرست مأموریت‌ها برگرد و دوباره انتخاب کن."
+            ),
             reply_markup=quest_main_keyboard(),
         )
+        await callback.answer()
         return
 
-    status = format_quest_status(
-        character_quest.status
-    )
-
-    objective = format_objective_type(
-        quest.objective_type
-    )
+    status = format_quest_status(character_quest.status)
+    objective = format_objective_type(quest.objective_type)
 
     progress = format_quest_progress(
         character_quest.progress,
@@ -356,20 +439,22 @@ async def quest_detail(callback: CallbackQuery):
     )
 
     if quest.min_level > 1:
-        text += (
-            f"\n\n🔒 حداقل سطح: {quest.min_level}"
-        )
+        text += f"\n\n🔒 حداقل سطح: {quest.min_level}"
 
     if quest.is_repeatable:
         text += "\n🔄 این مأموریت روزانه است."
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=text,
         reply_markup=quest_detail_keyboard(
             quest.id,
             can_claim,
         ),
     )
+
+    await callback.answer()
 
 
 # ============================================================
@@ -383,10 +468,10 @@ async def quest_detail(callback: CallbackQuery):
     )
 )
 async def claim_quest_reward(callback: CallbackQuery):
+    if not await _require_guild(callback):
+        return
     try:
-        quest_id = int(
-            callback.data.split(":", 2)[2]
-        )
+        quest_id = int(callback.data.split(":", 2)[2])
     except (ValueError, IndexError):
         await callback.answer(
             "❌ شناسه مأموریت نامعتبر است.",
@@ -416,26 +501,37 @@ async def claim_quest_reward(callback: CallbackQuery):
     quest = await get_quest(quest_id)
 
     if quest is None:
-        await callback.message.edit_text(
-            message,
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text=message,
             reply_markup=quest_main_keyboard(),
         )
         return
 
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await show_no_character(callback)
+        return
+
+    # اصلاح اصلی: استفاده از شناسه داخلی شخصیت
     character_quest = await get_character_quest(
-        telegram_id,
+        character.id,
         quest_id,
     )
 
     if character_quest is None:
-        await callback.message.edit_text(
-            message,
+        await show_panel(
+            callback=callback,
+            panel_name="quest",
+            text=message,
             reply_markup=quest_main_keyboard(),
         )
         return
 
     text = (
-        f"🎉 <b>مأموریت تکمیل شد!</b>\n\n"
+        "🎉 <b>مأموریت تکمیل شد!</b>\n\n"
         f"📜 {quest.name}\n\n"
         f"{message}\n\n"
         f"📌 وضعیت: "
@@ -448,8 +544,10 @@ async def claim_quest_reward(callback: CallbackQuery):
             "قابل انجام خواهد بود."
         )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="quest",
+        text=text,
         reply_markup=quest_detail_keyboard(
             quest.id,
             False,

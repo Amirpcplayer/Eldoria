@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +52,8 @@ class FanArt(Base):
         Numeric(12, 2),
         nullable=False,
     )
+
+    value_gold: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -162,6 +165,7 @@ class FanArtOrder(Base):
 
 class FanArtOwnership(Base):
     __tablename__ = "fan_art_ownerships"
+    __table_args__ = (UniqueConstraint("telegram_id", "fan_art_id", name="uq_fan_art_owner_art"),)
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -194,3 +198,15 @@ class FanArtOwnership(Base):
         "FanArt",
         back_populates="ownerships",
     )
+
+class GroupFanArtSpawn(Base):
+    """Current collectible fan-art spawn for each Telegram group."""
+    __tablename__ = "group_fan_art_spawns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    fan_art_id: Mapped[int] = mapped_column(ForeignKey("fan_arts.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    spawned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    claimed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -11,6 +11,12 @@ session = AiohttpSession(
 )
 
 
+from middlewares.premium_emoji import PremiumEmojiMiddleware
+from middlewares.premium_emoji_buttons import PremiumEmojiButtonsMiddleware
+
+session.middleware(PremiumEmojiButtonsMiddleware())
+session.middleware(PremiumEmojiMiddleware())
+
 bot = Bot(
     token=settings.bot_token,
     session=session,

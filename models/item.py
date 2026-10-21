@@ -38,7 +38,16 @@ class Item(Base):
         index=True,
     )
 
+    # Price used when the item is sold back to the shop.
     sell_price: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    # Price used when the item is bought from the shop.
+    # 0 means the item is not sold by the shop.
+    buy_price: Mapped[int] = mapped_column(
         Integer,
         default=0,
         nullable=False,

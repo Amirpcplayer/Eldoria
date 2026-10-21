@@ -143,7 +143,7 @@ async def fanart_add_name(
 
     if len(name) > 150:
         await message.answer(
-            "❌ نام نباید بیشتر از ۱۵۰ کاراکتر باشد."
+            "❌ نام نباید بیشتر از ۱۵۰ قهرمان باشد."
         )
         return
 
@@ -270,20 +270,30 @@ async def fanart_add_price(
         )
         return
 
-    await state.update_data(
-        price=price,
-    )
-
-    await state.set_state(
-        FanArtStates.add_limited,
-    )
-
+    await state.update_data(price=price)
+    await state.set_state(FanArtStates.add_value_gold)
     await message.answer(
-        "📦 آیا Fan Art محدود است؟\n\n"
-        "بله\n"
-        "یا\n"
-        "خیر"
+        "💰 ارزش اقتصادی این فن‌آرت در بازی را به طلا وارد کن.\n"
+        "این مقدار با قیمت پرداختی جداست و در شکار/اقتصاد بازی نمایش داده می‌شود.\n\n"
+        "مثال: 25000"
     )
+
+@router.message(FanArtStates.add_value_gold, F.text)
+async def fanart_add_value_gold(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    raw = message.text.strip().replace(",", "").replace("٬", "")
+    try:
+        value_gold = int(raw)
+    except ValueError:
+        await message.answer("❌ ارزش اقتصادی باید عدد صحیح باشد.")
+        return
+    if value_gold < 0 or value_gold > 2_000_000_000:
+        await message.answer("❌ ارزش اقتصادی باید بین صفر تا ۲٬۰۰۰٬۰۰۰٬۰۰۰ طلا باشد.")
+        return
+    await state.update_data(value_gold=value_gold)
+    await state.set_state(FanArtStates.add_limited)
+    await message.answer("🗃 آیا Fan Art محدود است؟\n\nبله\nیا\nخیر")
 
 
 @router.message(
@@ -313,7 +323,7 @@ async def fanart_add_limited(
         )
 
         await message.answer(
-            "📦 تعداد موجودی را وارد کن.\n\n"
+            "🗃 تعداد موجودی را وارد کن.\n\n"
             "مثال:\n"
             "10"
         )
@@ -392,6 +402,7 @@ async def create_fan_art(
         "description",
         "rarity",
         "price",
+        "value_gold",
         "is_limited",
     ]
 
@@ -415,6 +426,7 @@ async def create_fan_art(
             image_file_id=data["image_file_id"],
             rarity=data["rarity"],
             price=data["price"],
+            value_gold=int(data["value_gold"]),
             is_active=True,
             is_limited=data["is_limited"],
             stock=data.get("stock"),
@@ -443,7 +455,7 @@ async def create_fan_art(
         f"🎨 نام: {data['name']}\n"
         f"💎 رریتی: {data['rarity']}\n"
         f"💰 قیمت: {data['price']}\n"
-        f"📦 موجودی: {stock_text}"
+        f"🗃 موجودی: {stock_text}"
     )
 
 

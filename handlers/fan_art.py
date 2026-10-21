@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
@@ -9,6 +10,7 @@ from aiogram.types import (
 )
 
 from config.settings import settings
+from middlewares.panel_owner import protect_keyboard
 from keyboards.fan_art import (
     fan_art_admin_order_keyboard,
     fan_art_detail_keyboard,
@@ -30,6 +32,7 @@ from services.fan_art_service import (
     get_owned_fan_arts,
     owns_fan_art,
     set_waiting_receipt,
+    sell_owned_fan_art,
 )
 from states.fan_art import FanArtStates
 
@@ -51,22 +54,12 @@ async def show_text(
     text: str,
     reply_markup=None,
 ):
-    if callback.message.photo:
-        try:
-            await callback.message.delete()
-        except Exception:
-            pass
-
-        await callback.message.answer(
-            text,
-            reply_markup=reply_markup,
-        )
+    """Send a new Fan Art panel while preserving earlier chat messages."""
+    if callback.message is None:
         return
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=reply_markup,
-    )
+    if reply_markup is not None:
+        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
+    await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 async def show_photo(
@@ -75,25 +68,16 @@ async def show_photo(
     caption: str,
     reply_markup=None,
 ):
-    if callback.message.photo:
-        await callback.message.edit_media(
-            media=InputMediaPhoto(
-                media=photo,
-                caption=caption,
-            ),
-            reply_markup=reply_markup,
-        )
+    """Send a new Fan Art image panel; never replace the previous message."""
+    if callback.message is None:
         return
-
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-
+    if reply_markup is not None:
+        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
     await callback.message.answer_photo(
         photo=photo,
         caption=caption,
         reply_markup=reply_markup,
+        parse_mode="HTML",
     )
 
 
@@ -201,16 +185,17 @@ async def fan_art_view(
 
     if fan_art.is_limited:
         stock_text = (
-            f"📦 موجودی: {fan_art.stock or 0}"
+            f"🗃 موجودی: {fan_art.stock or 0}"
         )
     else:
-        stock_text = "📦 موجودی: نامحدود"
+        stock_text = "🗃 موجودی: نامحدود"
 
     caption = (
         f"🎨 {fan_art.name}\n\n"
         f"{fan_art.description}\n\n"
         f"💎 رریتی: {rarity_name}\n"
-        f"💰 قیمت: {fan_art.price}\n"
+        f"💰 قیمت خرید: {int(fan_art.price):,}\n"
+        f"🏦 ارزش اقتصادی بازی: {int(getattr(fan_art, 'value_gold', 0) or 0):,} طلا\n"
         f"{stock_text}"
     )
 
@@ -289,7 +274,7 @@ async def fan_art_buy(
         f"🎨 {fan_art.name}\n"
         f"💎 رریتی: "
         f"{RARITY_NAMES.get(fan_art.rarity, fan_art.rarity)}\n"
-        f"💰 مبلغ: {fan_art.price}\n\n"
+        f"💰 مبلغ: {int(fan_art.price):,}\n\n"
         f"📌 اطلاعات پرداخت:\n"
         f"{payment_info}\n\n"
         "پس از پرداخت، روی «💳 پرداخت کردم» بزن."
@@ -688,7 +673,7 @@ async def fan_art_orders(
     if order is None:
         await show_text(
             callback,
-            "📦 سفارش‌های من\n\n"
+            "🗃 سفارش‌های من\n\n"
             "سفارش فعالی ندارید.",
             fan_art_main_keyboard(),
         )
@@ -707,7 +692,7 @@ async def fan_art_orders(
 
     await show_text(
         callback,
-        "📦 سفارش فعال\n\n"
+        "🗃 سفارش فعال\n\n"
         f"🆔 سفارش: {order.order_code}\n"
         f"🎨 Fan Art: {order.fan_art.name}\n"
         f"💰 مبلغ: {order.price_snapshot}\n"
@@ -725,4 +710,27 @@ async def fan_art_noop(
     await callback.answer(
         "این Fan Art در صندوقچه شما قرار دارد.",
         show_alert=True,
+    )
+
+@router.callback_query(F.data.startswith("fanart:sell:"))
+async def fan_art_sell(callback: CallbackQuery):
+    try:
+        fan_art_id = int((callback.data or "").rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("شناسه فن‌آرت نامعتبر است.", show_alert=True); return
+    success, message = await sell_owned_fan_art(callback.from_user.id, fan_art_id)
+    await callback.answer(message[:180], show_alert=True)
+    owned = await get_owned_fan_arts(callback.from_user.id)
+    await show_text(callback, "🏆 <b>مجموعهٔ فن‌آرت‌های من</b>\n\n" + ("فن‌آرتی برای نمایش باقی نمانده است." if not owned else "برای انتخاب یا فروش فن‌آرت اقدام کن."), fan_art_owned_keyboard(owned) if owned else fan_art_main_keyboard())
+
+
+@router.message(Command("arts", ignore_case=True))
+@router.message(F.text.regexp(r"(?i)^\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\s*$"))
+async def fan_art_text_entry(message: Message):
+    """Open the Fan Art section from a slash command or Persian shortcut."""
+    await message.answer(
+        "🎨 <b>تالار فن‌آرت اِلدوریا</b>\n\n"
+        "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین.",
+        reply_markup=fan_art_main_keyboard(),
+        parse_mode="HTML",
     )

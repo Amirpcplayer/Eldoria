@@ -1,0 +1,18 @@
+World Eldoria – targeted fixes (2026-10-11)
+
+Changes in this package:
+- Shop equipment category edits the current shop panel in place where possible, avoiding deleting the panel before the replacement image is sent.
+- Gem shop idempotently creates/repairs a full six-piece Divine Eldoria set: weapon, helmet, armor, boots, ring, necklace. All six pieces cost gems and require level 100.
+- Divine sword's base 145 ATK is multiplied by the divine rarity scale (350), so it contributes +50,750 ATK before enhancement/set bonuses.
+- Full divine set has a 6-piece set bonus. Main combat stats scale strongly by rarity, while speed/accuracy/critical use a gentler multiplier to avoid nonsensical thousands of percent critical chance.
+- /mypet and «پت من» now report database errors instead of failing silently, and explain when no active pet exists.
+- Replying «حمله» to the active boss's own bot message routes to the boss combat handler instead of rejecting the bot as a PvP target.
+
+Installation:
+1. Back up the current project and .env.
+2. Extract this complete project ZIP over your project folder.
+3. Keep your existing .env and database data.
+4. Restart with: python main.py
+5. Open Shop > Gem Shop once to ensure the full Divine set is seeded into the database.
+
+Validation: Python syntax compilation and ZIP integrity were checked. A live Telegram/database battle was not available for end-to-end testing.

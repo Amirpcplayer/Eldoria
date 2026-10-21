@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+
+import models.monster
+import models.social_systems  # register social and group-dungeon models
+import models.world_systems  # register progression, marketplace and world-boss models
+
+from aiogram import Dispatcher
+from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault, ErrorEvent
+
+from bot.bot import bot
+
+from middlewares.username_sync import UsernameSyncMiddleware
+from middlewares.panel_owner import PanelOwnerMiddleware
+
+from handlers.start import router as start_router
+from handlers.main_menu import router as main_menu_router
+from handlers.character_creation import router as character_creation_router
+from handlers.race import router as race_router
+from handlers.element import router as element_router
+from handlers.admin_temp import router as admin_temp_router
+from handlers.admin_resource_gifts import router as admin_resource_gifts_router
+from handlers.admin_premium_emoji import router as admin_premium_emoji_router
+from handlers.fan_art_gifts import router as fan_art_gifts_router
+from handlers.inventory import router as inventory_router
+from handlers.profile import router as profile_router
+from handlers.skills import router as skills_router
+from handlers.equipment import router as equipment_router
+from handlers.quest import router as quest_router
+from handlers.shop import router as shop_router
+from handlers.fan_art import router as fan_art_router
+from handlers.fan_art_admin import router as fan_art_admin_router
+from handlers.fan_art_hunt import router as fan_art_hunt_router, fan_art_scheduler
+from handlers.combat import router as combat_router
+from handlers.adventure import router as adventure_router
+from handlers.pvp import router as pvp_router
+from handlers.party import router as party_router
+from handlers.social_systems import router as social_systems_router
+from handlers.dungeon_expedition import router as dungeon_expedition_router
+from handlers.guild import router as guild_router
+from handlers.advanced_world import router as advanced_world_router
+from handlers.group_boss import router as group_boss_router, boss_scheduler
+from handlers.group_link import router as group_link_router
+from services.pet_training_service import pet_training_scheduler
+from services.death_service import death_revival_scheduler
+from services.dungeon_expedition_service import dungeon_scheduler
+from services.guild_service import guild_sale_payout_scheduler
+from middlewares.group_boss_registration import GroupBossRegistrationMiddleware
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+logger = logging.getLogger("world_eldoria")
+dp = Dispatcher()
+
+
+@dp.errors()
+async def log_unhandled_update_error(event: ErrorEvent) -> bool:
+    """Log unexpected handler failures and give callback users feedback."""
+    update = event.update
+    exception = event.exception
+    logger.error(
+        "Unhandled update error (update_id=%s): %r",
+        getattr(update, "update_id", None),
+        exception,
+        exc_info=(type(exception), exception, exception.__traceback__),
+    )
+
+    callback = getattr(update, "callback_query", None)
+    if callback is not None:
+        try:
+            await callback.answer(
+                "❌ این بخش با خطا روبه‌رو شد. خطای کامل در ترمینال ربات ثبت شده است.",
+                show_alert=True,
+            )
+        except Exception:
+            pass
+    return True
+
+
+username_sync = UsernameSyncMiddleware()
+panel_owner = PanelOwnerMiddleware()
+
+dp.message.middleware(username_sync)
+dp.message.middleware(GroupBossRegistrationMiddleware())
+dp.callback_query.outer_middleware(panel_owner)
+dp.callback_query.middleware(username_sync)
+
+dp.include_router(start_router)
+dp.include_router(character_creation_router)
+dp.include_router(race_router)
+dp.include_router(element_router)
+
+# پنل ادمین و گیفت فن‌آرت
+dp.include_router(admin_temp_router)
+dp.include_router(admin_resource_gifts_router)
+dp.include_router(admin_premium_emoji_router)
+dp.include_router(fan_art_gifts_router)
+
+dp.include_router(group_boss_router)
+dp.include_router(group_link_router)
+dp.include_router(main_menu_router)
+dp.include_router(shop_router)
+dp.include_router(inventory_router)
+dp.include_router(profile_router)
+dp.include_router(skills_router)
+dp.include_router(equipment_router)
+dp.include_router(quest_router)
+dp.include_router(fan_art_admin_router)
+dp.include_router(fan_art_router)
+dp.include_router(fan_art_hunt_router)
+dp.include_router(combat_router)
+dp.include_router(adventure_router)
+dp.include_router(pvp_router)
+dp.include_router(party_router)
+dp.include_router(social_systems_router)
+dp.include_router(dungeon_expedition_router)
+dp.include_router(guild_router)
+dp.include_router(advanced_world_router)
+
+
+async def setup_bot_commands() -> None:
+    # Keep the same public command list in private chats and groups so Telegram can
+    # suggest the same commands wherever the bot is used. Admin authorization is
+    # still enforced by the handlers themselves.
+    commands = [
+        BotCommand(command="start", description="شروع بازی / ساخت شخصیت"),
+        BotCommand(command="menu", description="باز کردن منوی اصلی"),
+        BotCommand(command="guide", description="راهنمای دنیای فانتزی اِلدوریا"),
+        BotCommand(command="arts", description="تالار فن‌آرت اِلدوریا"),
+        BotCommand(command="profile", description="نمایش پروفایل قهرمان"),
+        BotCommand(command="shop", description="فروشگاه اِلدوریا"),
+        BotCommand(command="mypet", description="اطلاعات پت و سهمیه حمله"),
+        BotCommand(command="pvp", description="حمله مستقیم به بازیکن با ریپلای"),
+        BotCommand(command="bounty", description="تابلوی جایزه"),
+        BotCommand(command="attack", description="حمله به باس فعال گروه"),
+        BotCommand(command="magic", description="انتخاب جادو برای باس"),
+        BotCommand(command="heal", description="استفاده از معجون سلامتی"),
+        BotCommand(command="mana", description="ریکاوری مانا با معجون"),
+        BotCommand(command="art", description="فن‌آرت با ریپلای روی تصویر"),
+        BotCommand(command="boss_status", description="وضعیت باس گروه"),
+        BotCommand(command="dungeon", description="غنیمت‌های دانجن"),
+        BotCommand(command="market_items", description="فهرست آیتم‌های بازار"),
+        BotCommand(command="market_sell", description="فروش آیتم در بازار"),
+        BotCommand(command="market_equipment", description="فهرست تجهیزات بازار"),
+        BotCommand(command="market_sell_equipment", description="فروش تجهیزات در بازار"),
+        BotCommand(command="market_equipment_items", description="فهرست شناسه تجهیزات"),
+        BotCommand(command="fanart_add", description="افزودن فن‌آرت (مجازها)"),
+        BotCommand(command="cancel", description="لغو عملیات جاری"),
+        BotCommand(command="myid", description="نمایش شناسه تلگرام"),
+        BotCommand(command="remove_boss", description="حذف باس فعال (فقط ادمین)"),
+        BotCommand(command="admin", description="پنل مدیریت (فقط ادمین)"),
+    ]
+    await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    await bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
+
+
+async def main() -> None:
+    logger.info("World Eldoria is starting...")
+
+    try:
+        await setup_bot_commands()
+        logger.info("Bot commands registered.")
+
+        boss_task = asyncio.create_task(boss_scheduler(), name="world-eldoria-group-boss-scheduler")
+        fan_art_task = asyncio.create_task(fan_art_scheduler(), name="world-eldoria-fan-art-scheduler")
+        pet_task = asyncio.create_task(pet_training_scheduler(bot), name="world-eldoria-pet-training-scheduler")
+        death_task = asyncio.create_task(death_revival_scheduler(bot), name="world-eldoria-death-revival-scheduler")
+        dungeon_task = asyncio.create_task(dungeon_scheduler(bot), name="world-eldoria-dungeon-scheduler")
+        guild_sale_task = asyncio.create_task(guild_sale_payout_scheduler(), name="guild-sale-payout")
+        try:
+            await dp.start_polling(bot)
+        finally:
+            for task in (boss_task, fan_art_task, pet_task, death_task, dungeon_task, guild_sale_task):
+                task.cancel()
+            for task in (boss_task, fan_art_task, pet_task, death_task, dungeon_task, guild_sale_task):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    except asyncio.CancelledError:
+        logger.info("World Eldoria polling was cancelled.")
+        raise
+
+    except Exception:
+        logger.exception(
+            "World Eldoria stopped because of an unexpected error."
+        )
+        raise
+
+    finally:
+        logger.info("Closing Telegram bot session...")
+
+        if not bot.session.closed:
+            await bot.session.close()
+
+        logger.info("World Eldoria stopped.")
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("World Eldoria stopped by keyboard interrupt.")

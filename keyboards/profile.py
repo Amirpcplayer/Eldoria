@@ -7,7 +7,7 @@ def profile_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🗝️ صندوقچه",
+                    text="🗃 صندوقچه",
                     callback_data="menu:inventory",
                 ),
                 InlineKeyboardButton(
@@ -23,6 +23,12 @@ def profile_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="📊 آمار کامل",
                     callback_data="profile:stats",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎨 Fan Art پروفایل",
+                    callback_data="profile:fanart",
                 ),
             ],
             [

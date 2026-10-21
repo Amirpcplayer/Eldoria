@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def inventory_keyboard() -> InlineKeyboardMarkup:
@@ -16,7 +16,7 @@ def inventory_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📦 متریال",
+                    text="🗃 متریال‌ها",
                     callback_data="inventory:materials",
                 ),
                 InlineKeyboardButton(
@@ -26,7 +26,7 @@ def inventory_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🎨 Fan Art",
+                    text="🎨 فن‌آرت‌های من",
                     callback_data="inventory:fanart",
                 ),
             ],
@@ -40,15 +40,11 @@ def inventory_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def inventory_items_keyboard(
-    items,
-) -> InlineKeyboardMarkup:
-
-    buttons = []
+def inventory_items_keyboard(items) -> InlineKeyboardMarkup:
+    rows = []
 
     for inventory_item, item in items:
-
-        buttons.append(
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=f"{item.name} × {inventory_item.quantity}",
@@ -57,7 +53,17 @@ def inventory_items_keyboard(
             ]
         )
 
-    buttons.append(
+    if not rows:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📭 این بخش خالی است",
+                    callback_data="inventory:noop",
+                )
+            ]
+        )
+
+    rows.append(
         [
             InlineKeyboardButton(
                 text="🔙 بازگشت به صندوقچه",
@@ -66,6 +72,115 @@ def inventory_items_keyboard(
         ]
     )
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=buttons
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def equipment_items_keyboard(items) -> InlineKeyboardMarkup:
+    rows = []
+
+    for owned, equipment in items:
+        equipped_mark = " ✅" if owned.equipped else ""
+
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"{equipment.name} × {owned.quantity}"
+                        f"{equipped_mark}"
+                    ),
+                    callback_data=f"equipmentitem:{equipment.id}",
+                )
+            ]
+        )
+
+    if not rows:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📭 تجهیزاتی در صندوقچه نیست",
+                    callback_data="inventory:noop",
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 بازگشت به صندوقچه",
+                callback_data="menu:inventory",
+            )
+        ]
     )
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def equipment_item_details_keyboard(
+    equipment_id: int,
+    equipped: bool,
+) -> InlineKeyboardMarkup:
+    if equipped:
+        action_button = InlineKeyboardButton(
+            text="❌ برداشتن",
+            callback_data=f"inventory:unequip:{equipment_id}",
+        )
+    else:
+        action_button = InlineKeyboardButton(
+            text="🗡️ استفاده",
+            callback_data=f"inventory:equip:{equipment_id}",
+        )
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                action_button,
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 بازگشت به تجهیزات",
+                    callback_data="inventory:equipment",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗃 بازگشت به صندوقچه",
+                    callback_data="menu:inventory",
+                )
+            ],
+        ]
+    )
+
+
+def fan_art_inventory_keyboard(fan_arts) -> InlineKeyboardMarkup:
+    rows = []
+
+    for fan_art in fan_arts:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🎨 {fan_art.name}",
+                    callback_data=f"fanart:view:{fan_art.id}",
+                )
+            ]
+        )
+
+    if not rows:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📭 هنوز Fan Art ندارید",
+                    callback_data="inventory:noop",
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 بازگشت به صندوقچه",
+                callback_data="menu:inventory",
+            )
+        ]
+    )
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)

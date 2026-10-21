@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -10,7 +10,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data="menu:profile",
                 ),
                 InlineKeyboardButton(
-                    text="🗝️ صندوقچه",
+                    text="🗃 صندوقچه",
                     callback_data="menu:inventory",
                 ),
             ],
@@ -20,7 +20,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data="menu:skills",
                 ),
                 InlineKeyboardButton(
-                    text="🗡️ تجهیزات",
+                    text="🛡️ تجهیزات",
                     callback_data="menu:equipment",
                 ),
             ],
@@ -36,9 +36,21 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🏰 دانجن",
-                    callback_data="menu:dungeon",
+                    text="🔨 کرفتینگ",
+                    callback_data="menu:crafting",
                 ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🐾 پت",
+                    callback_data="menu:pets",
+                ),
+                InlineKeyboardButton(
+                    text="🎉 ایونت",
+                    callback_data="menu:events",
+                ),
+            ],
+            [
                 InlineKeyboardButton(
                     text="👥 پارتی",
                     callback_data="menu:party",
@@ -53,6 +65,17 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     text="🏆 رتبه‌بندی",
                     callback_data="menu:ranking",
                 ),
+            ],
+            [
+                InlineKeyboardButton(text="⚒️ آهنگری", callback_data="menu:forge"),
+                InlineKeyboardButton(text="🏪 بازار بازیکنان", callback_data="menu:marketplace"),
+            ],
+            [
+                InlineKeyboardButton(text="📖 دفترچهٔ هیولا", callback_data="menu:bestiary"),
+            ],
+            [
+                InlineKeyboardButton(text="💱 تبدیل گلد به جم", callback_data="menu:exchange"),
+                InlineKeyboardButton(text="📖 راهنما", callback_data="menu:guide"),
             ],
             [
                 InlineKeyboardButton(

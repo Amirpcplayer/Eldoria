@@ -4,7 +4,9 @@ from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
 from models.character import Character
+from services.title_service import sync_unlocked_titles
 from models.quest import Quest, CharacterQuest
+from models.social_systems import GuildMember
 from models.equipment import Equipment, CharacterEquipment
 
 
@@ -68,7 +70,6 @@ async def get_active_quests(category: str | None = None):
         )
 
         result = await session.scalars(query)
-
         return list(result.all())
 
 
@@ -157,6 +158,90 @@ async def _can_create_character_quest(
     )
 
 
+async def _sync_level_quests(
+    session,
+    character: Character,
+    quest_id: int | None = None,
+    current_level: int | None = None,
+) -> int:
+    """
+    همگام‌سازی پیشرفت مأموریت‌های رسیدن به سطح.
+
+    مثال:
+        سطح 9 از هدف 20  -> پیشرفت 9/20
+        سطح 19 از هدف 20 -> پیشرفت 19/20
+        سطح 20 از هدف 20 -> تکمیل مأموریت
+
+    مأموریت‌های دریافت‌شده دوباره فعال یا تغییر داده نمی‌شوند.
+    """
+
+    effective_level = max(
+        0,
+        character.level,
+        current_level if current_level is not None else 0,
+    )
+
+    query = (
+        select(CharacterQuest, Quest)
+        .join(
+            Quest,
+            Quest.id == CharacterQuest.quest_id,
+        )
+        .where(
+            CharacterQuest.character_id == character.id,
+            CharacterQuest.status == "active",
+            Quest.is_active.is_(True),
+            Quest.objective_type == "level",
+        )
+    )
+
+    if quest_id is not None:
+        query = query.where(
+            Quest.id == quest_id
+        )
+
+    rows = list(
+        (await session.execute(query)).all()
+    )
+
+    changed = 0
+    now = datetime.utcnow()
+
+    for character_quest, quest in rows:
+        target_level = quest.target_id
+
+        if target_level is None:
+            target_level = quest.required_amount
+
+        if target_level is None or target_level <= 0:
+            continue
+
+        # قبل از رسیدن به هدف، پیشرفت واقعی نمایش داده می‌شود.
+        # برای مثال لول 9 در مأموریت لول 20 برابر 9 خواهد بود.
+        new_progress = min(
+            effective_level,
+            quest.required_amount,
+        )
+
+        if character_quest.progress != new_progress:
+            character_quest.progress = new_progress
+            changed += 1
+
+        # فقط پس از رسیدن به سطح هدف مأموریت تکمیل می‌شود.
+        if effective_level >= target_level:
+            if character_quest.progress != quest.required_amount:
+                character_quest.progress = quest.required_amount
+
+            character_quest.status = "completed"
+
+            if character_quest.completed_at is None:
+                character_quest.completed_at = now
+
+            changed += 1
+
+    return changed
+
+
 # ============================================================
 # CHARACTER QUEST CREATION
 # ============================================================
@@ -199,10 +284,11 @@ async def ensure_character_quests(
             )
 
             if character_quest is not None:
-                await _reset_daily_quest_if_needed(
-                    session,
-                    character_quest,
-                )
+                if quest.is_repeatable:
+                    await _reset_daily_quest_if_needed(
+                        session,
+                        character_quest,
+                    )
 
                 continue
 
@@ -223,8 +309,13 @@ async def ensure_character_quests(
                 )
             )
 
-        await session.commit()
+        # مأموریت‌های سطحی موجود با سطح واقعی شخصیت هماهنگ می‌شوند.
+        await _sync_level_quests(
+            session,
+            character,
+        )
 
+        await session.commit()
         return True
 
 
@@ -274,7 +365,6 @@ async def get_character_quests(
         )
 
         result = await session.execute(query)
-
         return list(result.all())
 
 
@@ -320,26 +410,31 @@ async def update_progress(
         )
 
         changed = 0
+        now = datetime.utcnow()
 
         for character_quest, quest in rows:
-
             if character.level < quest.min_level:
                 continue
 
             if target_id is not None:
-                if quest.target_id is not None:
-                    if quest.target_id != target_id:
-                        continue
+                if (
+                    quest.target_id is not None
+                    and quest.target_id != target_id
+                ):
+                    continue
 
             character_quest.progress = min(
                 character_quest.progress + amount,
                 quest.required_amount,
             )
 
-            if character_quest.progress >= quest.required_amount:
+            if (
+                character_quest.progress
+                >= quest.required_amount
+            ):
                 character_quest.progress = quest.required_amount
                 character_quest.status = "completed"
-                character_quest.completed_at = datetime.utcnow()
+                character_quest.completed_at = now
 
             changed += 1
 
@@ -379,44 +474,20 @@ async def record_level_up(
         if character is None:
             return 0
 
-        query = (
-            select(CharacterQuest, Quest)
-            .join(
-                Quest,
-                Quest.id == CharacterQuest.quest_id,
-            )
-            .where(
-                CharacterQuest.character_id == character.id,
-                CharacterQuest.status == "active",
-                Quest.is_active.is_(True),
-                Quest.objective_type == "level",
-            )
+        # سطح دیتابیس و سطح رویداد با هم بررسی می‌شوند.
+        effective_level = max(
+            character.level,
+            new_level,
         )
 
-        rows = list(
-            (await session.execute(query)).all()
+        # پیشرفت مأموریت حتی قبل از رسیدن به هدف به‌روز می‌شود.
+        changed = await _sync_level_quests(
+            session,
+            character,
+            current_level=effective_level,
         )
 
-        changed = 0
-
-        for character_quest, quest in rows:
-            target_level = quest.target_id
-
-            if target_level is None:
-                target_level = quest.required_amount
-
-            if new_level < target_level:
-                continue
-
-            character_quest.progress = quest.required_amount
-            character_quest.status = "completed"
-            character_quest.completed_at = datetime.utcnow()
-
-            changed += 1
-
-        if changed:
-            await session.commit()
-
+        await session.commit()
         return changed
 
 
@@ -469,7 +540,6 @@ async def _apply_character_xp(
         return 0
 
     character.xp += amount
-
     levels_gained = 0
 
     while character.level < MAX_CHARACTER_LEVEL:
@@ -494,34 +564,10 @@ async def _update_level_quests_after_levelup(
     session,
     character: Character,
 ):
-    query = (
-        select(CharacterQuest, Quest)
-        .join(
-            Quest,
-            Quest.id == CharacterQuest.quest_id,
-        )
-        .where(
-            CharacterQuest.character_id == character.id,
-            CharacterQuest.status == "active",
-            Quest.is_active.is_(True),
-            Quest.objective_type == "level",
-        )
+    return await _sync_level_quests(
+        session,
+        character,
     )
-
-    rows = list(
-        (await session.execute(query)).all()
-    )
-
-    for character_quest, quest in rows:
-        target_level = quest.target_id
-
-        if target_level is None:
-            target_level = quest.required_amount
-
-        if character.level >= target_level:
-            character_quest.progress = quest.required_amount
-            character_quest.status = "completed"
-            character_quest.completed_at = datetime.utcnow()
 
 
 async def _add_equipment_reward(
@@ -547,15 +593,14 @@ async def _add_equipment_reward(
     )
 
     if character_equipment is None:
-        character_equipment = CharacterEquipment(
-            character_id=character_id,
-            equipment_id=equipment_id,
-            quantity=1,
-            equipped=False,
+        session.add(
+            CharacterEquipment(
+                character_id=character_id,
+                equipment_id=equipment_id,
+                quantity=1,
+                equipped=False,
+            )
         )
-
-        session.add(character_equipment)
-
     else:
         character_equipment.quantity += 1
 
@@ -572,11 +617,16 @@ async def claim_quest(
 ) -> tuple[bool, str]:
 
     async with AsyncSessionLocal() as session:
+        membership = await session.scalar(
+            select(GuildMember.id).where(GuildMember.telegram_id == telegram_id).limit(1)
+        )
+        if membership is None:
+            return False, "🔒 برای دریافت پاداش مأموریت باید عضو یک گیلد باشی."
 
         character = await session.scalar(
             select(Character).where(
                 Character.telegram_id == telegram_id
-            )
+            ).with_for_update()
         )
 
         if character is None:
@@ -602,14 +652,23 @@ async def claim_quest(
         if character_quest is None:
             return False, "❌ این مأموریت برای شما فعال نیست."
 
-        # Daily quest reset
+        # قبل از بررسی جایزه، پیشرفت مأموریت سطحی به‌روز می‌شود.
+        if (
+            quest.objective_type == "level"
+            and character_quest.status == "active"
+        ):
+            await _sync_level_quests(
+                session,
+                character,
+                quest_id=quest.id,
+            )
+
         if quest.is_repeatable:
             await _reset_daily_quest_if_needed(
                 session,
                 character_quest,
             )
 
-        # Already claimed
         if character_quest.status == "claimed":
             if quest.is_repeatable:
                 return (
@@ -622,8 +681,8 @@ async def claim_quest(
                 "❌ جایزه این مأموریت قبلاً دریافت شده است.",
             )
 
-        # Must be completed
         if character_quest.status != "completed":
+            await session.commit()
             return (
                 False,
                 "❌ ابتدا مأموریت را کامل کنید.",
@@ -635,7 +694,6 @@ async def claim_quest(
                 "❌ پیشرفت مأموریت کافی نیست.",
             )
 
-        # Minimum level
         if character.level < quest.min_level:
             return (
                 False,
@@ -652,6 +710,7 @@ async def claim_quest(
             character,
             quest.reward_xp,
         )
+        sync_unlocked_titles(character)
 
         character.skill_xp += max(
             0,
@@ -673,16 +732,13 @@ async def claim_quest(
             )
 
         character_quest.claimed_at = datetime.utcnow()
+        character_quest.status = "claimed"
 
         if quest.is_repeatable:
-            # Daily quests remain claimed until the next day.
-            character_quest.status = "claimed"
             character_quest.progress = quest.required_amount
 
-        else:
-            character_quest.status = "claimed"
-
-        # Update level-based quests caused by reward XP
+        # اگر دریافت XP سطح شخصیت را افزایش داده باشد،
+        # مأموریت‌های سطحی فعال نیز همگام می‌شوند.
         if levels_gained > 0:
             await _update_level_quests_after_levelup(
                 session,
@@ -709,9 +765,7 @@ async def claim_quest(
             )
 
         if equipment_rewarded:
-            reward_lines.append(
-                "🎁 تجهیزات"
-            )
+            reward_lines.append("🎁 تجهیزات")
 
         message = (
             "🎉 <b>مأموریت کامل شد!</b>\n\n"

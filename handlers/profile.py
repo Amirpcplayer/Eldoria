@@ -1,307 +1,883 @@
-from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from __future__ import annotations
 
+import logging
+import html
+
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
 from models.character import Character
-from models.skill import Skill
-from models.character_skill import CharacterSkill
+from models.fan_art import FanArt
 
-from keyboards.profile import profile_keyboard
+from middlewares.panel_owner import protect_keyboard
 
-from services.profile_service import (
-    get_rank,
-    get_title,
-    get_xp_progress,
-    create_xp_bar,
-    get_combat_power,
+from services.fan_art_service import (
+    clear_active_fan_art,
+    get_active_fan_art,
+    get_owned_fan_arts,
+    set_active_fan_art,
 )
+
+from services.equipment_service import get_final_character_stats
+from services.character_stats_service import (
+    calculate_character_combat_stats,
+    calculate_character_base_stats,
+)
+from services.xp_service import (
+    get_required_xp,
+    MAX_CHARACTER_LEVEL,
+)
+from services.title_service import TITLES, sync_unlocked_titles, title_for_level
+from services.vitals_recovery_service import recover_character_vitals
+from models.social_systems import Guild, GuildMember, Party, PartyMember
+from services.scroll_service import active_buffs, SCROLLS
 
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
-RACE_NAMES = {
-    "human": "👤 انسان",
-    "elf": "🧝 الف",
-    "demon": "😈 شیطان",
-    "dwarf": "⛏️ دورف",
-    "dragonite": "🐉 درگونایت",
-    "fairy": "🧚 پری",
-    "vampire": "🧛 خون‌آشام",
-    "werewolf": "🐺 گرگینه",
-}
+# ============================================================
+# XP PROGRESS BAR
+# ============================================================
 
-
-async def get_character(
-    telegram_id: int,
-):
-    async with AsyncSessionLocal() as session:
-
-        return await session.scalar(
-            select(Character).where(
-                Character.telegram_id == telegram_id
-            )
-        )
-
-
-async def get_learned_skills(
-    character_id: int,
-):
-    async with AsyncSessionLocal() as session:
-
-        result = await session.execute(
-            select(Skill, CharacterSkill)
-            .join(
-                CharacterSkill,
-                CharacterSkill.skill_id == Skill.id,
-            )
-            .where(
-                CharacterSkill.character_id == character_id,
-                CharacterSkill.unlocked.is_(True),
-                Skill.is_active.is_(True),
-            )
-            .order_by(
-                Skill.id.asc()
-            )
-        )
-
-        return result.all()
-
-
-def format_skills(
-    learned_skills,
+def build_xp_progress_bar(
+    level: int,
+    xp: int,
 ) -> str:
+    """
+    ساخت نوار پیشرفت XP تا سطح بعدی با استفاده از
+    فرمول اصلی services/xp_service.py.
+    """
 
-    if not learned_skills:
+    level = max(1, int(level or 1))
+    xp = max(0, int(xp or 0))
+
+    # قهرمان به حداکثر سطح رسیده است.
+    if level >= MAX_CHARACTER_LEVEL:
+        bar = "🟩" * 10
+
         return (
-            "✨ **جادوهای آموخته‌شده**\n"
-            "هنوز هیچ جادویی یاد نگرفته‌ای.\n"
+            f"{bar}\n"
+            "📈 پیشرفت سطح: ۱۰۰٪ (حداکثر سطح)\n"
+            "🏆 به حداکثر سطح رسیده‌ای!"
         )
 
-    text = "✨ **جادوهای آموخته‌شده**\n"
+    required_xp = get_required_xp(level)
 
-    for skill, character_skill in learned_skills:
+    # محافظت در برابر مقدار نامعتبر یا صفر
+    if required_xp <= 0:
+        bar = "🟩" * 10
 
-        text += (
-            f"• {skill.name} — "
-            f"Level **{character_skill.level}**\n"
+        return (
+            f"{bar}\n"
+            "📈 پیشرفت تا سطح بعدی: ۱۰۰٪\n"
+            "✨ XP موردنیاز: ۰"
         )
 
-    return text
-
-
-def format_profile(
-    character: Character,
-    learned_skills,
-) -> str:
-
-    rank = get_rank(
-        character.level
+    current_xp = min(xp, required_xp)
+    percentage = min(
+        100,
+        int(current_xp * 100 / required_xp),
     )
 
-    title = get_title(
-        character.level
+    filled_blocks = min(
+        10,
+        int(current_xp * 10 / required_xp),
     )
 
-    current_xp, required_xp, xp_percent = (
-        get_xp_progress(
-            character.level,
-            character.xp,
-        )
-    )
+    empty_blocks = 10 - filled_blocks
 
-    xp_bar = create_xp_bar(
-        xp_percent
-    )
-
-    combat_power = get_combat_power(
-        character
-    )
-
-    race = RACE_NAMES.get(
-        character.race,
-        character.race or "نامشخص",
-    )
-
-    if character.level >= 100:
-
-        xp_text = "MAX"
-
-    else:
-
-        xp_text = (
-            f"{current_xp:,} / "
-            f"{required_xp:,}"
-        )
-
-    skills_text = format_skills(
-        learned_skills
+    bar = (
+        "🟩" * filled_blocks
+        + "⬜" * empty_blocks
     )
 
     return (
-        "👤 **پروفایل قهرمان**\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-
-        f"🧑 نام: **{character.name}**\n"
-        f"🧬 نژاد: {race}\n"
-        f"🏅 Rank: **{rank}**\n"
-        f"🎖️ عنوان: **{title}**\n\n"
-
-        "📈 **پیشرفت قهرمان**\n"
-        f"⭐ Level: **{character.level}**\n"
-        f"🧪 XP: **{xp_text}**\n"
-        f"{xp_bar} {xp_percent}%\n\n"
-
-        "❤️ **سلامتی**\n"
-        f"❤️ HP: **{character.hp:,} / "
-        f"{character.max_hp:,}**\n"
-        f"💧 Mana: **{character.mana:,} / "
-        f"{character.max_mana:,}**\n\n"
-
-        "⚔️ **قدرت‌های رزمی**\n"
-        f"⚔️ Attack: **{character.attack}**\n"
-        f"🔮 Magic Power: **{character.magic_power}**\n"
-        f"🛡️ Defense: **{character.defense}**\n"
-        f"🔰 Magic Defense: **{character.magic_defense}**\n"
-        f"💨 Speed: **{character.speed}**\n"
-        f"🎯 Accuracy: **{character.accuracy}**\n\n"
-
-        "🍀 **ویژگی‌های ویژه**\n"
-        f"🍀 Luck: **{character.luck}**\n"
-        f"💥 Critical: **{character.critical}%**\n\n"
-
-        f"{skills_text}\n"
-
-        "💰 **دارایی‌ها**\n"
-        f"💰 Gold: **{character.gold:,}**\n"
-        f"💎 Gems: **{character.gems:,}**\n\n"
-
-        "⚡ **قدرت رزمی**\n"
-        f"🔥 Combat Power: **{combat_power:,}**\n\n"
-
-        "━━━━━━━━━━━━━━━━━━\n"
-        "🌌 قهرمانت در سرزمین اِلدوریا آماده ماجراجویی است!"
+        f"{bar}\n"
+        f"📈 پیشرفت تا سطح بعدی: {percentage}٪\n"
+        f"✨ XP: {xp:,} / {required_xp:,}"
     )
 
 
-@router.callback_query(
-    F.data == "menu:profile"
-)
+# ============================================================
+# KEYBOARDS
+# ============================================================
+
+def profile_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗃 صندوقچه",
+                    callback_data="menu:inventory",
+                ),
+                InlineKeyboardButton(
+                    text="🛡️ تجهیزات",
+                    callback_data="menu:equipment",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚔️ مهارت‌ها",
+                    callback_data="menu:skills",
+                ),
+                InlineKeyboardButton(
+                    text="📊 آمار کامل",
+                    callback_data="profile:stats",
+                ),
+            ],
+            [
+                InlineKeyboardButton(text="🧪 ریکاوری HP", callback_data="potion:choose:hp"),
+                InlineKeyboardButton(text="🔷 ریکاوری Mana", callback_data="potion:choose:mana"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎖️ لقب‌های قهرمان",
+                    callback_data="profile:titles",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎨 انتخاب Fan Art پروفایل",
+                    callback_data="profile:fanart",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 بازگشت",
+                    callback_data="menu:back",
+                ),
+            ],
+        ]
+    )
+
+
+def profile_fan_art_keyboard(
+    fan_arts: list[FanArt],
+    active_fan_art_id: int | None,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+
+    for fan_art in fan_arts:
+        text = (
+            f"✅ {fan_art.name}"
+            if fan_art.id == active_fan_art_id
+            else f"🎨 {fan_art.name}"
+        )
+
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=text,
+                    callback_data=f"profile:setfanart:{fan_art.id}",
+                )
+            ]
+        )
+
+    if active_fan_art_id is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🚫 حذف Fan Art فعال",
+                    callback_data="profile:clearfanart",
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 بازگشت به پروفایل",
+                callback_data="menu:profile",
+            )
+        ]
+    )
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def title_keyboard(unlocked: list[int], active_title: str | None, page: int = 0) -> InlineKeyboardMarkup:
+    page_size = 10
+    pages = max(1, (len(unlocked) + page_size - 1) // page_size)
+    page = max(0, min(page, pages - 1))
+    rows: list[list[InlineKeyboardButton]] = []
+    for level in unlocked[page * page_size:(page + 1) * page_size]:
+        title = TITLES[level - 1]
+        prefix = "✅ " if title == active_title else "🎖️ "
+        rows.append([InlineKeyboardButton(text=f"{prefix}Lv.{level} — {title}", callback_data=f"profile:settitle:{level}")])
+    nav: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ قبلی", callback_data=f"profile:titlepage:{page - 1}"))
+    if page + 1 < pages:
+        nav.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"profile:titlepage:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت به پروفایل", callback_data="menu:profile")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def render_titles(callback: CallbackQuery, page: int = 0) -> None:
+    telegram_id = callback.from_user.id
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id))
+        if character is None:
+            await callback.answer("❌ قهرمان پیدا نشد.", show_alert=True)
+            return
+        unlocked = sync_unlocked_titles(character)
+        active_title = character.active_title
+        character_name = character.name
+        level = character.level
+        await session.commit()
+    text = (
+        "🏰 <b>تالار القاب اِلدوریا</b>\n\n"
+        f"🧙 قهرمان: {character_name}\n⭐ سطح فعلی: {level}\n"
+        f"🎖️ لقب فعال: <b>{active_title}</b>\n\n"
+        f"🔓 لقب‌های بازشده: {len(unlocked)}/100\n"
+        "با هر سطح جدید، لقب مخصوص همان سطح باز می‌شود. یکی از لقب‌های بازشده را انتخاب کن:"
+    )
+    markup = owned_keyboard(title_keyboard(unlocked, active_title, page), telegram_id)
+    if callback.message is not None:
+        try:
+            await callback.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+        except Exception:
+            await callback.message.answer(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+
+
+def owned_keyboard(
+    keyboard: InlineKeyboardMarkup,
+    telegram_id: int,
+) -> InlineKeyboardMarkup:
+    """اختصاص تمام دکمه‌های یک کیبورد به صاحب پنل."""
+    return protect_keyboard(keyboard, telegram_id)
+
+
+# ============================================================
+# CHARACTER
+# ============================================================
+
+async def get_character(
+    telegram_id: int,
+) -> Character | None:
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == telegram_id)
+        )
+        if character is not None:
+            sync_unlocked_titles(character)
+            await session.commit()
+            await session.refresh(character)
+        return character
+
+
+# ============================================================
+# STATS
+# ============================================================
+
+async def get_profile_stats(
+    telegram_id: int,
+    character: Character,
+) -> dict[str, int]:
+    try:
+        stats = await calculate_character_combat_stats(character)
+    except Exception:
+        # A schema/query problem in the equipment or pet subsystem must not
+        # make the player's profile unavailable. Log the full traceback and
+        # render reliable level-based base stats as a safe fallback.
+        logger.exception(
+            "Failed to calculate full profile stats for telegram_id=%s; "
+            "falling back to base stats",
+            telegram_id,
+        )
+        stats = calculate_character_base_stats(character)
+
+    return {
+        "attack": int(stats.attack),
+        "magic_power": int(stats.magic_power),
+        "defense": int(stats.defense),
+        "magic_defense": int(stats.magic_defense),
+        "hp": int(stats.max_hp),
+        "mana": int(stats.max_mana),
+        "speed": int(stats.speed),
+        "accuracy": int(stats.accuracy),
+        "luck": int(stats.luck),
+        "critical": int(stats.critical),
+    }
+
+
+# ============================================================
+# PROFILE TEXT
+# ============================================================
+
+def build_profile_text(
+    character: Character,
+    active_fan_art: FanArt | None,
+    stats: dict[str, int],
+) -> str:
+    """Render a compact, ornate fantasy profile that fits Telegram captions."""
+    final_hp = max(1, int(stats.get("hp", 1)))
+    final_mana = max(1, int(stats.get("mana", 1)))
+    current_hp = max(0, min(int(character.hp or 0), final_hp))
+    current_mana = max(0, min(int(character.mana or 0), final_mana))
+
+    def bar(current: int, maximum: int, filled: str, empty: str = "▫️", width: int = 8) -> str:
+        ratio = max(0.0, min(1.0, current / max(1, maximum)))
+        count = min(width, int(ratio * width))
+        return filled * count + empty * (width - count)
+
+    level = max(1, int(character.level or 1))
+    xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
+    # A readable, comparable combat rating; it is informational and doesn't alter combat math.
+    combat_power = (
+        int(stats.get("attack", 0))
+        + int(stats.get("magic_power", 0))
+        + int(stats.get("defense", 0)) // 2
+        + int(stats.get("magic_defense", 0)) // 2
+        + int(stats.get("critical", 0)) * 100
+    )
+    name = html.escape(str(character.name or "قهرمان بی‌نام"))
+    race = html.escape(str(character.race or "نامشخص"))
+    gender_value = getattr(character, "gender", None)
+    gender = "مرد" if gender_value == "male" else "زن" if gender_value == "female" else "ثبت نشده"
+    title = html.escape(str(character.active_title or title_for_level(level)))
+
+    lines = [
+        "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
+        "  ⚔️ <b>قهرمان اِلدوریا</b> ⚔️",
+        "",
+        f"🧙 نام قهرمان: <b>{name}</b>",
+        f"🎖️ لقب: {title}",
+        f"🏅 سطح: Lv. {level}",
+        f"🧬 نژاد: {race}  ·  ⚧️ جنسیت: {gender}",
+        "",
+        "━━━━━━━━ ⚜️ هویت قهرمان ⚜️ ━━━━━━━━",
+        "",
+        f"⚔️ قدرت رزمی: <b>{combat_power:,}</b>",
+        f"💰 طلا: <b>{int(character.gold or 0):,}</b>  ·  💎 جم: <b>{int(character.gems or 0):,}</b>",
+        "",
+        "━━━━━━━━ ❤️ وضعیت حیاتی 💧 ━━━━━━━━",
+        "",
+        f"❤️ سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
+        f"{bar(current_hp, final_hp, '🟥', empty='⬜️')}",
+        "",
+        f"💧 مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
+        f"{bar(current_mana, final_mana, '🟦', empty='⬜️')}",
+        "",
+        "━━━━━━━━ ⚔️ ویژگی‌های رزمی ⚔️ ━━━━━━━━",
+        "",
+        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
+        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  ✨ دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
+        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
+        f"🍀 شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  💥 ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
+        "",
+        "━━━━━━━━ 🌟 مسیر قهرمانی 🌟 ━━━━━━━━",
+        "",
+        xp_progress,
+    ]
+    return "\n".join(lines)
+
+
+# ============================================================
+# SAFE PANEL OUTPUT
+# ============================================================
+
+async def replace_with_text_panel(
+    callback: CallbackQuery,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+) -> None:
+    """
+    جایگزینی پنل با کیبورد محافظت‌شده.
+    پیام مشترک گروه همچنان یک پیام تلگرام است؛
+    کنترل مالکیت دکمه‌ها در middleware انجام می‌شود.
+    """
+
+    telegram_id = callback.from_user.id
+    markup = owned_keyboard(keyboard, telegram_id)
+    message = callback.message
+
+    if message is None:
+        return
+
+    try:
+        if message.photo:
+            await message.delete()
+            await message.answer(
+                text,
+                reply_markup=markup,
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await message.edit_text(
+                text,
+                reply_markup=markup,
+                parse_mode=ParseMode.HTML,
+            )
+
+    except Exception:
+        # اگر پیام قابل ویرایش نبود، پیام تازه می‌فرستیم.
+        # از حذف اجباری پیام قبلی در این مسیر خودداری می‌کنیم.
+        await message.answer(
+            text,
+            reply_markup=markup,
+            parse_mode=ParseMode.HTML,
+        )
+
+
+# ============================================================
+# SHOW PROFILE
+# ============================================================
+
+async def show_profile(
+    callback: CallbackQuery,
+) -> None:
+    telegram_id = callback.from_user.id
+
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    stats = await get_profile_stats(
+        telegram_id,
+        character,
+    )
+
+    active_fan_art = await get_active_fan_art(
+        telegram_id,
+    )
+
+    text = build_profile_text(
+        character,
+        active_fan_art,
+        stats,
+    )
+
+    async with AsyncSessionLocal() as session:
+        guild_row = (await session.execute(
+            select(Guild.name, Guild.tag)
+            .join(GuildMember, GuildMember.guild_id == Guild.id)
+            .where(GuildMember.telegram_id == telegram_id)
+            .limit(1)
+        )).first()
+        party_row = (await session.execute(
+            select(Party.name, Party.rank)
+            .join(PartyMember, PartyMember.party_id == Party.id)
+            .where(PartyMember.telegram_id == telegram_id, Party.status == "open")
+            .limit(1)
+        )).first()
+
+    guild_line = (
+        f"🛡️ گیلد: <b>{html.escape(guild_row.name)}</b> [{html.escape(guild_row.tag)}]"
+        if guild_row else "🛡️ گیلد: بدون گیلد"
+    )
+    party_line = (
+        f"👥 پارتی: <b>{html.escape(party_row.name)}</b> · رتبه {html.escape(party_row.rank or 'F')}"
+        if party_row else "👥 پارتی: بدون پارتی"
+    )
+    buffs = await active_buffs(telegram_id)
+    if buffs:
+        now_ts = datetime.utcnow().timestamp()
+        buff_lines = []
+        for kind, payload in buffs:
+            remaining = max(0, int(float(payload.get("expires_at", 0)) - now_ts))
+            hours, minutes = divmod(remaining // 60, 60)
+            buff_lines.append(f"• {SCROLLS[kind]['title']} · باقی‌مانده {hours}س {minutes}د")
+        scroll_block = "📜 <b>اسکرول‌های فعال</b>\n" + "\n".join(buff_lines)
+    else:
+        scroll_block = "📜 <b>اسکرول‌های فعال</b>\n• هیچ اسکرولی فعال نیست."
+    text += "\n\n━━━━━━━━ 🛡️ پیوندهای قهرمان ⚔️ ━━━━━━━━\n" + guild_line + "\n" + party_line + "\n\n" + scroll_block
+
+    keyboard = owned_keyboard(
+        profile_keyboard(),
+        telegram_id,
+    )
+
+    message = callback.message
+
+    if message is None:
+        return
+
+    if (
+        active_fan_art is not None
+        and active_fan_art.image_file_id
+    ):
+        await message.answer_photo(
+            photo=active_fan_art.image_file_id,
+            caption=text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    # اگر فن‌آرت فعال نیست، از عکس اکانت تلگرام بازیکن استفاده کن.
+    try:
+        photos = await callback.bot.get_user_profile_photos(telegram_id, limit=1)
+        if photos.total_count and photos.photos and message is not None:
+            await message.answer_photo(
+                photo=photos.photos[0][-1].file_id,
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+            return
+    except Exception:
+        # نبودن عکس یا خطای API نباید مانع نمایش پروفایل شود.
+        pass
+
+    await replace_with_text_panel(
+        callback,
+        text,
+        profile_keyboard(),
+    )
+
+
+# ============================================================
+# OPEN PROFILE
+# ============================================================
+
+@router.callback_query(F.data == "menu:profile")
 async def profile_handler(
     callback: CallbackQuery,
 ):
+    # پاسخ فوری، تا تلگرام هنگام بارگذاری اطلاعات پروفایل دکمه را معلق نشان ندهد.
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
-    character = await get_character(
-        callback.from_user.id
-    )
-
-    if character is None:
-
-        await callback.answer(
-            "🌫️ قهرمانت پیدا نشد.",
-            show_alert=True,
+    try:
+        await show_profile(callback)
+    except Exception:
+        logger.exception(
+            "Failed to open profile for telegram_id=%s",
+            callback.from_user.id,
         )
-        return
+        # خطای پروفایل نباید به شکل کلیک بی‌پاسخ برای بازیکن دیده شود.
+        if callback.message is not None:
+            try:
+                await callback.message.answer(
+                    "❌ باز کردن پروفایل با خطا روبه‌رو شد. لطفاً دوباره تلاش کن؛ جزئیات خطا در لاگ ربات ثبت شد."
+                )
+            except Exception:
+                pass
 
-    learned_skills = await get_learned_skills(
-        character.id
-    )
 
-    await callback.message.edit_text(
-        format_profile(
-            character,
-            learned_skills,
-        ),
-        reply_markup=profile_keyboard(),
-        parse_mode="Markdown",
-    )
+# ============================================================
+# FULL STATS
+# ============================================================
 
+@router.callback_query(F.data == "profile:titles")
+async def profile_titles_handler(callback: CallbackQuery):
+    await render_titles(callback, 0)
     await callback.answer()
 
 
-@router.callback_query(
-    F.data == "profile:stats"
-)
+@router.callback_query(F.data.startswith("profile:titlepage:"))
+async def profile_titles_page_handler(callback: CallbackQuery):
+    try:
+        page = int(callback.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        page = 0
+    await render_titles(callback, page)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("profile:settitle:"))
+async def profile_set_title_handler(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    try:
+        title_level = int(callback.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await callback.answer("❌ لقب نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id))
+        if character is None:
+            await callback.answer("❌ قهرمان پیدا نشد.", show_alert=True)
+            return
+        unlocked = sync_unlocked_titles(character)
+        if title_level not in unlocked or title_level > int(character.level or 1):
+            await callback.answer("🔒 این لقب هنوز باز نشده است.", show_alert=True)
+            return
+        character.active_title = TITLES[title_level - 1]
+        await session.commit()
+    await render_titles(callback, (title_level - 1) // 10)
+    await callback.answer("✅ لقب قهرمان تغییر کرد.")
+
+
+@router.callback_query(F.data == "profile:stats")
 async def profile_stats_handler(
     callback: CallbackQuery,
 ):
+    telegram_id = callback.from_user.id
 
-    character = await get_character(
-        callback.from_user.id
-    )
+    character = await get_character(telegram_id)
 
     if character is None:
-
         await callback.answer(
-            "🌫️ قهرمانت پیدا نشد.",
+            "❌ قهرمان پیدا نشد.",
             show_alert=True,
         )
         return
 
-    rank = get_rank(
-        character.level
+    stats = await get_profile_stats(
+        telegram_id,
+        character,
     )
 
-    title = get_title(
-        character.level
+    final_hp = int(stats.get("hp", 0))
+    final_mana = int(stats.get("mana", 0))
+
+    current_hp = min(
+        int(character.hp or 0),
+        final_hp,
+    )
+    current_mana = min(
+        int(character.mana or 0),
+        final_mana,
     )
 
-    combat_power = get_combat_power(
-        character
+    xp_progress = build_xp_progress_bar(
+        level=character.level,
+        xp=character.xp,
     )
 
-    race = RACE_NAMES.get(
-        character.race,
-        character.race or "نامشخص",
+    text = (
+        "📊 <b>آمار کامل قهرمان</b>\n\n"
+        f"👤 {character.name}\n"
+        f"⭐ سطح: {character.level}\n\n"
+        "🎖️ <b>پیشرفت لول‌آپ</b>\n"
+        f"{xp_progress}\n\n"
+        f"❤️ HP: {current_hp}/{final_hp}\n"
+        f"💧 Mana: {current_mana}/{final_mana}\n\n"
+        f"⚔️ حمله: {stats['attack']}\n"
+        f"🔮 قدرت جادو: {stats['magic_power']}\n"
+        f"🛡️ دفاع: {stats['defense']}\n"
+        f"✨ دفاع جادویی: {stats['magic_defense']}\n"
+        f"💨 سرعت: {stats['speed']}\n"
+        f"🎯 دقت: {stats['accuracy']}\n"
+        f"🍀 شانس: {character.luck}\n"
+        f"💥 کریتیک: {stats['critical']}\n\n"
+        f"💰 طلا: {character.gold:,}\n"
+        f"💎 جم: {character.gems:,}"
     )
 
-    learned_skills = await get_learned_skills(
-        character.id
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔙 بازگشت به پروفایل",
+                    callback_data="menu:profile",
+                )
+            ]
+        ]
     )
 
-    skills_text = format_skills(
-        learned_skills
+    await replace_with_text_panel(
+        callback,
+        text,
+        keyboard,
+    )
+    await callback.answer()
+
+
+# ============================================================
+# FAN ART LIST
+# ============================================================
+
+@router.callback_query(F.data == "profile:fanart")
+async def profile_fan_art_handler(
+    callback: CallbackQuery,
+):
+    telegram_id = callback.from_user.id
+
+    character = await get_character(telegram_id)
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    fan_arts = await get_owned_fan_arts(
+        telegram_id,
     )
 
-    await callback.message.edit_text(
-        "📊 **آمار کامل قهرمان**\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+    if not fan_arts:
+        text = (
+            "🎨 <b>Fan Art پروفایل</b>\n\n"
+            "📭 هنوز هیچ Fan Artای در اختیار نداری.\n\n"
+            "ابتدا یک Fan Art تهیه کن تا بتوانی آن را "
+            "به عنوان تصویر پروفایل انتخاب کنی."
+        )
 
-        f"👤 نام: **{character.name}**\n"
-        f"🧬 نژاد: {race}\n"
-        f"🏅 Rank: **{rank}**\n"
-        f"🎖️ عنوان: **{title}**\n\n"
+        await replace_with_text_panel(
+            callback,
+            text,
+            profile_fan_art_keyboard(
+                [],
+                character.active_fan_art_id,
+            ),
+        )
 
-        "❤️ **Vital Stats**\n"
-        f"❤️ HP: **{character.hp:,} / "
-        f"{character.max_hp:,}**\n"
-        f"💧 Mana: **{character.mana:,} / "
-        f"{character.max_mana:,}**\n\n"
+        await callback.answer()
+        return
 
-        "⚔️ **Offensive Stats**\n"
-        f"⚔️ Attack: **{character.attack}**\n"
-        f"🔮 Magic Power: **{character.magic_power}**\n"
-        f"🎯 Accuracy: **{character.accuracy}**\n"
-        f"💥 Critical Chance: **{character.critical}%**\n\n"
+    text = (
+        "🎨 <b>Fan Art پروفایل</b>\n\n"
+        "Fan Art موردنظر خودت را برای نمایش در پروفایل انتخاب کن.\n\n"
+    )
 
-        "🛡️ **Defensive Stats**\n"
-        f"🛡️ Defense: **{character.defense}**\n"
-        f"🔰 Magic Defense: **{character.magic_defense}**\n\n"
+    active_name = next(
+        (
+            fan_art.name
+            for fan_art in fan_arts
+            if fan_art.id == character.active_fan_art_id
+        ),
+        None,
+    )
 
-        "🌟 **Utility Stats**\n"
-        f"💨 Speed: **{character.speed}**\n"
-        f"🍀 Luck: **{character.luck}**\n\n"
+    if active_name:
+        text += f"✅ فعال: {active_name}\n\n"
 
-        f"{skills_text}\n"
+    text += "یکی از Fan Artهای مالکیت‌شده را انتخاب کن:"
 
-        "⚡ **Combat Power**\n"
-        f"🔥 **{combat_power:,}**\n\n"
-
-        "━━━━━━━━━━━━━━━━━━",
-        reply_markup=profile_keyboard(),
-        parse_mode="Markdown",
+    await replace_with_text_panel(
+        callback,
+        text,
+        profile_fan_art_keyboard(
+            fan_arts,
+            character.active_fan_art_id,
+        ),
     )
 
     await callback.answer()
+
+
+# ============================================================
+# SET ACTIVE FAN ART
+# ============================================================
+
+@router.callback_query(
+    F.data.startswith("profile:setfanart:")
+)
+async def set_profile_fan_art_handler(
+    callback: CallbackQuery,
+):
+    try:
+        fan_art_id = int(
+            callback.data.split(":")[2]
+        )
+    except (ValueError, IndexError, AttributeError):
+        await callback.answer(
+            "❌ Fan Art نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    telegram_id = callback.from_user.id
+
+    success, result_message = await set_active_fan_art(
+        telegram_id,
+        fan_art_id,
+    )
+
+    if not success:
+        await callback.answer(
+            result_message,
+            show_alert=True,
+        )
+        return
+
+    await show_profile(callback)
+    await callback.answer("🎨 Fan Art فعال شد.")
+
+
+# ============================================================
+# CLEAR ACTIVE FAN ART
+# ============================================================
+
+@router.callback_query(
+    F.data == "profile:clearfanart"
+)
+async def clear_profile_fan_art_handler(
+    callback: CallbackQuery,
+):
+    telegram_id = callback.from_user.id
+
+    success, result_message = await clear_active_fan_art(
+        telegram_id,
+    )
+
+    if not success:
+        await callback.answer(
+            result_message,
+            show_alert=True,
+        )
+        return
+
+    await show_profile(callback)
+    await callback.answer("🚫 Fan Art فعال حذف شد.")
+
+@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() == "\u067e\u0631\u0648\u0641\u0627\u06cc\u0644"))
+@router.message(Command("profile", ignore_case=True))
+async def profile_command(message: Message):
+    """نمایش پروفایل خود یا صاحب پیامی که دستور به آن ریپلای شده است."""
+    if not message.from_user:
+        return
+    target_user = message.reply_to_message.from_user if message.reply_to_message else message.from_user
+    if target_user is None or target_user.is_bot:
+        await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == target_user.id)
+        )
+    if character is None:
+        await message.answer("این بازیکن هنوز حساب World Eldoria نساخته است.")
+        return
+
+    try:
+        stats = await get_profile_stats(target_user.id, character)
+        active_fan_art = await get_active_fan_art(target_user.id)
+        text = build_profile_text(character, active_fan_art, stats)
+    except Exception:
+        logger.exception(
+            "Failed to render /profile for telegram_id=%s",
+            target_user.id,
+        )
+        await message.answer(
+            "❌ پروفایل به‌دلیل خطای داخلی کامل باز نشد. جزئیات خطا در ترمینال ربات ثبت شد."
+        )
+        return
+
+    # فن‌آرت انتخاب‌شده همیشه اولویت دارد؛ در نبود آن عکس پروفایل تلگرام استفاده می‌شود.
+    photo = active_fan_art.image_file_id if active_fan_art and active_fan_art.image_file_id else None
+    if photo is None:
+        try:
+            photos = await message.bot.get_user_profile_photos(target_user.id, limit=1)
+            if photos.total_count and photos.photos:
+                photo = photos.photos[0][-1].file_id
+        except Exception:
+            photo = None
+
+    if photo:
+        await message.answer_photo(photo=photo, caption=text, parse_mode=ParseMode.HTML)
+    else:
+        await message.answer(text, parse_mode=ParseMode.HTML)

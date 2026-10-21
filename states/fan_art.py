@@ -9,6 +9,7 @@ class FanArtStates(StatesGroup):
     add_description = State()
     add_rarity = State()
     add_price = State()
+    add_value_gold = State()
     add_limited = State()
     add_stock = State()
 

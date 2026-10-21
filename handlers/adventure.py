@@ -1,4 +1,4 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from keyboards.adventure import (
@@ -10,6 +10,7 @@ from keyboards.adventure import (
     adventure_enemy_keyboard,
 )
 from keyboards.main_menu import main_menu_keyboard
+
 from services.adventure_service import (
     get_character,
     get_active_areas,
@@ -18,6 +19,9 @@ from services.adventure_service import (
     get_enemy,
     is_area_unlocked,
 )
+
+from services.panel_image_service import show_panel
+
 
 router = Router()
 
@@ -36,13 +40,18 @@ async def show_adventure_menu(
         )
         return
 
-    await callback.message.edit_text(
+    text = (
         "🗺️ <b>ماجراجویی</b>\n\n"
         "🌌 در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.\n\n"
         f"⭐ سطح قهرمان: {character.level}\n\n"
-        "یک بخش را انتخاب کن:",
+        "یک بخش را انتخاب کن:"
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_main_keyboard(),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -86,12 +95,18 @@ async def adventure_areas(
     areas = await get_active_areas()
 
     if not areas:
-        await callback.message.edit_text(
+        text = (
             "🌲 <b>مناطق ماجراجویی</b>\n\n"
-            "📦 در حال حاضر هیچ منطقه‌ای فعال نیست.",
-            reply_markup=adventure_main_keyboard(),
-            parse_mode="HTML",
+            "🗃 در حال حاضر هیچ منطقه‌ای فعال نیست."
         )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
+            reply_markup=adventure_main_keyboard(),
+        )
+
         await callback.answer()
         return
 
@@ -101,10 +116,11 @@ async def adventure_areas(
         "🔓 منطقه‌ای را برای مشاهده جزئیات انتخاب کن."
     )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_areas_keyboard(areas),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -177,13 +193,14 @@ async def adventure_area_details(
             "لازم است."
         )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_area_keyboard(
             area.id,
             unlocked,
         ),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -242,29 +259,40 @@ async def adventure_start(
     )
 
     if not enemies:
-        await callback.message.edit_text(
+        text = (
             f"⚔️ <b>{area.name}</b>\n\n"
             "🌌 وارد منطقه شدی.\n\n"
-            "📦 در حال حاضر هیچ دشمن فعالی "
-            "در این منطقه وجود ندارد.",
+            "🗃 در حال حاضر هیچ دشمن فعالی "
+            "در این منطقه وجود ندارد."
+        )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
             reply_markup=adventure_area_keyboard(
                 area.id,
                 True,
             ),
-            parse_mode="HTML",
         )
+
         await callback.answer()
         return
 
-    await callback.message.edit_text(
+    text = (
         f"⚔️ <b>{area.name}</b>\n\n"
         "🌌 وارد منطقه شدی.\n\n"
-        "👾 دشمنان این منطقه را مشاهده کن "
-        "و حریف خود را انتخاب کن.",
+        " دشمنان این منطقه را مشاهده کن "
+        "و حریف خود را انتخاب کن."
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_encounter_keyboard(
             area.id,
         ),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -322,26 +350,37 @@ async def adventure_enemies(
     )
 
     if not enemies:
-        await callback.message.edit_text(
-            f"👾 <b>دشمنان {area.name}</b>\n\n"
-            "در حال حاضر دشمنی در این منطقه ثبت نشده است.",
+        text = (
+            f" <b>دشمنان {area.name}</b>\n\n"
+            "در حال حاضر دشمنی در این منطقه ثبت نشده است."
+        )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
             reply_markup=adventure_area_keyboard(
                 area.id,
                 True,
             ),
-            parse_mode="HTML",
         )
+
         await callback.answer()
         return
 
-    await callback.message.edit_text(
-        f"👾 <b>دشمنان {area.name}</b>\n\n"
-        "حریف موردنظر را انتخاب کن:",
+    text = (
+        f" <b>دشمنان {area.name}</b>\n\n"
+        "حریف موردنظر را انتخاب کن:"
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_enemies_keyboard(
             enemies,
             area.id,
         ),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -404,7 +443,7 @@ async def adventure_enemy_details(
         return
 
     text = (
-        f"👾 <b>{enemy.name}</b>\n"
+        f" <b>{enemy.name}</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"📖 {enemy.description}\n\n"
         f"⭐ Level: {enemy.level}\n"
@@ -416,13 +455,14 @@ async def adventure_enemy_details(
         f"💰 Gold: +{enemy.gold_reward}"
     )
 
-    await callback.message.edit_text(
-        text,
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
         reply_markup=adventure_enemy_keyboard(
             enemy.id,
             area.id,
         ),
-        parse_mode="HTML",
     )
 
     await callback.answer()
@@ -434,11 +474,16 @@ async def adventure_enemy_details(
 async def adventure_back(
     callback: CallbackQuery,
 ):
-    await callback.message.edit_text(
+    text = (
         "🎮 <b>منوی اصلی World Eldoria</b>\n\n"
-        "🌌 ماجراجویی تو در اِلدوریا ادامه دارد...",
+        "🌌 ماجراجویی تو در اِلدوریا ادامه دارد..."
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="main_menu",
+        text=text,
         reply_markup=main_menu_keyboard(),
-        parse_mode="HTML",
     )
 
     await callback.answer()

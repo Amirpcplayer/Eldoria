@@ -27,7 +27,7 @@ def fan_art_main_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📦 سفارش‌های من",
+                    text="🗃 سفارش‌های من",
                     callback_data="fanart:orders",
                 )
             ],
@@ -164,31 +164,16 @@ def fan_art_receipt_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def fan_art_owned_keyboard(
-    fan_arts,
-) -> InlineKeyboardMarkup:
+def fan_art_owned_keyboard(fan_arts) -> InlineKeyboardMarkup:
     rows = []
-
     for fan_art in fan_arts:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"🎨 {fan_art.name}",
-                    callback_data=f"fanart:select:{fan_art.id}",
-                )
-            ]
-        )
-
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="🔙 بازگشت",
-                callback_data="menu:fanart",
-            )
-        ]
-    )
-
+        rows.append([InlineKeyboardButton(text=f"🎨 {fan_art.name}", callback_data=f"fanart:select:{fan_art.id}")])
+        value = int(getattr(fan_art, "value_gold", 0) or 0)
+        if value > 0:
+            rows.append([InlineKeyboardButton(text=f"💰 فروش برای {value:,} طلا", callback_data=f"fanart:sell:{fan_art.id}")])
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت", callback_data="menu:fanart")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
 
 
 def fan_art_admin_order_keyboard(

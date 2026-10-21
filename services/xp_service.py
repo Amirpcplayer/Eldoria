@@ -4,6 +4,10 @@ from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
 from models.character import Character
+from models.social_systems import PlayerSetting
+from models.world_systems import CharacterActivity, NotificationEvent
+from datetime import datetime
+from services.title_service import sync_unlocked_titles
 
 
 MAX_CHARACTER_LEVEL = 100
@@ -60,81 +64,20 @@ BASE_STATS = {
 def get_base_stats_for_level(
     level: int,
 ) -> dict[str, int]:
-    """
-    قدرت پایه قهرمان در Level مشخص.
-
-    این فرمول طوری طراحی شده که رشد Stats
-    در Levelهای پایین قابل توجه باشد و
-    در Levelهای بالا نیز به‌صورت کنترل‌شده رشد کند.
-    """
-
-    level = max(
-        1,
-        min(level, MAX_CHARACTER_LEVEL),
-    )
-
-    growth = level - 1
-
+    """Endgame-scaled base stats shared by XP gifts and normal level-ups."""
+    level = max(1, min(level, MAX_CHARACTER_LEVEL))
+    growth = (level - 1) ** 2
     return {
-        # HP
-        "max_hp": int(
-            BASE_STATS["max_hp"]
-            * (1 + growth * 0.25)
-        ),
-
-        # Mana
-        "max_mana": int(
-            BASE_STATS["max_mana"]
-            * (1 + growth * 0.16)
-        ),
-
-        # Physical Attack
-        "attack": int(
-            BASE_STATS["attack"]
-            * (1 + growth * 0.12)
-        ),
-
-        # Magic Power
-        "magic_power": int(
-            BASE_STATS["magic_power"]
-            * (1 + growth * 0.12)
-        ),
-
-        # Physical Defense
-        "defense": int(
-            BASE_STATS["defense"]
-            * (1 + growth * 0.11)
-        ),
-
-        # Magic Defense
-        "magic_defense": int(
-            BASE_STATS["magic_defense"]
-            * (1 + growth * 0.11)
-        ),
-
-        # Speed
-        "speed": int(
-            BASE_STATS["speed"]
-            * (1 + growth * 0.06)
-        ),
-
-        # Accuracy
-        "accuracy": int(
-            BASE_STATS["accuracy"]
-            * (1 + growth * 0.06)
-        ),
-
-        # Luck
-        "luck": int(
-            BASE_STATS["luck"]
-            * (1 + growth * 0.05)
-        ),
-
-        # Critical
-        "critical": int(
-            BASE_STATS["critical"]
-            + growth * 0.15
-        ),
+        "max_hp": 100 + 50 * growth,
+        "max_mana": 100 + 50 * growth,
+        "attack": 10 + int(5.1 * growth),
+        "magic_power": 10 + int(5.1 * growth),
+        "defense": 8 + int(2.55 * growth),
+        "magic_defense": 8 + int(2.55 * growth),
+        "speed": 10 + int(0.35 * growth),
+        "accuracy": 10 + int(0.35 * growth),
+        "luck": 5 + int(0.08 * growth),
+        "critical": min(75, 5 + int(0.08 * growth)),
     }
 
 
@@ -209,6 +152,7 @@ async def add_character_xp(
             character.xp = 0
 
             apply_level_stats(character)
+            sync_unlocked_titles(character)
 
             await session.commit()
 
@@ -332,6 +276,13 @@ async def add_character_xp(
 
         if character.level >= MAX_CHARACTER_LEVEL:
             character.xp = 0
+
+        sync_unlocked_titles(character)
+        if levels_gained > 0:
+            session.add(CharacterActivity(character_id=character.id,event_type="level_up",details=f"level={character.level};levels_gained={levels_gained}"))
+            setting = await session.scalar(select(PlayerSetting).where(PlayerSetting.telegram_id == telegram_id))
+            if setting is None or setting.notifications:
+                session.add(NotificationEvent(telegram_id=telegram_id,event_type="level_up",message=f"🎉 قهرمانت به سطح {character.level} رسید و لقب سطح جدید را باز کرد!",delivered=False))
 
         await session.commit()
 

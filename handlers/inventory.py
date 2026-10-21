@@ -1,180 +1,471 @@
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
-from aiogram.fsm.context import FSMContext
+import logging
+from datetime import datetime
 
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.types import (
+    CallbackQuery,
+    ForceReply,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy import select
 
 from bot.bot import bot
 from database.database import AsyncSessionLocal
+
 from models.character import Character
 from models.inventory import Inventory
 from models.item import Item
 from models.trade import Trade
+from models.equipment import CharacterEquipment, Equipment
+
+from services.fan_art_service import get_owned_fan_arts
+from services.inventory_service import sell_item
+from services.scroll_service import scroll_kind, SCROLLS, activate_scroll, has_buff, get_buff
+from services.equipment_service import (
+    equip_equipment,
+    unequip_equipment,
+)
+
+from services.panel_image_service import show_panel
 
 from keyboards.inventory import (
     inventory_keyboard,
     inventory_items_keyboard,
+    equipment_items_keyboard,
+    fan_art_inventory_keyboard,
 )
+
 from keyboards.item import (
     item_details_keyboard,
     trade_request_keyboard,
 )
-from services.inventory_service import sell_item
+
 from states.character import PlayerTrade
 
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# INVENTORY MENU
+# Helpers
 # ============================================================
 
-@router.callback_query(
-    F.data == "menu:inventory"
-)
-async def inventory_handler(
-    callback: CallbackQuery,
-):
+def _normalize_digits(value: str) -> str:
+    translation = str.maketrans(
+        "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
+        "01234567890123456789",
+    )
+    return value.translate(translation)
 
-    await callback.answer()
 
+def _normalize_username(value: str | None) -> str:
+    if not value:
+        return ""
+
+    value = value.strip()
+
+    if value.startswith("@"):
+        value = value[1:]
+
+    return value.strip().lower()
+
+
+async def _get_character(telegram_id: int):
     async with AsyncSessionLocal() as session:
-
-        character = await session.scalar(
+        return await session.scalar(
             select(Character).where(
-                Character.telegram_id == callback.from_user.id
+                Character.telegram_id == telegram_id
             )
         )
 
-    if character is None:
-        await callback.message.edit_text(
-            "❌ قهرمان پیدا نشد."
-        )
-        return
 
-    await callback.message.edit_text(
-        "🗝️ صندوقچه قهرمان\n\n"
-        f"👤 {character.name}\n\n"
-        "📦 دسته‌بندی آیتم‌ها را انتخاب کنید:",
-        reply_markup=inventory_keyboard(),
+async def _show(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup=None,
+) -> bool:
+    """
+    تمام پنل‌های Inventory از inventory.jpg استفاده می‌کنند.
+
+    این تابع فقط یک wrapper برای show_panel است تا منطق
+    قدیمی inventory نیازی به تغییر گسترده نداشته باشد.
+    """
+
+    try:
+        await show_panel(
+            callback=callback,
+            panel_name="inventory",
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return True
+
+    except Exception:
+        logger.exception(
+            "Failed to render inventory panel for telegram_id=%s",
+            callback.from_user.id,
+        )
+        try:
+            await callback.answer(
+                "❌ باز کردن صندوقچه با خطا روبه‌رو شد. جزئیات در لاگ ربات ثبت شد.",
+                show_alert=True,
+            )
+        except Exception:
+            pass
+        return False
+
+
+def _equipment_detail_keyboard(
+    equipment_id: int,
+    equipped: bool,
+) -> InlineKeyboardMarkup:
+
+    if equipped:
+        action_button = InlineKeyboardButton(
+            text="🔓 خارج کردن از تجهیزات",
+            callback_data=f"inventory:unequip:{equipment_id}",
+        )
+    else:
+        action_button = InlineKeyboardButton(
+            text="⚔️ تجهیز کردن",
+            callback_data=f"inventory:equip:{equipment_id}",
+        )
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [action_button],
+            [
+                InlineKeyboardButton(
+                    text="🔙 بازگشت به تجهیزات",
+                    callback_data="inventory:equipment",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗃 بازگشت به صندوقچه",
+                    callback_data="menu:inventory",
+                )
+            ],
+        ]
+    )
+
+
+async def _render_equipment_details(
+    callback: CallbackQuery,
+    equipment_id: int,
+) -> bool:
+
+    telegram_id = callback.from_user.id
+
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(
+                Character.telegram_id == telegram_id
+            )
+        )
+
+        if character is None:
+            return False
+
+        result = await session.execute(
+            select(
+                CharacterEquipment,
+                Equipment,
+            )
+            .join(
+                Equipment,
+                CharacterEquipment.equipment_id == Equipment.id,
+            )
+            .where(
+                CharacterEquipment.character_id == character.id,
+                CharacterEquipment.equipment_id == equipment_id,
+                CharacterEquipment.quantity > 0,
+                Equipment.is_active.is_(True),
+            )
+        )
+
+        row = result.first()
+
+    if row is None:
+        return False
+
+    owned, equipment = row
+
+    description = (
+        equipment.description
+        or "توضیحی برای این تجهیزات ثبت نشده است."
+    )
+
+    text = (
+        f"⚔️ {equipment.name}\n\n"
+        f"{description}\n\n"
+        f"📌 نوع: {equipment.equipment_type}\n"
+        f"💎 کمیابی: {equipment.rarity}\n"
+        f"🔢 تعداد: {owned.quantity}\n\n"
+        f"⚔️ حمله: +{equipment.attack}\n"
+        f"✨ قدرت جادو: +{equipment.magic_power}\n"
+        f"🛡️ دفاع: +{equipment.defense}\n"
+        f"🔮 دفاع جادویی: +{equipment.magic_defense}\n"
+        f"❤️ HP: +{equipment.hp}\n"
+        f"💧 Mana: +{equipment.mana}\n"
+        f"💨 سرعت: +{equipment.speed}\n"
+        f"🎯 دقت: +{equipment.accuracy}\n"
+        f"💥 کریتیکال: +{equipment.critical}\n\n"
+        f"{'✅ در حال استفاده' if owned.equipped else '🗃 در صندوقچه'}"
+    )
+
+    return await _show(
+        callback,
+        text,
+        _equipment_detail_keyboard(
+            equipment.id,
+            owned.equipped,
+        ),
     )
 
 
 # ============================================================
-# INVENTORY CATEGORY
+# Inventory Main
+# ============================================================
+
+@router.callback_query(F.data == "menu:inventory")
+async def inventory_handler(
+    callback: CallbackQuery,
+):
+    telegram_id = callback.from_user.id
+
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(
+                Character.telegram_id == telegram_id
+            )
+        )
+
+        if character is None:
+            await callback.answer(
+                "❌ شخصیت شما پیدا نشد.",
+                show_alert=True,
+            )
+            return
+
+        username = _normalize_username(
+            callback.from_user.username
+        )
+
+        if username:
+            character.telegram_username = username
+            await session.commit()
+
+        character_name = character.name
+
+    await _show(
+        callback,
+        (
+            "🗃 <b>صندوقچه قهرمان</b>\n\n"
+            f"👤 {character_name}\n\n"
+            "دسته‌بندی موردنظر را انتخاب کنید:"
+        ),
+        inventory_keyboard(),
+    )
+
+    await callback.answer()
+
+
+# ============================================================
+# Inventory Categories
 # ============================================================
 
 @router.callback_query(
-    F.data.startswith("inventory:")
+    F.data.in_(
+        {
+            "inventory:equipment",
+            "inventory:potions",
+            "inventory:materials",
+            "inventory:scrolls",
+            "inventory:fanart",
+        }
+    )
 )
 async def inventory_category_handler(
     callback: CallbackQuery,
 ):
-
     category = callback.data.split(":")[1]
-
-    type_map = {
-        "equipment": "equipment",
-        "potions": "potion",
-        "materials": "material",
-        "scrolls": "scroll",
-        "fanart": "fan_art",
-    }
-
-    if category not in type_map:
-        await callback.answer(
-            "⚠️ این بخش هنوز آماده نشده است.",
-            show_alert=True,
-        )
-        return
-
-    item_type = type_map[category]
+    telegram_id = callback.from_user.id
 
     async with AsyncSessionLocal() as session:
-
         character = await session.scalar(
             select(Character).where(
-                Character.telegram_id == callback.from_user.id
+                Character.telegram_id == telegram_id
             )
         )
 
         if character is None:
             await callback.answer(
-                "❌ قهرمان پیدا نشد.",
+                "❌ شخصیت شما پیدا نشد.",
                 show_alert=True,
             )
             return
 
-        result = await session.execute(
-            select(Inventory, Item)
-            .join(
-                Item,
-                Inventory.item_id == Item.id,
-            )
-            .where(
-                Inventory.character_id == character.id,
-                Item.item_type == item_type,
-                Inventory.quantity > 0,
-            )
-            .order_by(Inventory.id)
+        username = _normalize_username(
+            callback.from_user.username
         )
 
-        items = list(result.all())
+        if username:
+            character.telegram_username = username
+            await session.commit()
 
-    await callback.message.edit_text(
-        "🗝️ صندوقچه قهرمان\n\n"
-        f"👤 {character.name}\n\n"
-        "📦 آیتم‌های این بخش:",
-        reply_markup=inventory_items_keyboard(items),
+        if category == "equipment":
+
+            result = await session.execute(
+                select(
+                    CharacterEquipment,
+                    Equipment,
+                )
+                .join(
+                    Equipment,
+                    CharacterEquipment.equipment_id == Equipment.id,
+                )
+                .where(
+                    CharacterEquipment.character_id == character.id,
+                    CharacterEquipment.quantity > 0,
+                    Equipment.is_active.is_(True),
+                )
+                .order_by(CharacterEquipment.id)
+            )
+
+            items = list(result.all())
+
+            text = (
+                "⚔️ <b>تجهیزات موجود در صندوقچه</b>\n\n"
+                "برای مشاهده جزئیات روی یکی از تجهیزات بزنید."
+            )
+
+            keyboard = equipment_items_keyboard(items)
+
+        elif category == "fanart":
+
+            owned_fan_arts = await get_owned_fan_arts(
+                telegram_id
+            )
+
+            text = (
+                "🎨 <b>فن‌آرت‌های صندوقچه</b>\n\n"
+                "فن‌آرت موردنظر را انتخاب کنید:"
+            )
+
+            keyboard = fan_art_inventory_keyboard(
+                owned_fan_arts
+            )
+
+        else:
+
+            type_map = {
+                "potions": "potion",
+                "materials": "material",
+                "scrolls": "scroll",
+            }
+
+            item_type = type_map[category]
+
+            result = await session.execute(
+                select(
+                    Inventory,
+                    Item,
+                )
+                .join(
+                    Item,
+                    Inventory.item_id == Item.id,
+                )
+                .where(
+                    Inventory.character_id == character.id,
+                    Inventory.quantity > 0,
+                    Item.item_type == item_type,
+                )
+                .order_by(Inventory.id)
+            )
+
+            items = list(result.all())
+
+            labels = {
+                "potions": "🧪 <b>معجون‌های صندوقچه</b>",
+                "materials": "🗃 <b>متریال‌های صندوقچه</b>",
+                "scrolls": "📜 <b>اسکرول‌های صندوقچه</b>",
+            }
+
+            text = labels[category]
+
+            keyboard = inventory_items_keyboard(items)
+
+    await _show(
+        callback,
+        text,
+        keyboard,
     )
 
     await callback.answer()
 
 
 # ============================================================
-# ITEM DETAILS
+# Empty / No-op
+# ============================================================
+
+@router.callback_query(F.data == "inventory:noop")
+async def inventory_noop_handler(
+    callback: CallbackQuery,
+):
+    await callback.answer(
+        "موردی برای نمایش در این بخش وجود ندارد."
+    )
+
+
+# ============================================================
+# Item Details
 # ============================================================
 
 @router.callback_query(
-    F.data.startswith("item:")
+    F.data.regexp(r"^item:\d+$")
 )
 async def item_details_handler(
     callback: CallbackQuery,
 ):
+    item_id = int(
+        callback.data.split(":")[1]
+    )
 
-    parts = callback.data.split(":")
-
-    # item:sell / item:sell_player را این Handler نباید بگیرد
-    if len(parts) != 2:
-        return
-
-    try:
-        item_id = int(parts[1])
-    except ValueError:
-        await callback.answer(
-            "❌ آیتم نامعتبر است.",
-            show_alert=True,
-        )
-        return
+    telegram_id = callback.from_user.id
 
     async with AsyncSessionLocal() as session:
 
         character = await session.scalar(
             select(Character).where(
-                Character.telegram_id == callback.from_user.id
+                Character.telegram_id == telegram_id
             )
         )
 
         if character is None:
             await callback.answer(
-                "❌ قهرمان پیدا نشد.",
+                "❌ شخصیت شما پیدا نشد.",
                 show_alert=True,
             )
             return
 
-        row = await session.execute(
-            select(Inventory, Item)
+        username = _normalize_username(
+            callback.from_user.username
+        )
+
+        if username:
+            character.telegram_username = username
+            await session.commit()
+
+        result = await session.execute(
+            select(
+                Inventory,
+                Item,
+            )
             .join(
                 Item,
                 Inventory.item_id == Item.id,
@@ -186,29 +477,231 @@ async def item_details_handler(
             )
         )
 
-        row = row.first()
+        row = result.first()
 
     if row is None:
         await callback.answer(
-            "❌ این آیتم در صندوقچه شما وجود ندارد.",
+            "❌ این آیتم در صندوقچه شما نیست.",
             show_alert=True,
         )
         return
 
     inventory_item, item = row
 
-    await callback.message.edit_text(
-        f"📦 {item.name}\n\n"
-        f"📊 تعداد: {inventory_item.quantity}\n"
-        f"💰 قیمت فروش: {item.sell_price} Gold",
-        reply_markup=item_details_keyboard(item.id),
+    description = (
+        item.description
+        or "توضیحی برای این آیتم ثبت نشده است."
     )
+
+    text = (
+        f"🗃 <b>{item.name}</b>\n\n"
+        f"{description}\n\n"
+        f"🔢 تعداد: {inventory_item.quantity}\n"
+        f"💰 قیمت فروش: {item.sell_price:,} Gold"
+    )
+
+    if item.item_type == "scroll" and scroll_kind(item.name):
+        kind = scroll_kind(item.name)
+        active_buff = await get_buff(telegram_id, kind)
+        active = active_buff is not None
+        if active_buff:
+            remaining = max(1, int(float(active_buff.get("expires_at", 0)) - datetime.utcnow().timestamp()))
+            hours, minutes = divmod(remaining // 60, 60)
+            text += f"\n\n⏳ <b>اثر فعال</b>: {hours} ساعت و {minutes} دقیقه باقی مانده است."
+        rows = []
+        if not active:
+            rows.append([InlineKeyboardButton(text="✨ استفاده از اسکرول", callback_data=f"item:use_scroll:{item.id}")])
+        else:
+            rows.append([InlineKeyboardButton(text="⏳ اثر این اسکرول فعال است", callback_data="inventory:noop")])
+        rows.extend([
+            [InlineKeyboardButton(text="💰 فروش به فروشگاه", callback_data=f"item:sell:{item.id}")],
+            [InlineKeyboardButton(text="👤 پیشنهاد به بازیکن", callback_data=f"item:sell_player:{item.id}")],
+            [InlineKeyboardButton(text="🔙 بازگشت به اسکرول‌ها", callback_data="inventory:scrolls")],
+            [InlineKeyboardButton(text="🗃 بازگشت به صندوقچه", callback_data="menu:inventory")],
+        ])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+    else:
+        keyboard = item_details_keyboard(item.id)
+
+    await _show(callback, text, keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^item:use_scroll:\d+$"))
+async def use_scroll_handler(callback: CallbackQuery):
+    try:
+        item_id = int(callback.data.rsplit(":", 1)[-1])
+    except (TypeError, ValueError):
+        await callback.answer("شناسهٔ اسکرول معتبر نیست.", show_alert=True)
+        return
+
+    kind = None
+    item_name = ""
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(select(Character).where(Character.telegram_id == callback.from_user.id))
+        if character is None:
+            await callback.answer("قهرمان پیدا نشد.", show_alert=True)
+            return
+        row = (await session.execute(
+            select(Inventory, Item).join(Item, Inventory.item_id == Item.id)
+            .where(Inventory.character_id == character.id, Inventory.item_id == item_id, Inventory.quantity > 0, Item.item_type == "scroll")
+            .with_for_update()
+        )).first()
+        if row is None:
+            await callback.answer("این اسکرول در صندوقچه‌ات نیست.", show_alert=True)
+            return
+        inventory_item, item = row
+        kind = scroll_kind(item.name)
+        item_name = item.name
+        if not kind:
+            await callback.answer("اثر این اسکرول هنوز تعریف نشده است.", show_alert=True)
+            return
+        success, result = await activate_scroll(callback.from_user.id, kind)
+        if not success:
+            await callback.answer(result[:180], show_alert=True)
+            return
+        inventory_item.quantity -= 1
+        if inventory_item.quantity <= 0:
+            await session.delete(inventory_item)
+        await session.commit()
+
+    await callback.answer("اسکرول فعال شد!")
+    await _show(callback, f"✨ <b>{item_name}</b> مصرف شد.\n\n{SCROLLS[kind]['description']}\n\n⏳ مدت اثر: ۲ ساعت", InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📜 اسکرول‌های صندوقچه", callback_data="inventory:scrolls")],
+        [InlineKeyboardButton(text="🗃 بازگشت به صندوقچه", callback_data="menu:inventory")],
+    ]))
+
+
+# ============================================================
+# Equipment Details
+# ============================================================
+
+@router.callback_query(
+    F.data.regexp(r"^equipmentitem:\d+$")
+)
+async def equipment_details_handler(
+    callback: CallbackQuery,
+):
+    try:
+        equipment_id = int(
+            callback.data.split(":")[1]
+        )
+
+    except (ValueError, IndexError):
+
+        await callback.answer(
+            "❌ شناسه تجهیزات معتبر نیست.",
+            show_alert=True,
+        )
+        return
+
+    success = await _render_equipment_details(
+        callback,
+        equipment_id,
+    )
+
+    if not success:
+        await callback.answer(
+            "❌ این تجهیزات در صندوقچه شما نیست.",
+            show_alert=True,
+        )
+        return
 
     await callback.answer()
 
 
 # ============================================================
-# SELL TO SHOP
+# Equip
+# ============================================================
+
+@router.callback_query(
+    F.data.regexp(r"^inventory:equip:\d+$")
+)
+async def inventory_equip_equipment_handler(
+    callback: CallbackQuery,
+):
+    try:
+        equipment_id = int(
+            callback.data.split(":")[2]
+        )
+
+    except (ValueError, IndexError):
+
+        await callback.answer(
+            "❌ شناسه تجهیزات معتبر نیست.",
+            show_alert=True,
+        )
+        return
+
+    success, result_message = await equip_equipment(
+        callback.from_user.id,
+        equipment_id,
+    )
+
+    if not success:
+        await callback.answer(
+            result_message,
+            show_alert=True,
+        )
+        return
+
+    await _render_equipment_details(
+        callback,
+        equipment_id,
+    )
+
+    await callback.answer(
+        "✅ تجهیزات با موفقیت مجهز شد."
+    )
+
+
+# ============================================================
+# Unequip
+# ============================================================
+
+@router.callback_query(
+    F.data.regexp(r"^inventory:unequip:\d+$")
+)
+async def inventory_unequip_equipment_handler(
+    callback: CallbackQuery,
+):
+    try:
+        equipment_id = int(
+            callback.data.split(":")[2]
+        )
+
+    except (ValueError, IndexError):
+
+        await callback.answer(
+            "❌ شناسه تجهیزات معتبر نیست.",
+            show_alert=True,
+        )
+        return
+
+    success, result_message = await unequip_equipment(
+        callback.from_user.id,
+        equipment_id,
+    )
+
+    if not success:
+        await callback.answer(
+            result_message,
+            show_alert=True,
+        )
+        return
+
+    await _render_equipment_details(
+        callback,
+        equipment_id,
+    )
+
+    await callback.answer(
+        "🔓 تجهیزات از حالت تجهیز خارج شد."
+    )
+
+
+# ============================================================
+# Sell To NPC
 # ============================================================
 
 @router.callback_query(
@@ -217,14 +710,15 @@ async def item_details_handler(
 async def sell_item_handler(
     callback: CallbackQuery,
 ):
-
     try:
         item_id = int(
             callback.data.split(":")[2]
         )
+
     except (ValueError, IndexError):
+
         await callback.answer(
-            "❌ آیتم نامعتبر است.",
+            "❌ شناسه آیتم معتبر نیست.",
             show_alert=True,
         )
         return
@@ -235,36 +729,44 @@ async def sell_item_handler(
         1,
     )
 
-    await callback.answer(
-        message,
-        show_alert=True,
-    )
-
     if not success:
+        await callback.answer(
+            message,
+            show_alert=True,
+        )
         return
 
-    await inventory_handler(callback)
+    await _show(
+        callback,
+        message,
+        inventory_keyboard(),
+    )
+
+    await callback.answer(
+        "✅ فروش انجام شد."
+    )
 
 
 # ============================================================
-# SELL TO PLAYER
+# Trade - Start
 # ============================================================
 
 @router.callback_query(
     F.data.startswith("item:sell_player:")
 )
-async def sell_to_player_handler(
+async def sell_player_start_handler(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-
     try:
         item_id = int(
             callback.data.split(":")[2]
         )
+
     except (ValueError, IndexError):
+
         await callback.answer(
-            "❌ آیتم نامعتبر است.",
+            "❌ شناسه آیتم معتبر نیست.",
             show_alert=True,
         )
         return
@@ -279,12 +781,12 @@ async def sell_to_player_handler(
 
         if character is None:
             await callback.answer(
-                "❌ قهرمان پیدا نشد.",
+                "❌ شخصیت شما پیدا نشد.",
                 show_alert=True,
             )
             return
 
-        inventory_item = await session.scalar(
+        inventory = await session.scalar(
             select(Inventory).where(
                 Inventory.character_id == character.id,
                 Inventory.item_id == item_id,
@@ -292,46 +794,47 @@ async def sell_to_player_handler(
             )
         )
 
-        item = await session.scalar(
-            select(Item).where(
-                Item.id == item_id
+        if inventory is None:
+            await callback.answer(
+                "❌ این آیتم دیگر در صندوقچه شما نیست.",
+                show_alert=True,
             )
+            return
+
+        username = _normalize_username(
+            callback.from_user.username
         )
 
-    if inventory_item is None or item is None:
-        await callback.answer(
-            "❌ این آیتم در صندوقچه شما وجود ندارد.",
-            show_alert=True,
-        )
-        return
+        if username:
+            character.telegram_username = username
+            await session.commit()
 
-    if not item.is_tradeable:
-        await callback.answer(
-            "🔒 این آیتم قابل معامله نیست.",
-            show_alert=True,
-        )
-        return
+    await state.clear()
 
     await state.update_data(
-        item_id=item_id
+        trade_item_id=item_id,
     )
 
     await state.set_state(
         PlayerTrade.waiting_for_target
     )
 
-    await callback.message.edit_text(
-        "👤 فروش به بازیکن\n\n"
-        f"📦 آیتم: {item.name}\n"
-        f"📊 تعداد: 1\n\n"
-        "لطفاً نام قهرمان یا شناسه بازیکن خریدار را وارد کنید."
-    )
-
     await callback.answer()
+
+    if callback.message:
+        await callback.message.answer(
+            "👤 username تلگرام بازیکن خریدار را وارد کنید.\n\n"
+            "حتماً با @ وارد کنید.\n\n"
+            "مثال:\n"
+            "@leaderf2f",
+            reply_markup=ForceReply(
+                selective=True
+            ),
+        )
 
 
 # ============================================================
-# PLAYER TRADE - TARGET
+# Trade - Target Username
 # ============================================================
 
 @router.message(
@@ -341,59 +844,90 @@ async def trade_target_handler(
     message: Message,
     state: FSMContext,
 ):
+    target_text = (
+        message.text or ""
+    ).strip()
 
-    if not message.text:
+    if not target_text.startswith("@"):
+
         await message.answer(
-            "⚠️ لطفاً نام قهرمان یا شناسه بازیکن را وارد کنید."
+            "❌ لطفاً username را با @ وارد کنید.\n\n"
+            "مثال:\n"
+            "@leaderf2f",
+            reply_markup=ForceReply(
+                selective=True
+            ),
         )
         return
 
-    target_text = message.text.strip()
+    username = _normalize_username(
+        target_text
+    )
 
-    if not target_text:
+    data = await state.get_data()
+
+    item_id = data.get(
+        "trade_item_id"
+    )
+
+    if not item_id:
+        await state.clear()
+
         await message.answer(
-            "⚠️ لطفاً نام قهرمان یا شناسه بازیکن را وارد کنید."
+            "❌ اطلاعات معامله پیدا نشد.\n"
+            "لطفاً دوباره از صندوقچه شروع کنید."
+        )
+        return
+
+    seller = await _get_character(
+        message.from_user.id
+    )
+
+    if seller is None:
+        await state.clear()
+
+        await message.answer(
+            "❌ شخصیت شما پیدا نشد."
+        )
+        return
+
+    seller_username = _normalize_username(
+        message.from_user.username
+    )
+
+    if seller_username == username:
+
+        await message.answer(
+            "❌ نمی‌توانید به خودتان معامله پیشنهاد دهید.",
+            reply_markup=ForceReply(
+                selective=True
+            ),
         )
         return
 
     async with AsyncSessionLocal() as session:
 
-        buyer = None
-
-        if target_text.isdigit():
-
-            buyer = await session.scalar(
-                select(Character).where(
-                    Character.telegram_id == int(target_text)
-                )
+        target = await session.scalar(
+            select(Character).where(
+                Character.telegram_username == username
             )
-
-        else:
-
-            username = target_text.lstrip("@")
-
-            buyer = await session.scalar(
-                select(Character).where(
-                    Character.name == username
-                )
-            )
-
-    if buyer is None:
-        await message.answer(
-            "🌫️ قهرمان موردنظر در سرزمین اِلدوریا پیدا نشد.\n\n"
-            "🔎 نام یا شناسه بازیکن را بررسی کنید."
         )
-        return
 
-    if buyer.telegram_id == message.from_user.id:
+    if target is None:
+
         await message.answer(
-            "⚠️ نمی‌توانی از خودت خرید کنی!\n\n"
-            "👤 یک بازیکن دیگر را انتخاب کن."
+            "❌ بازیکنی با این username پیدا نشد.\n\n"
+            f"🔎 جستجو: @{username}\n\n"
+            "بازیکن باید حداقل یک‌بار با ربات اِلدوریا "
+            "تعامل کرده باشد تا username او ثبت شود.",
+            reply_markup=ForceReply(
+                selective=True
+            ),
         )
         return
 
     await state.update_data(
-        buyer_telegram_id=buyer.telegram_id
+        target_username=username,
     )
 
     await state.set_state(
@@ -401,15 +935,17 @@ async def trade_target_handler(
     )
 
     await message.answer(
-        "💰 قیمت معامله را وارد کنید.\n\n"
+        "💰 قیمت پیشنهادی را به Gold وارد کنید.\n\n"
         "مثال:\n"
-        "50\n\n"
-        "💰 مبلغ باید به صورت عدد وارد شود."
+        "20",
+        reply_markup=ForceReply(
+            selective=True
+        ),
     )
 
 
 # ============================================================
-# PLAYER TRADE - PRICE
+# Trade - Price
 # ============================================================
 
 @router.message(
@@ -419,46 +955,60 @@ async def trade_price_handler(
     message: Message,
     state: FSMContext,
 ):
+    normalized_price = _normalize_digits(
+        message.text or ""
+    ).strip()
 
-    if not message.text:
+    try:
+        price = int(
+            normalized_price
+        )
+
+    except (ValueError, TypeError):
+
         await message.answer(
-            "💰 مبلغ معامله را به صورت عدد وارد کنید."
+            "❌ قیمت باید فقط عدد باشد.\n\n"
+            "مثال:\n"
+            "20",
+            reply_markup=ForceReply(
+                selective=True
+            ),
         )
         return
-
-    price_text = message.text.strip()
-
-    if not price_text.isdigit():
-        await message.answer(
-            "💰 مبلغ معامله باید فقط به صورت عدد وارد شود."
-        )
-        return
-
-    price = int(price_text)
 
     if price <= 0:
+
         await message.answer(
-            "⚠️ قیمت معامله باید بیشتر از صفر باشد."
+            "❌ قیمت باید بیشتر از صفر باشد.",
+            reply_markup=ForceReply(
+                selective=True
+            ),
         )
         return
 
     data = await state.get_data()
 
-    item_id = data.get("item_id")
-    buyer_telegram_id = data.get(
-        "buyer_telegram_id"
+    item_id = data.get(
+        "trade_item_id"
     )
 
-    if not item_id or not buyer_telegram_id:
+    target_username = _normalize_username(
+        data.get("target_username")
+    )
+
+    if not item_id or not target_username:
+
         await state.clear()
 
         await message.answer(
-            "⚠️ اطلاعات معامله ناقص است.\n\n"
-            "لطفاً معامله را دوباره از صندوقچه شروع کنید."
+            "❌ اطلاعات معامله پیدا نشد.\n"
+            "لطفاً دوباره از صندوقچه شروع کنید."
         )
         return
 
-    seller_telegram_id = message.from_user.id
+    seller_telegram_id = (
+        message.from_user.id
+    )
 
     async with AsyncSessionLocal() as session:
 
@@ -468,65 +1018,98 @@ async def trade_price_handler(
             )
         )
 
-        buyer = await session.scalar(
+        if seller is None:
+
+            await state.clear()
+
+            await message.answer(
+                "❌ شخصیت شما پیدا نشد."
+            )
+            return
+
+        seller_username = _normalize_username(
+            message.from_user.username
+        )
+
+        if seller_username:
+            seller.telegram_username = seller_username
+
+        target = await session.scalar(
             select(Character).where(
-                Character.telegram_id == buyer_telegram_id
+                Character.telegram_username == target_username
             )
         )
 
-        item = await session.scalar(
-            select(Item).where(
-                Item.id == item_id
-            )
-        )
-
-        if seller is None or buyer is None:
-            await state.clear()
+        if target is None:
 
             await message.answer(
-                "🌫️ یکی از قهرمانان پیدا نشد."
+                "❌ بازیکنی با این username پیدا نشد.\n\n"
+                f"🔎 جستجو: @{target_username}"
             )
             return
 
-        if item is None:
+        if target.telegram_id == seller_telegram_id:
+
             await state.clear()
 
             await message.answer(
-                "📦 آیتم موردنظر پیدا نشد."
+                "❌ نمی‌توانید به خودتان معامله پیشنهاد دهید."
             )
             return
 
-        if not item.is_tradeable:
-            await state.clear()
-
-            await message.answer(
-                "🔒 این آیتم قابل معامله نیست."
+        result = await session.execute(
+            select(
+                Inventory,
+                Item,
             )
-            return
-
-        seller_inventory = await session.scalar(
-            select(Inventory).where(
+            .join(
+                Item,
+                Inventory.item_id == Item.id,
+            )
+            .where(
                 Inventory.character_id == seller.id,
                 Inventory.item_id == item_id,
+                Inventory.quantity > 0,
             )
+            .with_for_update()
         )
 
-        if (
-            seller_inventory is None
-            or seller_inventory.quantity < 1
-        ):
+        row = result.first()
+
+        if row is None:
+
             await state.clear()
 
             await message.answer(
-                "🗝️ این آیتم در صندوقچه قهرمانت وجود ندارد.\n\n"
-                "ممکن است قبلاً فروخته یا معامله شده باشد."
+                "❌ این آیتم دیگر در صندوقچه شما نیست."
+            )
+            return
+
+        inventory_item, item = row
+
+        existing_trade = await session.scalar(
+            select(Trade).where(
+                Trade.seller_telegram_id == seller_telegram_id,
+                Trade.buyer_telegram_id == target.telegram_id,
+                Trade.item_id == item.id,
+                Trade.status == "pending",
+            )
+        )
+
+        if existing_trade is not None:
+
+            await state.clear()
+
+            await message.answer(
+                "⚠️ برای این بازیکن، همین آیتم یک "
+                "پیشنهاد معامله فعال دارد."
             )
             return
 
         trade = Trade(
             seller_telegram_id=seller_telegram_id,
-            buyer_telegram_id=buyer_telegram_id,
-            item_id=item_id,
+            buyer_telegram_id=target.telegram_id,
+            item_id=item.id,
             quantity=1,
             price=price,
             status="pending",
@@ -536,186 +1119,213 @@ async def trade_price_handler(
 
         await session.flush()
 
-        trade_id = trade.id
+        item_name = item.name
+        seller_name = seller.name
+        target_telegram_id = target.telegram_id
 
         await session.commit()
 
+        trade_id = trade.id
+
     await state.clear()
 
-    await message.answer(
-        "📨 پیشنهاد معامله ارسال شد!\n\n"
-        f"📦 آیتم: {item.name}\n"
-        "📊 تعداد: 1\n"
-        f"💰 قیمت: {price} Gold\n\n"
-        "⏳ منتظر پاسخ خریدار بمان."
+    # ========================================================
+    # Seller Message
+    # ========================================================
+
+    seller_message = await message.answer(
+        (
+            "✅ پیشنهاد معامله ایجاد شد.\n\n"
+            f"👤 خریدار: @{target_username}\n"
+            f"🗃 آیتم: {item_name}\n"
+            "🔢 تعداد: ۱\n"
+            f"💰 قیمت: {price} Gold\n\n"
+            "⏳ منتظر پاسخ خریدار..."
+        )
     )
 
+    # ========================================================
+    # Buyer Message
+    # ========================================================
+
     try:
-        await bot.send_message(
-            buyer_telegram_id,
-            "📨 یک پیشنهاد معامله جدید داری!\n\n"
-            f"👤 فروشنده: {seller.name}\n"
-            f"📦 آیتم: {item.name}\n"
-            "📊 تعداد: 1\n"
-            f"💰 قیمت: {price} Gold\n\n"
-            "⚔️ سرنوشت این معامله در دستان توست!",
+
+        buyer_message = await bot.send_message(
+            chat_id=target_telegram_id,
+            text=(
+                "📨 پیشنهاد معامله جدید!\n\n"
+                f"👤 فروشنده: {seller_name}\n"
+                f"🗃 آیتم: {item_name}\n"
+                "🔢 تعداد: ۱\n"
+                f"💰 قیمت: {price} Gold"
+            ),
             reply_markup=trade_request_keyboard(
-                str(trade_id)
+                trade_id
             ),
         )
+
     except Exception:
-        pass
+
+        await message.answer(
+            "⚠️ معامله ساخته شد، اما ارسال پیام به خریدار "
+            "موفق نبود.\n\n"
+            "ممکن است خریدار هنوز ربات را Start نکرده باشد."
+        )
+
+        return
+
+    # ========================================================
+    # Save message IDs
+    # ========================================================
+
+    async with AsyncSessionLocal() as session:
+
+        trade = await session.get(
+            Trade,
+            trade_id,
+        )
+
+        if trade is not None:
+
+            trade.seller_message_id = (
+                seller_message.message_id
+            )
+
+            trade.seller_chat_id = (
+                message.chat.id
+            )
+
+            trade.buyer_message_id = (
+                buyer_message.message_id
+            )
+
+            trade.buyer_chat_id = (
+                target_telegram_id
+            )
+
+            await session.commit()
 
 
 # ============================================================
-# ACCEPT TRADE
+# Trade - Accept
 # ============================================================
 
 @router.callback_query(
     F.data.startswith("trade:accept:")
 )
-async def accept_trade_handler(
+async def trade_accept_handler(
     callback: CallbackQuery,
 ):
-
     try:
+
         trade_id = int(
             callback.data.split(":")[2]
         )
+
     except (ValueError, IndexError):
 
         await callback.answer(
-            "⚠️ این پیشنهاد معامله معتبر نیست.",
+            "❌ شناسه معامله معتبر نیست.",
             show_alert=True,
         )
         return
 
-    buyer_user_id = callback.from_user.id
+    buyer_telegram_id = (
+        callback.from_user.id
+    )
 
     async with AsyncSessionLocal() as session:
 
         trade = await session.scalar(
             select(Trade)
-            .where(Trade.id == trade_id)
+            .where(
+                Trade.id == trade_id
+            )
             .with_for_update()
         )
 
         if trade is None:
-            await callback.answer(
-                "🌫️ این معامله پیدا نشد.",
-                show_alert=True,
-            )
-            return
 
-        if trade.buyer_telegram_id != buyer_user_id:
             await callback.answer(
-                "🔒 این پیشنهاد برای بازیکن دیگری است!",
+                "❌ این معامله پیدا نشد.",
                 show_alert=True,
             )
             return
 
         if trade.status != "pending":
+
             await callback.answer(
-                "⚠️ این پیشنهاد دیگر فعال نیست.",
+                "⚠️ این معامله دیگر فعال نیست.",
                 show_alert=True,
             )
             return
 
-        seller_user_id = trade.seller_telegram_id
+        if trade.buyer_telegram_id != buyer_telegram_id:
 
-        seller = await session.scalar(
-            select(Character)
-            .where(
-                Character.telegram_id == seller_user_id
+            await callback.answer(
+                "⛔ این پیشنهاد معامله برای شما نیست.",
+                show_alert=True,
             )
-            .with_for_update()
-        )
+            return
 
         buyer = await session.scalar(
-            select(Character)
+            select(Character).where(
+                Character.telegram_id == buyer_telegram_id
+            )
+        )
+
+        if buyer is None:
+
+            await callback.answer(
+                "❌ شخصیت شما پیدا نشد.",
+                show_alert=True,
+            )
+            return
+
+        seller = await session.scalar(
+            select(Character).where(
+                Character.telegram_id == trade.seller_telegram_id
+            )
+        )
+
+        if seller is None:
+
+            trade.status = "rejected"
+
+            await session.commit()
+
+            await callback.answer(
+                "❌ فروشنده دیگر وجود ندارد.",
+                show_alert=True,
+            )
+            return
+
+        inventory = await session.scalar(
+            select(Inventory)
             .where(
-                Character.telegram_id == buyer_user_id
+                Inventory.character_id == seller.id,
+                Inventory.item_id == trade.item_id,
+                Inventory.quantity >= trade.quantity,
             )
             .with_for_update()
         )
 
-        item = await session.scalar(
-            select(Item).where(
-                Item.id == trade.item_id
-            )
-        )
+        if inventory is None:
 
-        if seller is None or buyer is None:
-            await callback.answer(
-                "🌫️ اطلاعات یکی از قهرمانان پیدا نشد.",
-                show_alert=True,
-            )
-            return
+            trade.status = "rejected"
 
-        if item is None:
-            await callback.answer(
-                "📦 آیتم معامله پیدا نشد.",
-                show_alert=True,
-            )
-            return
+            await session.commit()
 
-        if not item.is_tradeable:
             await callback.answer(
-                "🔒 این آیتم دیگر قابل معامله نیست.",
+                "❌ فروشنده دیگر این آیتم را ندارد.",
                 show_alert=True,
             )
             return
 
         if buyer.gold < trade.price:
 
-            needed_gold = trade.price - buyer.gold
-
             await callback.answer(
-                f"💰 Gold کافی نداری!\n\n"
-                f"📦 آیتم: {item.name}\n"
-                f"💰 قیمت: {trade.price} Gold\n"
-                f"💰 موجودی تو: {buyer.gold} Gold\n\n"
-                f"⚠️ {needed_gold} Gold دیگر نیاز داری.",
-                show_alert=True,
-            )
-            return
-
-        seller_inventory = await session.scalar(
-            select(Inventory)
-            .where(
-                Inventory.character_id == seller.id,
-                Inventory.item_id == trade.item_id,
-            )
-            .with_for_update()
-        )
-
-        if (
-            seller_inventory is None
-            or seller_inventory.quantity < trade.quantity
-        ):
-
-            trade.status = "cancelled"
-
-            await session.commit()
-
-            await callback.message.edit_text(
-                "⚠️ معامله لغو شد!\n\n"
-                f"📦 آیتم «{item.name}» دیگر در صندوقچه فروشنده موجود نیست.\n\n"
-                "💰 هیچ Goldای منتقل نشد."
-            )
-
-            try:
-                await bot.send_message(
-                    seller_user_id,
-                    "⚠️ معامله لغو شد!\n\n"
-                    f"📦 آیتم «{item.name}» دیگر در صندوقچه تو موجود نیست.\n\n"
-                    "💰 هیچ Goldای منتقل نشد.",
-                )
-            except Exception:
-                pass
-
-            await callback.answer(
-                "📦 آیتم دیگر موجود نیست.",
+                "💰 طلای کافی برای این معامله ندارید.",
                 show_alert=True,
             )
             return
@@ -729,146 +1339,235 @@ async def accept_trade_handler(
             .with_for_update()
         )
 
-        seller_inventory.quantity -= trade.quantity
-
-        if seller_inventory.quantity <= 0:
-            await session.delete(
-                seller_inventory
-            )
-
-        if buyer_inventory:
-
-            buyer_inventory.quantity += trade.quantity
-
-        else:
+        if buyer_inventory is None:
 
             buyer_inventory = Inventory(
                 character_id=buyer.id,
                 item_id=trade.item_id,
-                quantity=trade.quantity,
+                quantity=0,
             )
 
             session.add(
                 buyer_inventory
             )
 
+            await session.flush()
+
+        inventory.quantity -= (
+            trade.quantity
+        )
+
+        if inventory.quantity < 0:
+            inventory.quantity = 0
+
+        buyer_inventory.quantity += (
+            trade.quantity
+        )
+
         buyer.gold -= trade.price
         seller.gold += trade.price
 
         trade.status = "accepted"
 
-        seller_current_gold = seller.gold
-        buyer_current_gold = buyer.gold
+        item = await session.get(
+            Item,
+            trade.item_id,
+        )
+
+        item_name = (
+            item.name
+            if item is not None
+            else "آیتم"
+        )
+
+        price = trade.price
+
+        seller_message_id = (
+            trade.seller_message_id
+        )
+
+        seller_chat_id = (
+            trade.seller_chat_id
+        )
 
         await session.commit()
 
-    await callback.message.edit_text(
-        "🎉 معامله با موفقیت انجام شد!\n\n"
-        f"📦 آیتم دریافت‌شده: {item.name}\n"
-        f"📊 تعداد: {trade.quantity}\n\n"
-        f"💰 پرداخت کردی: {trade.price} Gold\n"
-        f"💰 Gold باقی‌مانده: {buyer_current_gold}"
-    )
+    # ========================================================
+    # Buyer Message
+    # ========================================================
 
     try:
-        await bot.send_message(
-            seller_user_id,
-            "🎉 معامله با موفقیت انجام شد!\n\n"
-            f"📦 آیتم فروخته‌شده: {item.name}\n"
-            f"📊 تعداد: {trade.quantity}\n\n"
-            f"💰 دریافت کردی: +{trade.price} Gold\n"
-            f"💰 Gold فعلی: {seller_current_gold}",
+
+        await callback.message.edit_text(
+            (
+                "✅ معامله با موفقیت انجام شد!\n\n"
+                f"🗃 آیتم: {item_name}\n"
+                "🔢 تعداد: ۱\n"
+                f"💰 مبلغ پرداخت‌شده: {price} Gold\n\n"
+                "🎉 آیتم به صندوقچه شما منتقل شد."
+            ),
+            reply_markup=None,
         )
+
     except Exception:
         pass
 
+    # ========================================================
+    # Seller Message
+    # ========================================================
+
+    if seller_chat_id and seller_message_id:
+
+        try:
+
+            await bot.edit_message_text(
+                chat_id=seller_chat_id,
+                message_id=seller_message_id,
+                text=(
+                    "✅ معامله با موفقیت انجام شد!\n\n"
+                    f"🗃 آیتم: {item_name}\n"
+                    "🔢 تعداد: ۱\n"
+                    f"💰 مبلغ دریافتی: {price} Gold\n\n"
+                    "🎉 آیتم با موفقیت به خریدار منتقل شد."
+                ),
+                reply_markup=None,
+            )
+
+        except Exception:
+            pass
+
     await callback.answer(
-        "🎉 معامله با موفقیت انجام شد!"
+        "✅ معامله با موفقیت انجام شد."
     )
 
 
 # ============================================================
-# REJECT TRADE
+# Trade - Reject
 # ============================================================
 
 @router.callback_query(
     F.data.startswith("trade:reject:")
 )
-async def reject_trade_handler(
+async def trade_reject_handler(
     callback: CallbackQuery,
 ):
-
     try:
+
         trade_id = int(
             callback.data.split(":")[2]
         )
+
     except (ValueError, IndexError):
 
         await callback.answer(
-            "⚠️ این پیشنهاد معامله معتبر نیست.",
+            "❌ شناسه معامله معتبر نیست.",
             show_alert=True,
         )
         return
 
-    buyer_user_id = callback.from_user.id
+    buyer_telegram_id = (
+        callback.from_user.id
+    )
 
     async with AsyncSessionLocal() as session:
 
         trade = await session.scalar(
             select(Trade)
-            .where(Trade.id == trade_id)
+            .where(
+                Trade.id == trade_id
+            )
             .with_for_update()
         )
 
         if trade is None:
-            await callback.answer(
-                "🌫️ این معامله پیدا نشد.",
-                show_alert=True,
-            )
-            return
 
-        if trade.buyer_telegram_id != buyer_user_id:
             await callback.answer(
-                "🔒 این پیشنهاد برای بازیکن دیگری است!",
+                "❌ این معامله پیدا نشد.",
                 show_alert=True,
             )
             return
 
         if trade.status != "pending":
+
             await callback.answer(
-                "⚠️ این پیشنهاد دیگر فعال نیست.",
+                "⚠️ این معامله دیگر فعال نیست.",
                 show_alert=True,
             )
             return
 
-        seller_user_id = trade.seller_telegram_id
+        if trade.buyer_telegram_id != buyer_telegram_id:
 
-        item = await session.scalar(
-            select(Item).where(
-                Item.id == trade.item_id
+            await callback.answer(
+                "⛔ این پیشنهاد معامله برای شما نیست.",
+                show_alert=True,
             )
-        )
+            return
 
         trade.status = "rejected"
 
+        item = await session.get(
+            Item,
+            trade.item_id,
+        )
+
+        item_name = (
+            item.name
+            if item is not None
+            else "آیتم"
+        )
+
+        seller_chat_id = (
+            trade.seller_chat_id
+        )
+
+        seller_message_id = (
+            trade.seller_message_id
+        )
+
         await session.commit()
 
-    await callback.message.edit_text(
-        "🛑 معامله رد شد.\n\n"
-        f"📦 آیتم: {item.name if item else 'نامشخص'}\n"
-        "💰 هیچ Goldای منتقل نشد."
-    )
+    # ========================================================
+    # Buyer Message
+    # ========================================================
 
     try:
-        await bot.send_message(
-            seller_user_id,
-            "🛑 پیشنهاد معامله رد شد.\n\n"
-            f"📦 آیتم: {item.name if item else 'نامشخص'}\n"
-            "💰 هیچ Goldای منتقل نشد.",
+
+        await callback.message.edit_text(
+            (
+                "❌ معامله رد شد.\n\n"
+                f"🗃 آیتم: {item_name}\n"
+                "🔢 تعداد: ۱\n\n"
+                "این پیشنهاد دیگر فعال نیست."
+            ),
+            reply_markup=None,
         )
+
     except Exception:
         pass
 
+    # ========================================================
+    # Seller Message
+    # ========================================================
+
+    if seller_chat_id and seller_message_id:
+
+        try:
+
+            await bot.edit_message_text(
+                chat_id=seller_chat_id,
+                message_id=seller_message_id,
+                text=(
+                    "❌ پیشنهاد معامله رد شد.\n\n"
+                    f"🗃 آیتم: {item_name}\n"
+                    "🔢 تعداد: ۱\n\n"
+                    "خریدار این پیشنهاد را رد کرد."
+                ),
+                reply_markup=None,
+            )
+
+        except Exception:
+            pass
+
     await callback.answer(
-        "🛑 معامله رد شد."
+        "❌ معامله رد شد."
     )

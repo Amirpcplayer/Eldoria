@@ -4,7 +4,6 @@ from aiogram.enums import ParseMode
 from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
-
 from models.character import Character
 from models.skill import Skill
 from models.character_skill import CharacterSkill
@@ -28,8 +27,12 @@ from services.skill_service import (
     upgrade_skill,
 )
 
+from services.panel_image_service import show_panel
+
 
 router = Router()
+
+PANEL_NAME = "skills"
 
 
 ELEMENT_NAMES = {
@@ -55,6 +58,10 @@ RARITY_NAMES = {
 }
 
 
+# ==================================================
+# ابزارهای مشترک
+# ==================================================
+
 async def get_character(telegram_id: int):
     async with AsyncSessionLocal() as session:
         return await session.scalar(
@@ -64,21 +71,47 @@ async def get_character(telegram_id: int):
         )
 
 
+async def render_skills_panel(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup=None,
+):
+    """
+    نمایش پنل مهارت‌ها با مدیریت پیام تصویری یا متنی.
+    """
+    return await show_panel(
+        callback=callback,
+        panel_name=PANEL_NAME,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def show_error(
+    callback: CallbackQuery,
+    text: str,
+):
+    await callback.answer(
+        text,
+        show_alert=True,
+    )
+
+
 # ==================================================
 # منوی اصلی مهارت‌ها
 # ==================================================
 
 @router.callback_query(F.data == "menu:skills")
 async def skills_menu_handler(callback: CallbackQuery):
-
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
+        await show_error(
+            callback,
             "❌ قهرمان پیدا نشد.",
-            show_alert=True,
         )
         return
 
@@ -89,35 +122,33 @@ async def skills_menu_handler(callback: CallbackQuery):
         "قدرت‌های جادویی خودت را مدیریت کن."
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=skills_main_keyboard(),
-        parse_mode=ParseMode.HTML,
+        skills_main_keyboard(),
     )
 
     await callback.answer()
 
 
 # ==================================================
-# 📚 مهارت‌های من
+# مهارت‌های من
 # ==================================================
 
 @router.callback_query(F.data == "skills:list")
 async def skills_list_handler(callback: CallbackQuery):
-
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
+        await show_error(
+            callback,
             "❌ قهرمان پیدا نشد.",
-            show_alert=True,
         )
         return
 
     async with AsyncSessionLocal() as session:
-
         result = await session.execute(
             select(CharacterSkill, Skill)
             .join(
@@ -138,72 +169,67 @@ async def skills_list_handler(callback: CallbackQuery):
         skills = list(result.all())
 
     if not skills:
-
-        await callback.message.edit_text(
+        text = (
             "📚 <b>مهارت‌های من</b>\n\n"
             "هنوز هیچ مهارتی یاد نگرفته‌ای.\n\n"
             "✨ از بخش «یادگیری مهارت» "
-            "یک مهارت انتخاب کن.",
-            reply_markup=skills_list_keyboard([]),
-            parse_mode=ParseMode.HTML,
+            "یک مهارت انتخاب کن."
+        )
+
+        await render_skills_panel(
+            callback,
+            text,
+            skills_list_keyboard([]),
         )
 
         await callback.answer()
         return
 
-    buttons = []
-
-    for character_skill, skill in skills:
-        buttons.append(
-            (
-                f"✅ {skill.name} • Lv.{character_skill.level}",
-                skill.id,
-            )
+    buttons = [
+        (
+            f"✅ {skill.name} • Lv.{character_skill.level}",
+            skill.id,
         )
+        for character_skill, skill in skills
+    ]
 
     text = (
         "📚 <b>مهارت‌های من</b>\n\n"
         f"⚔️ تعداد مهارت‌ها: {len(skills)}"
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=skills_list_keyboard(buttons),
-        parse_mode=ParseMode.HTML,
+        skills_list_keyboard(buttons),
     )
 
     await callback.answer()
 
 
 # ==================================================
-# جزئیات مهارت از «مهارت‌های من»
-# فقط اطلاعات مهارت
+# جزئیات مهارت‌های من
 # ==================================================
 
-@router.callback_query(
-    F.data.startswith("skill:details:")
-)
+@router.callback_query(F.data.startswith("skill:details:"))
 async def my_skill_details_handler(
     callback: CallbackQuery,
 ):
-
-    skill_id = int(
-        callback.data.split(":")[2]
-    )
+    try:
+        skill_id = int(callback.data.split(":")[2])
+    except (ValueError, IndexError):
+        await show_error(callback, "❌ شناسه مهارت نامعتبر است.")
+        return
 
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
-            "❌ قهرمان پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ قهرمان پیدا نشد.")
         return
 
     async with AsyncSessionLocal() as session:
-
         skill = await session.scalar(
             select(Skill).where(
                 Skill.id == skill_id,
@@ -220,16 +246,13 @@ async def my_skill_details_handler(
         )
 
     if skill is None:
-        await callback.answer(
-            "❌ مهارت پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ مهارت پیدا نشد.")
         return
 
     if character_skill is None:
-        await callback.answer(
+        await show_error(
+            callback,
             "❌ این مهارت را یاد نگرفته‌ای.",
-            show_alert=True,
         )
         return
 
@@ -242,51 +265,37 @@ async def my_skill_details_handler(
 
 
 # ==================================================
-# ✨ یادگیری مهارت
+# یادگیری مهارت
 # ==================================================
 
 @router.callback_query(F.data == "skills:learn")
 async def skills_learn_handler(callback: CallbackQuery):
-
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
-            "❌ قهرمان پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ قهرمان پیدا نشد.")
         return
 
     async with AsyncSessionLocal() as session:
-
         result = await session.execute(
             select(Skill)
-            .where(
-                Skill.is_active.is_(True),
-            )
+            .where(Skill.is_active.is_(True))
             .order_by(
                 Skill.unlock_level,
                 Skill.id,
             )
         )
-
-        all_skills = list(
-            result.scalars().all()
-        )
+        all_skills = list(result.scalars().all())
 
         owned_result = await session.execute(
-            select(CharacterSkill)
-            .where(
+            select(CharacterSkill).where(
                 CharacterSkill.character_id == character.id,
                 CharacterSkill.unlocked.is_(True),
             )
         )
-
-        owned_skills = list(
-            owned_result.scalars().all()
-        )
+        owned_skills = list(owned_result.scalars().all())
 
     owned_skill_ids = {
         character_skill.skill_id
@@ -296,27 +305,21 @@ async def skills_learn_handler(callback: CallbackQuery):
     max_slots = get_unlocked_skill_slots(
         character.level
     )
-
-    used_slots = len(owned_skills)
+    used_slots = sum(
+        1 for character_skill in owned_skills
+        if character_skill.slot is not None
+    )
 
     skill_buttons = []
 
     for skill in all_skills:
-
         if skill.id in owned_skill_ids:
-
             skill_buttons.append(
-                (
-                    skill.name,
-                    skill.id,
-                    "owned",
-                )
+                (skill.name, skill.id, "owned")
             )
-
             continue
 
         if skill.unlock_level > character.level:
-
             skill_buttons.append(
                 (
                     f"{skill.name} • Lv.{skill.unlock_level}",
@@ -324,32 +327,10 @@ async def skills_learn_handler(callback: CallbackQuery):
                     "locked",
                 )
             )
-
-            continue
-
-        if used_slots >= max_slots:
-
-            next_level = 20
-
-            if character.level >= 20:
-                next_level = 60
-
-            skill_buttons.append(
-                (
-                    f"{skill.name} • Lv.{next_level}",
-                    skill.id,
-                    "locked",
-                )
-            )
-
             continue
 
         skill_buttons.append(
-            (
-                skill.name,
-                skill.id,
-                "available",
-            )
+            (skill.name, skill.id, "available")
         )
 
     text = (
@@ -362,26 +343,21 @@ async def skills_learn_handler(callback: CallbackQuery):
         "🔒 قفل"
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=learn_skills_keyboard(
-            skill_buttons
-        ),
-        parse_mode=ParseMode.HTML,
+        learn_skills_keyboard(skill_buttons),
     )
 
     await callback.answer()
 
 
 # ==================================================
-# مهارت قفل
+# مهارت قفل‌شده
 # ==================================================
 
 @router.callback_query(F.data == "skill:locked")
-async def locked_skill_handler(
-    callback: CallbackQuery,
-):
-
+async def locked_skill_handler(callback: CallbackQuery):
     await callback.answer(
         "🔒 این مهارت هنوز برای قهرمانت باز نشده است.",
         show_alert=True,
@@ -393,13 +369,12 @@ async def locked_skill_handler(
 # ==================================================
 
 @router.callback_query(F.data.startswith("learn:"))
-async def learn_skill_handler(
-    callback: CallbackQuery,
-):
-
-    skill_id = int(
-        callback.data.split(":")[1]
-    )
+async def learn_skill_handler(callback: CallbackQuery):
+    try:
+        skill_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await show_error(callback, "❌ شناسه مهارت نامعتبر است.")
+        return
 
     success, message = await unlock_skill(
         callback.from_user.id,
@@ -407,54 +382,44 @@ async def learn_skill_handler(
     )
 
     if not success:
-
-        await callback.answer(
-            message
-            .replace("<b>", "")
-            .replace("</b>", ""),
-            show_alert=True,
+        await show_error(
+            callback,
+            message.replace("<b>", "").replace("</b>", ""),
         )
-
         return
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         message,
-        reply_markup=skills_main_keyboard(),
-        parse_mode=ParseMode.HTML,
+        skills_main_keyboard(),
     )
 
     await callback.answer()
 
 
 # ==================================================
-# مهارت‌های یادگرفته‌شده از بخش «یادگیری مهارت»
-# فقط اطلاعات مهارت
+# جزئیات مهارت در فهرست یادگیری
 # ==================================================
 
-@router.callback_query(
-    F.data.startswith("learned:details:")
-)
+@router.callback_query(F.data.startswith("learned:details:"))
 async def learned_skill_details_handler(
     callback: CallbackQuery,
 ):
-
-    skill_id = int(
-        callback.data.split(":")[2]
-    )
+    try:
+        skill_id = int(callback.data.split(":")[2])
+    except (ValueError, IndexError):
+        await show_error(callback, "❌ شناسه مهارت نامعتبر است.")
+        return
 
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
-            "❌ قهرمان پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ قهرمان پیدا نشد.")
         return
 
     async with AsyncSessionLocal() as session:
-
         skill = await session.scalar(
             select(Skill).where(
                 Skill.id == skill_id,
@@ -471,16 +436,13 @@ async def learned_skill_details_handler(
         )
 
     if skill is None:
-        await callback.answer(
-            "❌ مهارت پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ مهارت پیدا نشد.")
         return
 
     if character_skill is None:
-        await callback.answer(
+        await show_error(
+            callback,
             "❌ این مهارت را یاد نگرفته‌ای.",
-            show_alert=True,
         )
         return
 
@@ -493,28 +455,22 @@ async def learned_skill_details_handler(
 
 
 # ==================================================
-# ⬆️ ارتقای مهارت
-# تنها مسیر ورود به لیست ارتقا
+# فهرست ارتقای مهارت‌ها
 # ==================================================
 
 @router.callback_query(F.data == "skills:upgrade")
 async def skills_upgrade_list_handler(
     callback: CallbackQuery,
 ):
-
     character = await get_character(
         callback.from_user.id
     )
 
     if character is None:
-        await callback.answer(
-            "❌ قهرمان پیدا نشد.",
-            show_alert=True,
-        )
+        await show_error(callback, "❌ قهرمان پیدا نشد.")
         return
 
     async with AsyncSessionLocal() as session:
-
         result = await session.execute(
             select(CharacterSkill, Skill)
             .join(
@@ -535,30 +491,30 @@ async def skills_upgrade_list_handler(
         skills = list(result.all())
 
     if not skills:
-
-        await callback.message.edit_text(
+        text = (
             "⬆️ <b>ارتقای مهارت</b>\n\n"
             "❌ هنوز هیچ مهارتی یاد نگرفته‌ای.\n\n"
             "ابتدا از بخش «✨ یادگیری مهارت» "
-            "یک مهارت یاد بگیر.",
-            reply_markup=skills_main_keyboard(),
-            parse_mode=ParseMode.HTML,
+            "یک مهارت یاد بگیر."
+        )
+
+        await render_skills_panel(
+            callback,
+            text,
+            skills_main_keyboard(),
         )
 
         await callback.answer()
         return
 
-    upgrade_buttons = []
-
-    for character_skill, skill in skills:
-
-        upgrade_buttons.append(
-            (
-                skill.name,
-                skill.id,
-                character_skill.level,
-            )
+    upgrade_buttons = [
+        (
+            skill.name,
+            skill.id,
+            character_skill.level,
         )
+        for character_skill, skill in skills
+    ]
 
     text = (
         "⬆️ <b>ارتقای مهارت</b>\n\n"
@@ -566,12 +522,10 @@ async def skills_upgrade_list_handler(
         f"⚔️ تعداد مهارت‌ها: {len(skills)}"
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=skill_upgrade_list_keyboard(
-            upgrade_buttons
-        ),
-        parse_mode=ParseMode.HTML,
+        skill_upgrade_list_keyboard(upgrade_buttons),
     )
 
     await callback.answer()
@@ -581,16 +535,15 @@ async def skills_upgrade_list_handler(
 # پنل ارتقای یک مهارت
 # ==================================================
 
-@router.callback_query(
-    F.data.startswith("skill:upgrade:")
-)
+@router.callback_query(F.data.startswith("skill:upgrade:"))
 async def upgrade_skill_handler(
     callback: CallbackQuery,
 ):
-
-    skill_id = int(
-        callback.data.split(":")[2]
-    )
+    try:
+        skill_id = int(callback.data.split(":")[2])
+    except (ValueError, IndexError):
+        await show_error(callback, "❌ شناسه مهارت نامعتبر است.")
+        return
 
     success, message, info = await get_skill_upgrade_info(
         callback.from_user.id,
@@ -598,14 +551,10 @@ async def upgrade_skill_handler(
     )
 
     if not success:
-
-        await callback.answer(
-            message
-            .replace("<b>", "")
-            .replace("</b>", ""),
-            show_alert=True,
+        await show_error(
+            callback,
+            message.replace("<b>", "").replace("</b>", ""),
         )
-
         return
 
     text = (
@@ -620,37 +569,34 @@ async def upgrade_skill_handler(
         "💰 <b>هزینه ارتقا</b>\n"
         f"✨ XP مورد نیاز: {info['xp_cost']:,}\n"
         f"💰 Gold مورد نیاز: {info['gold_cost']:,}\n\n"
-        "📦 <b>موجودی فعلی</b>\n"
+        "🗃 <b>موجودی فعلی</b>\n"
         f"✨ XP: {info['current_xp']:,}\n"
         f"💰 Gold: {info['current_gold']:,}\n\n"
         "آیا می‌خواهی این مهارت را ارتقا بدهی؟"
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=skill_upgrade_confirm_keyboard(
-            skill_id
-        ),
-        parse_mode=ParseMode.HTML,
+        skill_upgrade_confirm_keyboard(skill_id),
     )
 
     await callback.answer()
 
 
 # ==================================================
-# تأیید ارتقا
+# تأیید ارتقای مهارت
 # ==================================================
 
-@router.callback_query(
-    F.data.startswith("skill:upgrade_confirm:")
-)
+@router.callback_query(F.data.startswith("skill:upgrade_confirm:"))
 async def confirm_upgrade_skill_handler(
     callback: CallbackQuery,
 ):
-
-    skill_id = int(
-        callback.data.split(":")[2]
-    )
+    try:
+        skill_id = int(callback.data.split(":")[2])
+    except (ValueError, IndexError):
+        await show_error(callback, "❌ شناسه مهارت نامعتبر است.")
+        return
 
     success, message = await upgrade_skill(
         callback.from_user.id,
@@ -658,23 +604,17 @@ async def confirm_upgrade_skill_handler(
     )
 
     clean_message = (
-        message
-        .replace("<b>", "")
-        .replace("</b>", "")
+        message.replace("<b>", "").replace("</b>", "")
     )
 
     if not success:
-
-        await callback.answer(
-            clean_message,
-            show_alert=True,
-        )
-
+        await show_error(callback, clean_message)
         return
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         clean_message,
-        reply_markup=skill_upgrade_list_keyboard([]),
+        skill_upgrade_list_keyboard([]),
     )
 
     await callback.answer(
@@ -683,7 +623,7 @@ async def confirm_upgrade_skill_handler(
 
 
 # ==================================================
-# نمایش مشترک اطلاعات مهارت
+# نمایش مشترک جزئیات مهارت
 # ==================================================
 
 async def show_skill_details(
@@ -692,18 +632,10 @@ async def show_skill_details(
     character_skill: CharacterSkill,
     keyboard,
 ):
-
     level = character_skill.level
 
-    power = get_skill_power(
-        skill,
-        level,
-    )
-
-    mana = get_skill_mana_cost(
-        skill,
-        level,
-    )
+    power = get_skill_power(skill, level)
+    mana = get_skill_mana_cost(skill, level)
 
     element = ELEMENT_NAMES.get(
         skill.element,
@@ -716,23 +648,22 @@ async def show_skill_details(
     )
 
     text = (
-        f"{skill.name}\n\n"
+        f"<b>{skill.name}</b>\n\n"
         f"🌟 عنصر: {element}\n"
         f"💎 کمیابی: {rarity}\n"
         f"📖 نوع: {skill.skill_type}\n"
         f"🎯 هدف: {skill.target_type}\n\n"
         f"📝 {skill.description or 'بدون توضیحات'}\n\n"
-        f"⚔️ سطح مهارت: "
-        f"{level}/{skill.max_level}\n"
+        f"⚔️ سطح مهارت: {level}/{skill.max_level}\n"
         f"💥 قدرت: {power}\n"
         f"💧 Mana: {mana}\n"
         f"⏳ Cooldown: {skill.cooldown} ثانیه"
     )
 
-    await callback.message.edit_text(
+    await render_skills_panel(
+        callback,
         text,
-        reply_markup=keyboard,
-        parse_mode=ParseMode.HTML,
+        keyboard,
     )
 
     await callback.answer()

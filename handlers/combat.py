@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
@@ -7,8 +9,11 @@ from keyboards.combat import (
     combat_potions_keyboard,
     combat_skills_keyboard,
 )
+from middlewares.panel_owner import protect_keyboard
+from database.redis import redis
 from services.combat_service import (
     create_battle,
+    delete_battle,
     enemy_turn,
     finish_victory,
     flee_battle,
@@ -29,23 +34,169 @@ router = Router()
 # ============================================================
 
 def get_enemy_display_name(battle: dict) -> str:
-    """
-    Battle ممکن است enemy_name را نداشته باشد.
-    نام Variant یا سایر کلیدهای موجود را به‌صورت امن بررسی می‌کنیم.
-    """
-
-    possible_names = (
+    for name in (
         battle.get("enemy_name"),
         battle.get("enemy_variant"),
         battle.get("monster_name"),
         battle.get("variant_name"),
-    )
-
-    for name in possible_names:
+    ):
         if name:
             return str(name)
 
     return "دشمن"
+
+
+async def render_battle_panel(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup,
+) -> bool:
+    """نمایش پنل؛ اگر افزودن پیشوند مالک باعث طولانی‌شدن callback شود،
+    کیبورد اصلی استفاده می‌شود. هندلرهای مبارزه مالکیت بتل را بررسی می‌کنند.
+    """
+
+    message = callback.message
+
+    if message is None:
+        return False
+
+    try:
+        keyboard = protect_keyboard(
+            reply_markup,
+            callback.from_user.id,
+        )
+    except ValueError:
+        # برخی callbackها با پیشوند مالک از محدودیت تلگرام عبور می‌کنند.
+        # callbackهای مبارزه در هندلرها با مالکیت بتل اعتبارسنجی می‌شوند.
+        keyboard = reply_markup
+
+    if message.photo:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        try:
+            await message.answer(
+                text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            return True
+        except Exception:
+            return False
+
+    try:
+        await message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        return True
+    except Exception:
+        pass
+
+    try:
+        await message.answer(
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        return True
+    except Exception:
+        return False
+
+
+async def answer_display_error(
+    callback: CallbackQuery,
+) -> None:
+    try:
+        await callback.answer(
+            "❌ نمایش پنل ناموفق بود. دوباره تلاش کن.",
+            show_alert=True,
+        )
+    except Exception:
+        pass
+
+
+async def find_active_battle(
+    telegram_id: int,
+) -> dict | None:
+    """پیدا کردن بتل فعال متعلق به همین بازیکن."""
+
+    from database.redis import redis
+
+    async for key in redis.scan_iter(
+        match="eldoria:battle:*"
+    ):
+        if isinstance(key, bytes):
+            key = key.decode("utf-8")
+
+        if ":battle_reward:" in key:
+            continue
+
+        data = await redis.hgetall(key)
+
+        if not data:
+            continue
+
+        stored_owner = data.get("telegram_id", 0)
+
+        if isinstance(stored_owner, bytes):
+            stored_owner = stored_owner.decode("utf-8")
+
+        try:
+            if int(stored_owner) != telegram_id:
+                continue
+        except (TypeError, ValueError):
+            continue
+
+        battle_id = key.rsplit(":", 1)[-1]
+        battle = await get_battle(battle_id)
+
+        if battle is not None:
+            return battle
+
+    return None
+
+
+def build_battle_text(
+    battle: dict,
+    player_damage: int | None = None,
+    enemy_damage: int | None = None,
+    action_text: str | None = None,
+) -> str:
+    enemy_name = get_enemy_display_name(battle)
+
+    text = (
+        "⚔️ <b>مبارزه</b>\n\n"
+        "👤 <b>تو</b>\n"
+        f"❤️ HP: {battle['player_hp']}/"
+        f"{battle['player_max_hp']}\n"
+        f"🔵 Mana: {battle['player_mana']}/"
+        f"{battle['player_max_mana']}\n\n"
+        f"👹 <b>{enemy_name}</b>\n"
+        f"❤️ HP: {battle['enemy_hp']}/"
+        f"{battle['enemy_max_hp']}\n"
+        f"⚔️ Attack: {battle['enemy_attack']}\n"
+        f"🛡️ Defense: {battle['enemy_defense']}"
+    )
+
+    if action_text:
+        text += f"\n\n{action_text}"
+
+    if player_damage is not None:
+        text += f"\n⚔️ آسیب تو: <b>{player_damage}</b>"
+
+    if enemy_damage is not None:
+        text += f"\n💥 آسیب دشمن: <b>{enemy_damage}</b>"
+
+    text += f"\n\n🔄 نوبت: {battle['turn']}"
+
+    if battle.get("defending", False):
+        text += "\n\n🛡️ حالت دفاع فعال است."
+
+    return text
 
 
 async def show_battle(
@@ -54,50 +205,18 @@ async def show_battle(
     player_damage: int | None = None,
     enemy_damage: int | None = None,
     action_text: str | None = None,
-) -> None:
-    combat_log = ""
-
-    if action_text:
-        combat_log += f"\n{action_text}"
-
-    if player_damage is not None:
-        combat_log += (
-            f"\n⚔️ آسیب تو: <b>{player_damage}</b>"
-        )
-
-    if enemy_damage is not None:
-        combat_log += (
-            f"\n💥 آسیب دشمن: <b>{enemy_damage}</b>"
-        )
-
-    enemy_name = get_enemy_display_name(battle)
-
-    text = (
-        "⚔️ <b>مبارزه</b>\n\n"
-        "👤 <b>تو</b>\n"
-        f"❤️ HP: {battle['player_hp']}/{battle['player_max_hp']}\n"
-        f"🔵 Mana: "
-        f"{battle['player_mana']}/{battle['player_max_mana']}\n\n"
-        f"👹 <b>{enemy_name}</b>\n"
-        f"❤️ HP: {battle['enemy_hp']}/{battle['enemy_max_hp']}\n"
-        f"⚔️ Attack: {battle['enemy_attack']}\n"
-        f"🛡️ Defense: {battle['enemy_defense']}"
-    )
-
-    if combat_log:
-        text += f"\n{combat_log}"
-
-    text += f"\n\n🔄 نوبت: {battle['turn']}"
-
-    if battle.get("defending", False):
-        text += "\n\n🛡️ حالت دفاع فعال است."
-
-    await callback.message.edit_text(
-        text,
+) -> bool:
+    return await render_battle_panel(
+        callback=callback,
+        text=build_battle_text(
+            battle,
+            player_damage,
+            enemy_damage,
+            action_text,
+        ),
         reply_markup=combat_keyboard(
             battle["battle_id"]
         ),
-        parse_mode="HTML",
     )
 
 
@@ -105,29 +224,28 @@ async def show_defeat(
     callback: CallbackQuery,
     battle: dict,
     enemy_damage: int | None = None,
-) -> None:
+) -> bool:
     damage_text = ""
 
     if enemy_damage is not None:
         damage_text = (
-            f"\n💥 آسیب نهایی دشمن: "
-            f"<b>{enemy_damage}</b>\n"
+            f"\n💥 آسیب نهایی دشمن: <b>{enemy_damage}</b>\n"
         )
-
-    enemy_name = get_enemy_display_name(battle)
 
     text = (
         "💀 <b>شکست خوردی!</b>\n\n"
-        f"👹 دشمن: {enemy_name}\n"
+        f"👹 دشمن: {get_enemy_display_name(battle)}\n"
         f"{damage_text}\n"
         "❤️ HP تو به صفر رسید.\n"
         "هیچ پاداشی دریافت نکردی."
     )
 
-    await callback.message.edit_text(
+    await delete_battle(battle["battle_id"])
+
+    return await render_battle_panel(
+        callback,
         text,
-        reply_markup=adventure_main_keyboard(),
-        parse_mode="HTML",
+        adventure_main_keyboard(),
     )
 
 
@@ -135,49 +253,52 @@ async def show_victory(
     callback: CallbackQuery,
     battle: dict,
     damage: int,
-) -> None:
-    (
-        success,
-        xp,
-        skill_xp,
-        gold,
-        levels_gained,
-    ) = await finish_victory(
-        battle["battle_id"]
+) -> bool:
+    success, xp, skill_xp, gold, levels_gained = (
+        await finish_victory(battle["battle_id"])
     )
 
     if not success:
-        await callback.message.edit_text(
-            "⚠️ دریافت پاداش با مشکل مواجه شد.\n"
-            "لطفاً دوباره تلاش کن.",
-            reply_markup=adventure_main_keyboard(),
-            parse_mode="HTML",
-        )
-        return
-
-    level_text = ""
-
-    if levels_gained > 0:
-        level_text = (
-            f"\n🎉 Level Up: +{levels_gained}"
+        return await render_battle_panel(
+            callback,
+            (
+                "⚠️ <b>دریافت پاداش ناموفق بود.</b>\n\n"
+                "ثبت پاداش موفق نبود. لطفاً وضعیت بتل را بررسی کن."
+            ),
+            adventure_main_keyboard(),
         )
 
-    enemy_name = get_enemy_display_name(battle)
+    level_text = (
+        f"\n🎉 Level Up: +{levels_gained}"
+        if levels_gained > 0
+        else ""
+    )
+    drops = []
+    try:
+        import json
+        raw_drops = await redis.get(f"eldoria:last_adventure_drops:{callback.from_user.id}")
+        if raw_drops:
+            drops = json.loads(raw_drops)
+        await redis.delete(f"eldoria:last_adventure_drops:{callback.from_user.id}")
+    except Exception:
+        drops = []
 
+    drop_text = "\n\n🎁 <b>آیتم‌های به‌دست‌آمده</b>\n" + ("\n".join(f"• {name}" for name in drops) if drops else "• این بار متریالی پیدا نشد.")
     text = (
         "🏆 <b>پیروزی!</b>\n\n"
-        f"👹 {enemy_name} شکست خورد!\n\n"
-        f"⚔️ آسیب نهایی تو: <b>{damage}</b>\n\n"
-        f"✨ XP: +{xp}\n"
-        f"🔮 Skill XP: +{skill_xp}\n"
-        f"💰 Gold: +{gold}"
+        f"👹 {get_enemy_display_name(battle)} شکست خورد!\n\n"
+        f"⚔️ آسیب نهایی تو: <b>{damage:,}</b>\n\n"
+        f"✨ XP: +{xp:,}\n"
+        f"🔮 Skill XP: +{skill_xp:,}\n"
+        f"💰 Gold: +{gold:,}"
         f"{level_text}"
+        f"{drop_text}"
     )
 
-    await callback.message.edit_text(
+    return await render_battle_panel(
+        callback,
         text,
-        reply_markup=adventure_main_keyboard(),
-        parse_mode="HTML",
+        adventure_main_keyboard(),
     )
 
 
@@ -185,9 +306,7 @@ async def validate_battle_owner(
     callback: CallbackQuery,
     battle_id: str,
 ) -> dict | None:
-    battle = await get_battle(
-        battle_id
-    )
+    battle = await get_battle(battle_id)
 
     if battle is None:
         await callback.answer(
@@ -196,9 +315,18 @@ async def validate_battle_owner(
         )
         return None
 
-    if battle["telegram_id"] != callback.from_user.id:
+    try:
+        owner_id = int(battle["telegram_id"])
+    except (KeyError, TypeError, ValueError):
         await callback.answer(
-            "❌ این مبارزه متعلق به شما نیست.",
+            "❌ اطلاعات مالک مبارزه نامعتبر است.",
+            show_alert=True,
+        )
+        return None
+
+    if owner_id != callback.from_user.id:
+        await callback.answer(
+            "⛔ این مبارزه برای شما نیست!",
             show_alert=True,
         )
         return None
@@ -220,32 +348,22 @@ async def validate_battle_owner(
     return battle
 
 
-# ============================================================
-# ENEMY TURN
-# ============================================================
-
 async def process_enemy_turn(
     callback: CallbackQuery,
     battle_id: str,
     player_damage: int,
     action_text: str,
-) -> tuple[bool, dict | None]:
-
-    (
-        enemy_success,
-        enemy_damage,
-        defeated,
-        battle,
-    ) = await enemy_turn(
-        battle_id
+) -> None:
+    enemy_success, enemy_damage, defeated, battle = (
+        await enemy_turn(battle_id)
     )
 
     if not enemy_success or battle is None:
         await callback.answer(
-            "⚠️ نوبت دشمن با مشکل مواجه شد.",
+            "⚠️ اجرای نوبت دشمن با مشکل مواجه شد.",
             show_alert=True,
         )
-        return False, None
+        return
 
     if defeated:
         await show_defeat(
@@ -253,37 +371,34 @@ async def process_enemy_turn(
             battle,
             enemy_damage,
         )
-
         await callback.answer(
             f"⚔️ آسیب تو: {player_damage} | "
             f"💥 آسیب دشمن: {enemy_damage}"
         )
+        return
 
-        return True, battle
-
-    await show_battle(
+    displayed = await show_battle(
         callback,
         battle,
-        player_damage=player_damage,
-        enemy_damage=enemy_damage,
-        action_text=action_text,
+        player_damage,
+        enemy_damage,
+        action_text,
     )
 
-    await callback.answer(
-        f"⚔️ آسیب تو: {player_damage} | "
-        f"💥 آسیب دشمن: {enemy_damage}"
-    )
-
-    return True, battle
+    if displayed:
+        await callback.answer(
+            f"⚔️ آسیب تو: {player_damage} | "
+            f"💥 آسیب دشمن: {enemy_damage}"
+        )
+    else:
+        await answer_display_error(callback)
 
 
 # ============================================================
-# START COMBAT
+# START / RESUME COMBAT
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("adventure:fight:")
-)
+@router.callback_query(F.data.startswith("adventure:fight:"))
 async def combat_start_handler(
     callback: CallbackQuery,
 ) -> None:
@@ -300,78 +415,83 @@ async def combat_start_handler(
         enemy_id = int(parts[2])
     except ValueError:
         await callback.answer(
-            "❌ دشمن نامعتبر است.",
+            "❌ شناسه دشمن نامعتبر است.",
             show_alert=True,
         )
         return
 
-    success, message, battle = await create_battle(
-        callback.from_user.id,
-        enemy_id,
-    )
+    try:
+        success, message, battle = await create_battle(
+            callback.from_user.id,
+            enemy_id,
+        )
 
-    if not success or battle is None:
+        if not success or battle is None:
+            existing_battle = await find_active_battle(
+                callback.from_user.id
+            )
+
+            if existing_battle is not None:
+                displayed = await show_battle(
+                    callback,
+                    existing_battle,
+                    action_text="🔄 به مبارزه فعال قبلی برگشتی.",
+                )
+
+                if displayed:
+                    await callback.answer(
+                        "⚔️ مبارزه قبلی بازیابی شد."
+                    )
+                else:
+                    await answer_display_error(callback)
+
+                return
+
+            await callback.answer(
+                message or "❌ شروع مبارزه ناموفق بود.",
+                show_alert=True,
+            )
+            return
+
+        displayed = await show_battle(
+            callback,
+            battle,
+            action_text="⚔️ مبارزه آغاز شد!",
+        )
+
+        if not displayed:
+            await delete_battle(battle["battle_id"])
+            await answer_display_error(callback)
+            return
+
+        await callback.answer("⚔️ مبارزه شروع شد!")
+
+    except Exception:
+        # خطا را در ترمینال ثبت می‌کنیم تا علت واقعی قابل تشخیص باشد.
+        import logging
+
+        logging.exception("Failed to start combat")
         await callback.answer(
-            message,
+            "❌ شروع مبارزه با خطا مواجه شد. ترمینال را بررسی کن.",
             show_alert=True,
         )
-        return
-
-    enemy_name = get_enemy_display_name(battle)
-
-    await callback.message.edit_text(
-        (
-            "⚔️ <b>مبارزه آغاز شد!</b>\n\n"
-            f"👹 دشمن: {enemy_name}\n"
-            f"❤️ HP دشمن: "
-            f"{battle['enemy_hp']}/"
-            f"{battle['enemy_max_hp']}\n\n"
-            f"❤️ HP تو: "
-            f"{battle['player_hp']}/"
-            f"{battle['player_max_hp']}\n"
-            f"🔵 Mana: "
-            f"{battle['player_mana']}/"
-            f"{battle['player_max_mana']}"
-        ),
-        reply_markup=combat_keyboard(
-            battle["battle_id"]
-        ),
-        parse_mode="HTML",
-    )
-
-    await callback.answer(
-        "⚔️ مبارزه شروع شد!"
-    )
 
 
 # ============================================================
 # ATTACK
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:attack:")
-)
+@router.callback_query(F.data.startswith("combat:attack:"))
 async def combat_attack_handler(
     callback: CallbackQuery,
 ) -> None:
     battle_id = callback.data.split(":")[-1]
-
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
+    battle = await validate_battle_owner(callback, battle_id)
 
     if battle is None:
         return
 
-    (
-        success,
-        damage,
-        victory,
-        battle,
-    ) = await player_attack(
-        battle_id
-    )
+    success, damage, victory, battle = await player_attack(battle_id)
 
     if not success or battle is None:
         await callback.answer(
@@ -381,22 +501,20 @@ async def combat_attack_handler(
         return
 
     if victory:
-        await show_victory(
-            callback,
-            battle,
-            damage,
-        )
+        displayed = await show_victory(callback, battle, damage)
 
-        await callback.answer(
-            f"⚔️ آسیب تو: {damage}"
-        )
+        if displayed:
+            await callback.answer(f"⚔️ آسیب تو: {damage}")
+        else:
+            await answer_display_error(callback)
+
         return
 
     await process_enemy_turn(
         callback,
         battle_id,
-        player_damage=damage,
-        action_text="⚔️ حمله انجام شد.",
+        damage,
+        "⚔️ حمله انجام شد.",
     )
 
 
@@ -404,25 +522,17 @@ async def combat_attack_handler(
 # SKILLS MENU
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:skills:")
-)
+@router.callback_query(F.data.startswith("combat:skills:"))
 async def combat_skills_handler(
     callback: CallbackQuery,
 ) -> None:
     battle_id = callback.data.split(":")[-1]
-
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
+    battle = await validate_battle_owner(callback, battle_id)
 
     if battle is None:
         return
 
-    character = await get_character(
-        callback.from_user.id
-    )
+    character = await get_character(callback.from_user.id)
 
     if character is None:
         await callback.answer(
@@ -431,9 +541,7 @@ async def combat_skills_handler(
         )
         return
 
-    skills = await get_character_skills(
-        character.id
-    )
+    skills = await get_character_skills(character.id)
 
     if not skills:
         await callback.answer(
@@ -442,33 +550,28 @@ async def combat_skills_handler(
         )
         return
 
-    text = (
-        "🔮 <b>مهارت‌ها</b>\n\n"
-        f"🔵 Mana: "
-        f"{battle['player_mana']}/"
-        f"{battle['player_max_mana']}\n\n"
-        "مهارت موردنظر را انتخاب کن:"
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=combat_skills_keyboard(
-            battle_id,
-            skills,
+    displayed = await render_battle_panel(
+        callback,
+        (
+            "🔮 <b>مهارت‌ها</b>\n\n"
+            f"🔵 Mana: {battle['player_mana']}/"
+            f"{battle['player_max_mana']}\n\n"
+            "مهارت موردنظر را انتخاب کن:"
         ),
-        parse_mode="HTML",
+        combat_skills_keyboard(battle_id, skills),
     )
 
-    await callback.answer()
+    if displayed:
+        await callback.answer()
+    else:
+        await answer_display_error(callback)
 
 
 # ============================================================
 # USE SKILL
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:skill:")
-)
+@router.callback_query(F.data.startswith("combat:skill:"))
 async def combat_skill_handler(
     callback: CallbackQuery,
 ) -> None:
@@ -476,7 +579,7 @@ async def combat_skill_handler(
 
     if len(parts) != 4:
         await callback.answer(
-            "❌ درخواست نامعتبر است.",
+            "❌ درخواست مهارت نامعتبر است.",
             show_alert=True,
         )
         return
@@ -487,54 +590,41 @@ async def combat_skill_handler(
         skill_id = int(parts[3])
     except ValueError:
         await callback.answer(
-            "❌ مهارت نامعتبر است.",
+            "❌ شناسه مهارت نامعتبر است.",
             show_alert=True,
         )
         return
 
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
-
-    if battle is None:
+    if await validate_battle_owner(callback, battle_id) is None:
         return
 
-    (
-        success,
-        message,
-        damage,
-        victory,
-        battle,
-    ) = await player_skill(
+    success, message, damage, victory, battle = await player_skill(
         battle_id,
         skill_id,
     )
 
     if not success or battle is None:
         await callback.answer(
-            message,
+            message or "❌ استفاده از مهارت ناموفق بود.",
             show_alert=True,
         )
         return
 
     if victory:
-        await show_victory(
-            callback,
-            battle,
-            damage,
-        )
+        displayed = await show_victory(callback, battle, damage)
 
-        await callback.answer(
-            f"🔮 آسیب مهارت تو: {damage}"
-        )
+        if displayed:
+            await callback.answer(f"🔮 آسیب مهارت: {damage}")
+        else:
+            await answer_display_error(callback)
+
         return
 
     await process_enemy_turn(
         callback,
         battle_id,
-        player_damage=damage,
-        action_text=message,
+        damage,
+        message,
     )
 
 
@@ -542,18 +632,12 @@ async def combat_skill_handler(
 # POTIONS MENU
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:potions:")
-)
+@router.callback_query(F.data.startswith("combat:potions:"))
 async def combat_potions_handler(
     callback: CallbackQuery,
 ) -> None:
     battle_id = callback.data.split(":")[-1]
-
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
+    battle = await validate_battle_owner(callback, battle_id)
 
     if battle is None:
         return
@@ -566,43 +650,39 @@ async def combat_potions_handler(
         return
 
     potions = await get_healing_potions(
-        battle["character_id"]
+        battle["character_id"],
+        max_hp=int(battle.get("player_max_hp", 100) or 100),
     )
 
     if not potions:
         await callback.answer(
-            "🧪 هیچ معجون سلامتی در صندوقچه شما وجود ندارد.",
+            "🧪 معجون سلامتی در صندوقچه ندارید.",
             show_alert=True,
         )
         return
 
-    text = (
-        "🧪 <b>معجون‌ها</b>\n\n"
-        f"❤️ HP فعلی: "
-        f"{battle['player_hp']}/"
-        f"{battle['player_max_hp']}\n\n"
-        "معجون موردنظر را انتخاب کن:"
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=combat_potions_keyboard(
-            battle_id,
-            potions,
+    displayed = await render_battle_panel(
+        callback,
+        (
+            "🧪 <b>معجون‌ها</b>\n\n"
+            f"❤️ HP فعلی: {battle['player_hp']}/"
+            f"{battle['player_max_hp']}\n\n"
+            "معجون موردنظر را انتخاب کن:"
         ),
-        parse_mode="HTML",
+        combat_potions_keyboard(battle_id, potions),
     )
 
-    await callback.answer()
+    if displayed:
+        await callback.answer()
+    else:
+        await answer_display_error(callback)
 
 
 # ============================================================
 # USE POTION
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:potion:")
-)
+@router.callback_query(F.data.startswith("combat:potion:"))
 async def combat_potion_handler(
     callback: CallbackQuery,
 ) -> None:
@@ -610,7 +690,7 @@ async def combat_potion_handler(
 
     if len(parts) != 4:
         await callback.answer(
-            "❌ درخواست نامعتبر است.",
+            "❌ درخواست معجون نامعتبر است.",
             show_alert=True,
         )
         return
@@ -621,69 +701,55 @@ async def combat_potion_handler(
         item_id = int(parts[3])
     except ValueError:
         await callback.answer(
-            "❌ معجون نامعتبر است.",
+            "❌ شناسه معجون نامعتبر است.",
             show_alert=True,
         )
         return
 
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
-
-    if battle is None:
+    if await validate_battle_owner(callback, battle_id) is None:
         return
 
-    (
-        success,
-        message,
-        healed,
-        updated_battle,
-    ) = await use_healing_potion(
-        battle_id,
-        item_id,
+    success, message, healed, updated_battle = (
+        await use_healing_potion(
+            battle_id,
+            item_id,
+        )
     )
 
     if not success or updated_battle is None:
         await callback.answer(
-            message,
+            message or "❌ استفاده از معجون ناموفق بود.",
             show_alert=True,
         )
         return
 
-    await show_battle(
+    displayed = await show_battle(
         callback,
         updated_battle,
     )
 
-    await callback.answer(
-        f"🧪 مقدار HP بازیابی‌شده: +{healed}"
-    )
+    if displayed:
+        await callback.answer(
+            f"🧪 مقدار HP بازیابی‌شده: +{healed}"
+        )
+    else:
+        await answer_display_error(callback)
 
 
 # ============================================================
 # FLEE
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:flee:")
-)
+@router.callback_query(F.data.startswith("combat:flee:"))
 async def combat_flee_handler(
     callback: CallbackQuery,
 ) -> None:
     battle_id = callback.data.split(":")[-1]
 
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
-
-    if battle is None:
+    if await validate_battle_owner(callback, battle_id) is None:
         return
 
-    success = await flee_battle(
-        battle_id
-    )
+    success = await flee_battle(battle_id)
 
     if not success:
         await callback.answer(
@@ -692,41 +758,38 @@ async def combat_flee_handler(
         )
         return
 
-    await callback.message.edit_text(
-        "🏃 <b>از مبارزه فرار کردی.</b>\n\n"
-        "هیچ پاداشی دریافت نکردی.",
-        reply_markup=adventure_main_keyboard(),
-        parse_mode="HTML",
+    displayed = await render_battle_panel(
+        callback,
+        "🏃 <b>از مبارزه خارج شدی.</b>\n\nهیچ پاداشی دریافت نکردی.",
+        adventure_main_keyboard(),
     )
 
-    await callback.answer(
-        "🏃 از مبارزه خارج شدی."
-    )
+    if displayed:
+        await callback.answer("🏃 از مبارزه خارج شدی.")
+    else:
+        await answer_display_error(callback)
 
 
 # ============================================================
 # BACK TO BATTLE
 # ============================================================
 
-@router.callback_query(
-    F.data.startswith("combat:back:")
-)
+@router.callback_query(F.data.startswith("combat:back:"))
 async def combat_back_handler(
     callback: CallbackQuery,
 ) -> None:
     battle_id = callback.data.split(":")[-1]
-
-    battle = await validate_battle_owner(
-        callback,
-        battle_id,
-    )
+    battle = await validate_battle_owner(callback, battle_id)
 
     if battle is None:
         return
 
-    await show_battle(
+    displayed = await show_battle(
         callback,
         battle,
     )
 
-    await callback.answer()
+    if displayed:
+        await callback.answer()
+    else:
+        await answer_display_error(callback)

@@ -1,17 +1,16 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 from pathlib import Path
 
-# ------------------------------------------------------------------
-# PROJECT ROOT
-# ------------------------------------------------------------------
+import pytest
+from sqlalchemy import select
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-
-from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
 from models.monster import Monster
@@ -24,37 +23,23 @@ from services.power_service import (
 from services.damage_service import calculate_damage
 
 
-# ------------------------------------------------------------------
-# TEST LEVELS
-# ------------------------------------------------------------------
 TEST_LEVELS = [1, 5, 10, 20, 50, 100]
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
-def print_separator():
+def print_separator() -> None:
     print("-" * 80)
 
 
-def validate_positive(name: str, value: int) -> bool:
-    if value <= 0:
-        print(f"❌ {name} invalid: {value}")
-        return False
-
+def validate_positive(name: str, value: int) -> None:
+    assert value > 0, f"{name} invalid: {value}"
     print(f"✅ {name}: {value}")
-    return True
 
 
-# ------------------------------------------------------------------
-# HERO SCALING
-# ------------------------------------------------------------------
-def test_hero_scaling() -> bool:
+def _run_hero_scaling() -> None:
     print("\n" + "=" * 80)
     print("🧪 HERO LEVEL SCALING")
     print("=" * 80)
 
-    passed = True
     previous = None
 
     for level in TEST_LEVELS:
@@ -87,9 +72,23 @@ def test_hero_scaling() -> bool:
             stats.critical,
         ]
 
-        if any(value <= 0 for value in values):
-            print(f"❌ Invalid stat at Level {level}")
-            passed = False
+        stat_names = [
+            "HP",
+            "Mana",
+            "ATK",
+            "Magic Power",
+            "DEF",
+            "MDEF",
+            "Speed",
+            "Accuracy",
+            "Luck",
+            "Critical",
+        ]
+
+        for stat_name, value in zip(stat_names, values):
+            assert value > 0, (
+                f"{stat_name} invalid at Level {level}: {value}"
+            )
 
         if previous is not None:
             previous_values = [
@@ -108,40 +107,25 @@ def test_hero_scaling() -> bool:
             for old, new, stat_name in zip(
                 previous_values,
                 values,
-                [
-                    "HP",
-                    "Mana",
-                    "ATK",
-                    "Magic Power",
-                    "DEF",
-                    "MDEF",
-                    "Speed",
-                    "Accuracy",
-                    "Luck",
-                    "Critical",
-                ],
+                stat_names,
             ):
-                if new < old:
-                    print(
-                        f"❌ {stat_name} decreased: "
-                        f"{old} → {new}"
-                    )
-                    passed = False
+                assert new >= old, (
+                    f"{stat_name} decreased: "
+                    f"{old} → {new}"
+                )
 
         previous = stats
 
-    return passed
+
+@pytest.mark.asyncio
+async def test_hero_scaling() -> None:
+    _run_hero_scaling()
 
 
-# ------------------------------------------------------------------
-# MONSTER SCALING
-# ------------------------------------------------------------------
-async def test_monster_scaling() -> bool:
+async def _run_monster_scaling() -> None:
     print("\n" + "=" * 80)
     print("🧪 MONSTER LEVEL SCALING")
     print("=" * 80)
-
-    passed = True
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -154,12 +138,11 @@ async def test_monster_scaling() -> bool:
 
     print(f"Active Monsters={len(monsters)}")
 
-    if not monsters:
-        print("❌ No active monsters found.")
-        return False
+    assert monsters, "No active monsters found."
 
     for monster in monsters:
         print_separator()
+
         print(
             f"👹 {monster.name} | "
             f"{monster.variant} | "
@@ -193,34 +176,35 @@ async def test_monster_scaling() -> bool:
                 f"MDEF={stats.magic_defense:4}"
             )
 
-            if stats.hp < previous_hp:
-                print("❌ HP decreased.")
-                passed = False
+            assert stats.hp >= previous_hp, (
+                f"HP decreased for {monster.variant}: "
+                f"{previous_hp} → {stats.hp}"
+            )
 
-            if stats.attack < previous_attack:
-                print("❌ Attack decreased.")
-                passed = False
+            assert stats.attack >= previous_attack, (
+                f"Attack decreased for {monster.variant}: "
+                f"{previous_attack} → {stats.attack}"
+            )
 
-            if stats.defense < previous_defense:
-                print("❌ Defense decreased.")
-                passed = False
+            assert stats.defense >= previous_defense, (
+                f"Defense decreased for {monster.variant}: "
+                f"{previous_defense} → {stats.defense}"
+            )
 
             previous_hp = stats.hp
             previous_attack = stats.attack
             previous_defense = stats.defense
 
-    return passed
+
+@pytest.mark.asyncio
+async def test_monster_scaling() -> None:
+    await _run_monster_scaling()
 
 
-# ------------------------------------------------------------------
-# DAMAGE BALANCE
-# ------------------------------------------------------------------
-def test_damage_balance() -> bool:
+def _run_damage_balance() -> None:
     print("\n" + "=" * 80)
     print("🧪 DAMAGE BALANCE")
     print("=" * 80)
-
-    passed = True
 
     for level in TEST_LEVELS:
         hero = get_hero_base_stats(level)
@@ -261,26 +245,23 @@ def test_damage_balance() -> bool:
             f"Damage={monster_damage.damage:3}"
         )
 
-        if player_damage.damage < 1:
-            print("❌ Player damage below minimum.")
-            passed = False
+        assert player_damage.damage >= 1, (
+            "Player damage below minimum."
+        )
 
-        if monster_damage.damage < 1:
-            print("❌ Monster damage below minimum.")
-            passed = False
-
-    return passed
+        assert monster_damage.damage >= 1, (
+            "Monster damage below minimum."
+        )
 
 
-# ------------------------------------------------------------------
-# DAMAGE GROWTH
-# ------------------------------------------------------------------
-def test_damage_growth() -> bool:
+def test_damage_balance() -> None:
+    _run_damage_balance()
+
+
+def _run_damage_growth() -> None:
     print("\n" + "=" * 80)
     print("🧪 DAMAGE GROWTH CHECK")
     print("=" * 80)
-
-    passed = True
 
     previous_damage = 0
 
@@ -314,27 +295,22 @@ def test_damage_growth() -> bool:
             f"Damage={result.damage:3}"
         )
 
-        if result.damage < previous_damage:
-            print(
-                f"❌ Damage decreased: "
-                f"{previous_damage} → {result.damage}"
-            )
-            passed = False
+        assert result.damage >= previous_damage, (
+            f"Damage decreased: "
+            f"{previous_damage} → {result.damage}"
+        )
 
         previous_damage = result.damage
 
-    return passed
+
+def test_damage_growth() -> None:
+    _run_damage_growth()
 
 
-# ------------------------------------------------------------------
-# CRITICAL BALANCE
-# ------------------------------------------------------------------
-def test_critical_balance() -> bool:
+def _run_critical_balance() -> None:
     print("\n" + "=" * 80)
     print("🧪 CRITICAL DAMAGE BALANCE")
     print("=" * 80)
-
-    passed = True
 
     for level in TEST_LEVELS:
         hero = get_hero_base_stats(level)
@@ -380,22 +356,19 @@ def test_critical_balance() -> bool:
             f"Ratio={ratio:.2f}x"
         )
 
-        if critical.damage <= normal.damage:
-            print("❌ Critical damage is not higher.")
-            passed = False
-
-    return passed
+        assert critical.damage > normal.damage, (
+            "Critical damage is not higher."
+        )
 
 
-# ------------------------------------------------------------------
-# ELEMENT BALANCE
-# ------------------------------------------------------------------
-def test_element_balance() -> bool:
+def test_critical_balance() -> None:
+    _run_critical_balance()
+
+
+def _run_element_balance() -> None:
     print("\n" + "=" * 80)
     print("🧪 ELEMENT BALANCE")
     print("=" * 80)
-
-    passed = True
 
     tests = [
         ("fire", "ice", 1.50),
@@ -430,48 +403,57 @@ def test_element_balance() -> bool:
             f"Actual={actual:.2f}"
         )
 
-        if actual != expected:
-            print("❌ Element multiplier mismatch.")
-            passed = False
-        else:
-            print("✅")
+        assert actual == expected, (
+            f"Element multiplier mismatch: "
+            f"{attack_element} → {defender_element} | "
+            f"expected={expected:.2f}, actual={actual:.2f}"
+        )
 
-    return passed
+        print("✅")
 
 
-# ------------------------------------------------------------------
-# MAIN
-# ------------------------------------------------------------------
-async def main():
+def test_element_balance() -> None:
+    _run_element_balance()
+
+
+async def main() -> None:
     print("=" * 80)
-    print("WORLD ELDORIA - LEVEL SCALING & COMBAT BALANCE TEST")
+    print(
+        "WORLD ELDORIA - LEVEL SCALING & "
+        "COMBAT BALANCE TEST"
+    )
     print("=" * 80)
+
+    tests = [
+        ("Hero Scaling", _run_hero_scaling),
+        ("Monster Scaling", _run_monster_scaling),
+        ("Damage Balance", _run_damage_balance),
+        ("Damage Growth", _run_damage_growth),
+        ("Critical Balance", _run_critical_balance),
+        ("Element Balance", _run_element_balance),
+    ]
 
     results = []
 
-    results.append(
-        ("Hero Scaling", test_hero_scaling())
-    )
+    for name, test_function in tests:
+        try:
+            result = test_function()
 
-    results.append(
-        ("Monster Scaling", await test_monster_scaling())
-    )
+            if asyncio.iscoroutine(result):
+                await result
 
-    results.append(
-        ("Damage Balance", test_damage_balance())
-    )
+            results.append((name, True))
 
-    results.append(
-        ("Damage Growth", test_damage_growth())
-    )
+        except AssertionError as exc:
+            print(f"❌ {name} FAILED: {exc}")
+            results.append((name, False))
 
-    results.append(
-        ("Critical Balance", test_critical_balance())
-    )
-
-    results.append(
-        ("Element Balance", test_element_balance())
-    )
+        except Exception as exc:
+            print(
+                f"❌ {name} ERROR: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            results.append((name, False))
 
     print("\n" + "=" * 80)
     print("📊 FINAL RESULT")
@@ -489,10 +471,16 @@ async def main():
     print("-" * 80)
 
     if all_passed:
-        print("✅ LEVEL SCALING & COMBAT BALANCE TEST COMPLETED")
+        print(
+            "✅ LEVEL SCALING & COMBAT BALANCE "
+            "TEST COMPLETED"
+        )
         print("✅ No database values were modified.")
     else:
-        print("❌ LEVEL SCALING & COMBAT BALANCE TEST FAILED")
+        print(
+            "❌ LEVEL SCALING & COMBAT BALANCE "
+            "TEST FAILED"
+        )
 
     print("=" * 80)
 

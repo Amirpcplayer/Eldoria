@@ -51,7 +51,7 @@ class Skill(Base):
 
     max_level: Mapped[int] = mapped_column(
         Integer,
-        default=10,
+        default=200,
         nullable=False,
     )
 

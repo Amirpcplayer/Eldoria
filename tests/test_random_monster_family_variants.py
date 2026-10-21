@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 
+import pytest
+import pytest_asyncio
 from sqlalchemy import select
 
 from database.database import AsyncSessionLocal
@@ -27,7 +29,9 @@ GOLEM_VARIANTS = {
 }
 
 
-async def get_monster_by_variant(variant: str) -> Monster | None:
+async def get_monster_by_variant(
+    variant: str,
+) -> Monster | None:
     async with AsyncSessionLocal() as session:
         return await session.scalar(
             select(Monster).where(
@@ -37,13 +41,15 @@ async def get_monster_by_variant(variant: str) -> Monster | None:
         )
 
 
-async def test_family(
+async def check_family(
     family_name: str,
     base_variant: str,
     expected_variants: set[str],
     trials: int = 100,
 ) -> bool:
-    base_monster = await get_monster_by_variant(base_variant)
+    base_monster = await get_monster_by_variant(
+        base_variant
+    )
 
     if base_monster is None:
         print(
@@ -99,7 +105,9 @@ async def test_family(
         count = counter.get(variant, 0)
         percentage = (count / trials) * 100
 
-        monster = await get_monster_by_variant(variant)
+        monster = await get_monster_by_variant(
+            variant
+        )
 
         monster_id = monster.id if monster else "N/A"
 
@@ -132,13 +140,40 @@ async def test_family(
     return True
 
 
+@pytest.mark.asyncio
+async def test_goblin_random_variants():
+    result = await check_family(
+        family_name="goblin",
+        base_variant="goblin",
+        expected_variants=GOBLIN_VARIANTS,
+        trials=100,
+    )
+
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_golem_random_variants():
+    result = await check_family(
+        family_name="golem",
+        base_variant="stone_golem",
+        expected_variants=GOLEM_VARIANTS,
+        trials=100,
+    )
+
+    assert result is True
+
+
 async def main() -> None:
     print("=" * 100)
-    print("WORLD ELDORIA - GOBLIN + GOLEM RANDOM VARIANT TEST")
+    print(
+        "WORLD ELDORIA - GOBLIN + GOLEM "
+        "RANDOM VARIANT TEST"
+    )
     print("=" * 100)
     print()
 
-    goblin_ok = await test_family(
+    goblin_ok = await check_family(
         family_name="goblin",
         base_variant="goblin",
         expected_variants=GOBLIN_VARIANTS,
@@ -147,7 +182,7 @@ async def main() -> None:
 
     print()
 
-    golem_ok = await test_family(
+    golem_ok = await check_family(
         family_name="golem",
         base_variant="stone_golem",
         expected_variants=GOLEM_VARIANTS,

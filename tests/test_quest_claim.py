@@ -1,15 +1,18 @@
+from __future__ import annotations
+
 import asyncio
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import delete, select
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-
-from sqlalchemy import delete, select
 
 from database.database import AsyncSessionLocal
 
@@ -28,7 +31,7 @@ TEST_TELEGRAM_ID = 999999998
 TEST_CHARACTER_NAME = "Quest Claim Test Hero"
 
 
-async def cleanup():
+async def cleanup() -> None:
     async with AsyncSessionLocal() as session:
         character = await session.scalar(
             select(Character).where(
@@ -36,7 +39,7 @@ async def cleanup():
             )
         )
 
-        if character:
+        if character is not None:
             await session.execute(
                 delete(CharacterEquipment).where(
                     CharacterEquipment.character_id == character.id
@@ -54,8 +57,18 @@ async def cleanup():
         await session.commit()
 
 
-async def create_character():
+async def create_character() -> int:
     async with AsyncSessionLocal() as session:
+        existing = await session.scalar(
+            select(Character).where(
+                Character.telegram_id == TEST_TELEGRAM_ID
+            )
+        )
+
+        if existing is not None:
+            await session.delete(existing)
+            await session.commit()
+
         character = Character(
             telegram_id=TEST_TELEGRAM_ID,
             name=TEST_CHARACTER_NAME,
@@ -75,7 +88,7 @@ async def create_character():
         return character.id
 
 
-async def get_character():
+async def get_character() -> Character | None:
     async with AsyncSessionLocal() as session:
         return await session.scalar(
             select(Character).where(
@@ -84,7 +97,7 @@ async def get_character():
         )
 
 
-async def get_quest(name: str):
+async def get_quest(name: str) -> Quest | None:
     async with AsyncSessionLocal() as session:
         return await session.scalar(
             select(Quest).where(
@@ -93,7 +106,7 @@ async def get_quest(name: str):
         )
 
 
-async def complete_quest(quest_id: int):
+async def complete_quest(quest_id: int) -> None:
     character = await get_character()
 
     assert character is not None
@@ -122,6 +135,16 @@ async def complete_quest(quest_id: int):
         character_quest.claimed_at = None
 
         await session.commit()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def quest_test_character():
+    await cleanup()
+    await create_character()
+
+    yield
+
+    await cleanup()
 
 
 async def test_basic_claim():
@@ -249,6 +272,11 @@ async def test_level_up():
 
     assert character is not None
 
+    await ensure_character_quests(
+        TEST_TELEGRAM_ID,
+        "story",
+    )
+
     async with AsyncSessionLocal() as session:
         db_character = await session.scalar(
             select(Character).where(
@@ -307,8 +335,12 @@ async def test_equipment_reward():
 
     assert character is not None
 
-    async with AsyncSessionLocal() as session:
+    await ensure_character_quests(
+        TEST_TELEGRAM_ID,
+        "story",
+    )
 
+    async with AsyncSessionLocal() as session:
         equipment = await session.scalar(
             select(Equipment).where(
                 Equipment.is_active.is_(True)
@@ -374,7 +406,7 @@ async def test_equipment_reward():
                 )
             )
 
-            if db_quest:
+            if db_quest is not None:
                 db_quest.reward_equipment_id = old_reward
                 await session.commit()
 
@@ -384,14 +416,14 @@ async def test_equipment_reward():
 async def test_repeatable():
     print("[8/8] Checking Repeatable Quest...")
 
-    quest = await get_quest("⚔️ شکار روزانه")
+    quest = await get_quest("⚔️ شکارچی پیوسته")
 
     assert quest is not None
     assert quest.is_repeatable is True
 
     await ensure_character_quests(
         TEST_TELEGRAM_ID,
-        "daily",
+        quest.category,
     )
 
     character = await get_character()
@@ -422,7 +454,6 @@ async def test_repeatable():
     assert character_quest is not None
     assert character_quest.status == "claimed"
 
-    # همان روز نباید دوباره Claim شود
     success, _ = await claim_quest(
         TEST_TELEGRAM_ID,
         quest.id,
@@ -430,7 +461,6 @@ async def test_repeatable():
 
     assert success is False
 
-    # شبیه‌سازی روز بعد
     async with AsyncSessionLocal() as session:
         db_character_quest = await session.scalar(
             select(CharacterQuest).where(
@@ -448,7 +478,7 @@ async def test_repeatable():
 
     await ensure_character_quests(
         TEST_TELEGRAM_ID,
-        "daily",
+        quest.category,
     )
 
     character_quest = await get_character_quest(
@@ -466,7 +496,7 @@ async def test_repeatable():
     )
 
 
-async def main():
+async def main() -> None:
     print()
     print("========================================")
     print("       WORLD ELDORIA QUEST CLAIM TEST")

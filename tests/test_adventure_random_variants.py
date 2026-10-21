@@ -122,7 +122,7 @@ async def run_family_test(
     )
 
     print(
-        f"👾 Base Monster: {base_monster.name} "
+        f" Base Monster: {base_monster.name} "
         f"| ID={base_monster.id} "
         f"| family={base_monster.family} "
         f"| variant={base_monster.variant}"

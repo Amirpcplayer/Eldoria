@@ -27,10 +27,11 @@ async def removed_element_handler(
 async def enter_game_handler(
     callback: CallbackQuery,
 ):
-    await callback.message.edit_text(
-        "🌌 به اِلدوریا خوش آمدی!\n\n"
-        "🎮 منوی اصلی بازی:",
-        reply_markup=main_menu_keyboard(),
-    )
+    if callback.message is not None:
+        await callback.message.answer(
+            "🌌 به اِلدوریا خوش آمدی!\n\n"
+            "🎮 منوی اصلی بازی:",
+            reply_markup=main_menu_keyboard(),
+        )
 
     await callback.answer()

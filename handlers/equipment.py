@@ -1,4 +1,13 @@
-from aiogram import Router
+from __future__ import annotations
+
+import logging
+
+from aiogram import F, Router
+from aiogram.enums import ParseMode
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+)
 from aiogram.types import CallbackQuery
 
 from keyboards.equipment import (
@@ -6,8 +15,10 @@ from keyboards.equipment import (
     equipment_list_keyboard,
     equipment_details_keyboard,
 )
-
 from keyboards.main_menu import main_menu_keyboard
+
+from services.panel_image_service import show_panel
+from middlewares.panel_owner import protect_keyboard
 
 from services.equipment_service import (
     get_character,
@@ -21,7 +32,8 @@ from services.equipment_service import (
 )
 
 
-router = Router()
+router = Router(name="equipment")
+logger = logging.getLogger(__name__)
 
 
 EQUIPMENT_TYPE_NAMES = {
@@ -32,7 +44,6 @@ EQUIPMENT_TYPE_NAMES = {
     "ring": "💍 انگشترها",
     "necklace": "📿 گردنبندها",
 }
-
 
 RARITY_NAMES = {
     "common": "⚪ معمولی",
@@ -45,35 +56,178 @@ RARITY_NAMES = {
 }
 
 
-def get_rarity_name(
-    rarity: str,
-) -> str:
-
-    return RARITY_NAMES.get(
-        rarity,
-        rarity,
-    )
+MAIN_MENU_TEXT = (
+    "🎮 <b>منوی اصلی World Eldoria</b>\n\n"
+    "🌌 ماجراجویی تو در اِلدوریا ادامه دارد..."
+)
 
 
-def get_equipment_type_title(
-    equipment_type: str,
-) -> str:
+EQUIPMENT_MENU_TEXT = (
+    "🛡️ <b>تجهیزات قهرمان</b>\n\n"
+    "از بخش‌های زیر نوع تجهیزات موردنظر را انتخاب کن:"
+)
 
+
+def get_rarity_name(rarity: str) -> str:
+    return RARITY_NAMES.get(rarity, rarity)
+
+
+def get_equipment_type_title(equipment_type: str) -> str:
     return EQUIPMENT_TYPE_NAMES.get(
         equipment_type,
         equipment_type,
     )
 
 
+async def send_new_panel(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup,
+) -> None:
+    """
+    پیام قبلی را حذف و پنل جدید ارسال می‌کند.
+    برای ورود به پنل تجهیزات استفاده می‌شود.
+    """
+    message = callback.message
+
+    if message is None:
+        await callback.answer(
+            "❌ پیام قبلی در دسترس نیست.",
+            show_alert=True,
+        )
+        return
+
+    try:
+        await message.delete()
+
+    except (TelegramBadRequest, TelegramForbiddenError) as exc:
+        logger.warning(
+            "Could not delete previous panel. "
+            "user_id=%s, chat_id=%s, message_id=%s, error=%s",
+            callback.from_user.id,
+            message.chat.id,
+            message.message_id,
+            exc,
+        )
+
+        await callback.answer(
+            "❌ حذف پنل قبلی ناموفق بود. لطفاً دوباره تلاش کن.",
+            show_alert=True,
+        )
+        return
+
+    except Exception:
+        logger.exception(
+            "Unexpected error deleting previous panel."
+        )
+        await callback.answer(
+            "❌ خطا هنگام حذف پنل قبلی.",
+            show_alert=True,
+        )
+        return
+
+    try:
+        # پنل تجهیزات شخصی است؛ همهٔ دکمه‌های آن فقط برای سازنده معتبرند.
+        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
+        await message.answer(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML,
+        )
+
+    except Exception:
+        logger.exception(
+            "Could not send equipment panel. user_id=%s",
+            callback.from_user.id,
+        )
+        await callback.answer(
+            "❌ ارسال پنل تجهیزات ناموفق بود. ترمینال را بررسی کن.",
+            show_alert=True,
+        )
+        return
+
+    await callback.answer()
+
+
+async def edit_panel(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup,
+) -> None:
+    """
+    صفحات داخلی تجهیزات را در همان پیام ویرایش می‌کند.
+    در صورت ناموفق بودن ویرایش، برای جلوگیری از پنل تکراری
+    ابتدا پیام قبلی حذف می‌شود و سپس پنل جایگزین ارسال می‌شود.
+    """
+    message = callback.message
+
+    if message is None:
+        await callback.answer(
+            "❌ پیام پنل در دسترس نیست.",
+            show_alert=True,
+        )
+        return
+
+    try:
+        # محافظت در سمت پنل، علاوه بر اعتبارسنجی عملیات تجهیزات در سرویس.
+        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
+        await message.edit_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML,
+        )
+
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            await callback.answer()
+            return
+
+        logger.warning(
+            "Equipment panel edit failed. "
+            "user_id=%s, chat_id=%s, message_id=%s, error=%s",
+            callback.from_user.id,
+            message.chat.id,
+            message.message_id,
+            exc,
+        )
+
+        await send_new_panel(
+            callback,
+            text,
+            reply_markup,
+        )
+        return
+
+    except TelegramForbiddenError:
+        logger.exception(
+            "Telegram forbade editing equipment panel."
+        )
+        await callback.answer(
+            "❌ اجازه ویرایش این پیام وجود ندارد.",
+            show_alert=True,
+        )
+        return
+
+    except Exception:
+        logger.exception(
+            "Unexpected equipment panel edit error."
+        )
+        await callback.answer(
+            "❌ خطای غیرمنتظره هنگام ویرایش پنل.",
+            show_alert=True,
+        )
+        return
+
+    await callback.answer()
+
+
 async def show_equipment_details(
     callback: CallbackQuery,
     equipment_id: int,
-):
+) -> None:
     telegram_id = callback.from_user.id
 
-    character = await get_character(
-        telegram_id
-    )
+    character = await get_character(telegram_id)
 
     if character is None:
         await callback.answer(
@@ -82,9 +236,7 @@ async def show_equipment_details(
         )
         return
 
-    equipment = await get_equipment(
-        equipment_id
-    )
+    equipment = await get_equipment(equipment_id)
 
     if equipment is None:
         await callback.answer(
@@ -107,14 +259,6 @@ async def show_equipment_details(
 
     equipment_type = equipment.equipment_type
 
-    type_name = get_equipment_type_title(
-        equipment_type
-    )
-
-    rarity = get_rarity_name(
-        equipment.rarity
-    )
-
     status = (
         "🟢 مجهز است"
         if character_equipment.equipped
@@ -130,50 +274,63 @@ async def show_equipment_details(
     text = (
         f"{equipment.name}\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"📦 نوع: {type_name}\n"
-        f"💎 کمیابی: {rarity}\n"
-        f"⭐ سطح موردنیاز: "
-        f"{equipment.required_level}\n"
-        f"🧙 سطح قهرمان: "
-        f"{character.level}\n"
+        f"🗃 نوع: {get_equipment_type_title(equipment_type)}\n"
+        f"💎 کمیابی: {get_rarity_name(equipment.rarity)}\n"
+        f"⭐ سطح موردنیاز: {equipment.required_level}\n"
+        f"🧙 سطح قهرمان: {character.level}\n"
         f"📌 وضعیت سطح: {level_status}\n"
         f"🔢 تعداد: ×{character_equipment.quantity}\n"
         f"📍 وضعیت: {status}\n\n"
         "📊 <b>ویژگی‌های تجهیز</b>\n"
-        f"⚔️ Attack: +{equipment.attack}\n"
-        f"🔮 Magic Power: +{equipment.magic_power}\n"
-        f"🛡️ Defense: +{equipment.defense}\n"
-        f"🔰 Magic Defense: +{equipment.magic_defense}\n"
-        f"❤️ HP: +{equipment.hp}\n"
-        f"💧 Mana: +{equipment.mana}\n"
-        f"💨 Speed: +{equipment.speed}\n"
-        f"🎯 Accuracy: +{equipment.accuracy}\n"
-        f"💥 Critical: +{equipment.critical}%\n\n"
+        f"⚔️ حمله: +{equipment.attack}\n"
+        f"🔮 قدرت جادو: +{equipment.magic_power}\n"
+        f"🛡️ دفاع: +{equipment.defense}\n"
+        f"🔰 دفاع جادویی: +{equipment.magic_defense}\n"
+        f"❤️ سلامتی: +{equipment.hp}\n"
+        f"💧 مانا: +{equipment.mana}\n"
+        f"💨 سرعت: +{equipment.speed}\n"
+        f"🎯 دقت: +{equipment.accuracy}\n"
+        f"💥 ضربه بحرانی: +{equipment.critical}%\n\n"
         f"📝 {equipment.description or 'بدون توضیحات'}"
     )
 
-    await callback.message.edit_text(
+    await edit_panel(
+        callback,
         text,
-        reply_markup=equipment_details_keyboard(
+        equipment_details_keyboard(
             equipment.id,
             character_equipment.equipped,
             equipment_type,
         ),
     )
 
-    await callback.answer()
 
-
-@router.callback_query(
-    lambda callback: callback.data == "menu:equipment"
-)
-async def equipment_menu(
-    callback: CallbackQuery,
-):
-
-    character = await get_character(
-        callback.from_user.id
+@router.callback_query(F.data == "menu:equipment")
+async def equipment_menu(callback: CallbackQuery) -> None:
+    logger.info(
+        "Equipment menu callback received from user %s",
+        callback.from_user.id,
     )
+
+    character = await get_character(callback.from_user.id)
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد. ابتدا شخصیتت را بساز.",
+            show_alert=True,
+        )
+        return
+
+    await send_new_panel(
+        callback,
+        EQUIPMENT_MENU_TEXT,
+        equipment_main_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "equipment:menu")
+async def equipment_menu_back(callback: CallbackQuery) -> None:
+    character = await get_character(callback.from_user.id)
 
     if character is None:
         await callback.answer(
@@ -182,37 +339,27 @@ async def equipment_menu(
         )
         return
 
-    await callback.message.edit_text(
-        "🛡️ <b>تجهیزات قهرمان</b>\n\n"
-        "از بخش‌های زیر نوع تجهیزات موردنظر را انتخاب کن:",
-        reply_markup=equipment_main_keyboard(),
-    )
-
-    await callback.answer()
-
-
-@router.callback_query(
-    lambda callback: callback.data == "equipment:menu"
-)
-async def equipment_menu_back(
-    callback: CallbackQuery,
-):
-
-    await equipment_menu(
-        callback
+    await edit_panel(
+        callback,
+        EQUIPMENT_MENU_TEXT,
+        equipment_main_keyboard(),
     )
 
 
-@router.callback_query(
-    lambda callback: callback.data.startswith(
-        "equipment:list:"
-    )
-)
+@router.callback_query(F.data.startswith("equipment:list:"))
 async def equipment_list_handler(
     callback: CallbackQuery,
-):
+) -> None:
+    parts = (callback.data or "").split(":")
 
-    equipment_type = callback.data.split(":")[2]
+    if len(parts) != 3:
+        await callback.answer(
+            "❌ درخواست نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    equipment_type = parts[2]
 
     if equipment_type not in EQUIPMENT_TYPE_NAMES:
         await callback.answer(
@@ -221,9 +368,8 @@ async def equipment_list_handler(
         )
         return
 
-    character = await get_character(
-        callback.from_user.id
-    )
+    telegram_id = callback.from_user.id
+    character = await get_character(telegram_id)
 
     if character is None:
         await callback.answer(
@@ -233,7 +379,7 @@ async def equipment_list_handler(
         return
 
     all_equipment = await get_character_equipments(
-        callback.from_user.id
+        telegram_id
     )
 
     equipment_list = [
@@ -242,90 +388,81 @@ async def equipment_list_handler(
         if item[1].equipment_type == equipment_type
     ]
 
-    type_name = get_equipment_type_title(
-        equipment_type
-    )
+    type_name = get_equipment_type_title(equipment_type)
 
     if not equipment_list:
-
-        await callback.message.edit_text(
-            f"{type_name}\n\n"
-            "📦 در حال حاضر هیچ تجهیزی از این نوع "
-            "در صندوقچه تو وجود ندارد.",
-            reply_markup=equipment_list_keyboard(
+        await edit_panel(
+            callback,
+            (
+                f"{type_name}\n\n"
+                "🗃 در حال حاضر هیچ تجهیزی از این نوع "
+                "در صندوقچه تو وجود ندارد."
+            ),
+            equipment_list_keyboard(
                 [],
                 equipment_type,
             ),
         )
-
-        await callback.answer()
         return
 
     text = (
         f"{type_name}\n\n"
-        f"📦 تعداد تجهیزات: "
-        f"{len(equipment_list)}\n\n"
+        f"🗃 تعداد تجهیزات: {len(equipment_list)}\n\n"
         "برای مشاهده جزئیات، یک تجهیز را انتخاب کن."
     )
 
-    await callback.message.edit_text(
+    await edit_panel(
+        callback,
         text,
-        reply_markup=equipment_list_keyboard(
+        equipment_list_keyboard(
             equipment_list,
             equipment_type,
         ),
     )
 
-    await callback.answer()
 
-
-@router.callback_query(
-    lambda callback: callback.data.startswith(
-        "equipment:item:"
-    )
-)
+@router.callback_query(F.data.startswith("equipment:item:"))
 async def equipment_details_handler(
     callback: CallbackQuery,
-):
+) -> None:
+    parts = (callback.data or "").split(":")
 
-    equipment_id = int(
-        callback.data.split(":")[2]
-    )
+    if len(parts) != 3 or not parts[2].isdigit():
+        await callback.answer(
+            "❌ شناسه تجهیز نامعتبر است.",
+            show_alert=True,
+        )
+        return
 
     await show_equipment_details(
         callback,
-        equipment_id,
+        int(parts[2]),
     )
 
 
-@router.callback_query(
-    lambda callback: callback.data.startswith(
-        "equipment:equip:"
-    )
-)
+@router.callback_query(F.data.startswith("equipment:equip:"))
 async def equipment_equip_handler(
     callback: CallbackQuery,
-):
+) -> None:
+    parts = (callback.data or "").split(":")
 
-    equipment_id = int(
-        callback.data.split(":")[2]
-    )
+    if len(parts) != 3 or not parts[2].isdigit():
+        await callback.answer(
+            "❌ شناسه تجهیز نامعتبر است.",
+            show_alert=True,
+        )
+        return
 
-    success, message = await equip_equipment(
+    equipment_id = int(parts[2])
+
+    success, result_message = await equip_equipment(
         callback.from_user.id,
         equipment_id,
     )
 
     if not success:
-
-        clean_message = (
-            message
-            .replace("<b>", "")
-            .replace("</b>", "")
-        )
-
         await callback.answer(
-            clean_message,
+            result_message.replace("<b>", "").replace("</b>", ""),
             show_alert=True,
         )
         return
@@ -335,39 +472,30 @@ async def equipment_equip_handler(
         equipment_id,
     )
 
-    await callback.answer(
-        "✅ تجهیز با موفقیت مجهز شد."
-    )
 
-
-@router.callback_query(
-    lambda callback: callback.data.startswith(
-        "equipment:unequip:"
-    )
-)
+@router.callback_query(F.data.startswith("equipment:unequip:"))
 async def equipment_unequip_handler(
     callback: CallbackQuery,
-):
+) -> None:
+    parts = (callback.data or "").split(":")
 
-    equipment_id = int(
-        callback.data.split(":")[2]
-    )
+    if len(parts) != 3 or not parts[2].isdigit():
+        await callback.answer(
+            "❌ شناسه تجهیز نامعتبر است.",
+            show_alert=True,
+        )
+        return
 
-    success, message = await unequip_equipment(
+    equipment_id = int(parts[2])
+
+    success, result_message = await unequip_equipment(
         callback.from_user.id,
         equipment_id,
     )
 
     if not success:
-
-        clean_message = (
-            message
-            .replace("<b>", "")
-            .replace("</b>", "")
-        )
-
         await callback.answer(
-            clean_message,
+            result_message.replace("<b>", "").replace("</b>", ""),
             show_alert=True,
         )
         return
@@ -377,21 +505,14 @@ async def equipment_unequip_handler(
         equipment_id,
     )
 
-    await callback.answer(
-        "✅ تجهیز از حالت استفاده خارج شد."
-    )
 
-
-@router.callback_query(
-    lambda callback: callback.data == "equipment:stats"
-)
+@router.callback_query(F.data == "equipment:stats")
 async def equipment_stats_handler(
     callback: CallbackQuery,
-):
+) -> None:
+    telegram_id = callback.from_user.id
 
-    character = await get_character(
-        callback.from_user.id
-    )
+    character = await get_character(telegram_id)
 
     if character is None:
         await callback.answer(
@@ -400,50 +521,41 @@ async def equipment_stats_handler(
         )
         return
 
-    stats = await get_equipment_stats(
-        callback.from_user.id
-    )
-
-    equipped = await get_equipped_equipments(
-        callback.from_user.id
-    )
+    stats = await get_equipment_stats(telegram_id)
+    equipped = await get_equipped_equipments(telegram_id)
 
     text = (
         "📊 <b>آمار تجهیزات</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"🛡️ تجهیزات مجهز: "
-        f"{len(equipped)}\n\n"
-        "⚔️ <b>Bonusهای تجهیزات</b>\n"
-        f"⚔️ Attack: +{stats['attack']}\n"
-        f"🔮 Magic Power: +{stats['magic_power']}\n"
-        f"🛡️ Defense: +{stats['defense']}\n"
-        f"🔰 Magic Defense: +{stats['magic_defense']}\n"
-        f"❤️ HP: +{stats['hp']}\n"
-        f"💧 Mana: +{stats['mana']}\n"
-        f"💨 Speed: +{stats['speed']}\n"
-        f"🎯 Accuracy: +{stats['accuracy']}\n"
-        f"💥 Critical: +{stats['critical']}%\n\n"
-        "این مقادیر به آمار پایه قهرمان اضافه می‌شوند."
+        f"🛡️ تجهیزات مجهز: {len(equipped)}\n\n"
+        "⚔️ <b>افزایش آمار از تجهیزات</b>\n"
+        f"⚔️ حمله: +{stats['attack']}\n"
+        f"🔮 قدرت جادو: +{stats['magic_power']}\n"
+        f"🛡️ دفاع: +{stats['defense']}\n"
+        f"🔰 دفاع جادویی: +{stats['magic_defense']}\n"
+        f"❤️ سلامتی: +{stats['hp']}\n"
+        f"💧 مانا: +{stats['mana']}\n"
+        f"💨 سرعت: +{stats['speed']}\n"
+        f"🎯 دقت: +{stats['accuracy']}\n"
+        f"💥 ضربه بحرانی: +{stats['critical']}%\n\n"
+        "این مقادیر، پاداش آمار تجهیزات مجهز را نشان می‌دهند."
     )
 
-    await callback.message.edit_text(
+    await edit_panel(
+        callback,
         text,
-        reply_markup=equipment_main_keyboard(),
+        equipment_main_keyboard(),
     )
 
-    await callback.answer()
 
-
-@router.callback_query(
-    lambda callback: callback.data == "equipment:back"
-)
+@router.callback_query(F.data == "equipment:back")
 async def equipment_back_handler(
     callback: CallbackQuery,
-):
-
-    await callback.message.edit_text(
-        "🎮 <b>منوی اصلی World Eldoria</b>\n\n"
-        "🌌 ماجراجویی تو در اِلدوریا ادامه دارد...",
+) -> None:
+    await show_panel(
+        callback=callback,
+        panel_name="main_menu",
+        text=MAIN_MENU_TEXT,
         reply_markup=main_menu_keyboard(),
     )
 

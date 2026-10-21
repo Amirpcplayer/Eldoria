@@ -1,0 +1,67 @@
+"""Timed scroll effects. Buffs are stored with Redis TTL and an explicit expiry timestamp."""
+from __future__ import annotations
+import json
+from datetime import datetime, timedelta
+from database.redis import redis
+
+DURATION_SECONDS = 2 * 60 * 60
+SCROLLS = {
+    "power": {"names": ("📜 اسکرول قدرت",), "title": "قدرت", "description": "به مدت ۲ ساعت، آسیب حملات فیزیکی و جادویی را ۲۰٪ افزایش می‌دهد."},
+    "defense": {"names": ("📜 اسکرول دفاع",), "title": "دفاع", "description": "به مدت ۲ ساعت، آسیب دریافتی از دشمنان را ۲۰٪ کاهش می‌دهد."},
+    "resistance": {"names": ("📜 اسکرول مقاومت",), "title": "مقاومت‌شکن", "description": "به مدت ۲ ساعت، مقاومت عنصری دشمن را هنگام جادو نادیده می‌گیرد."},
+    "healing": {"names": ("📜 اسکرول درمان",), "title": "درمان", "description": "به مدت ۲ ساعت، اثر بازیابی HP را ۲۰٪ افزایش می‌دهد."},
+    "mana": {"names": ("📜 اسکرول مانا",), "title": "مانا", "description": "به مدت ۲ ساعت، اثر بازیابی Mana را ۲۰٪ افزایش می‌دهد."},
+    "explorer": {"names": ("📜 اسکرول شکارچی", "📜 اسکرول کاوشگر"), "title": "کاوشگر", "description": "به مدت ۲ ساعت، پاداش XP و Gold ماجراجویی و شانس یافتن متریال را ۳۰٪ افزایش می‌دهد."},
+}
+
+def scroll_kind(item_name: str) -> str | None:
+    for kind, data in SCROLLS.items():
+        if item_name in data["names"]:
+            return kind
+    return None
+
+def buff_key(telegram_id: int, kind: str) -> str:
+    return f"eldoria:scroll_buff:{int(telegram_id)}:{kind}"
+
+async def get_buff(telegram_id: int, kind: str) -> dict | None:
+    raw = await redis.get(buff_key(telegram_id, kind))
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        if float(data.get("expires_at", 0)) <= datetime.utcnow().timestamp():
+            await redis.delete(buff_key(telegram_id, kind))
+            return None
+        return data
+    except (ValueError, TypeError, json.JSONDecodeError):
+        await redis.delete(buff_key(telegram_id, kind))
+        return None
+
+async def has_buff(telegram_id: int, kind: str) -> bool:
+    return await get_buff(telegram_id, kind) is not None
+
+async def activate_scroll(telegram_id: int, kind: str) -> tuple[bool, str]:
+    if kind not in SCROLLS:
+        return False, "این اسکرول اثر شناخته‌شده‌ای ندارد."
+    key = buff_key(telegram_id, kind)
+    existing = await get_buff(telegram_id, kind)
+    if existing:
+        remaining = max(1, int(float(existing["expires_at"]) - datetime.utcnow().timestamp()))
+        hours, minutes = divmod(remaining // 60, 60)
+        return False, f"اثر «{SCROLLS[kind]['title']}» از قبل فعال است؛ زمان باقی‌مانده: {hours} ساعت و {minutes} دقیقه. اثرها روی هم انباشته نمی‌شوند."
+    now = datetime.utcnow().timestamp()
+    payload = {"kind": kind, "started_at": now, "expires_at": now + DURATION_SECONDS}
+    await redis.set(key, json.dumps(payload), ex=DURATION_SECONDS, nx=True)
+    # Defend against two nearly simultaneous taps; only one activation wins.
+    confirmed = await get_buff(telegram_id, kind)
+    if not confirmed or float(confirmed.get("started_at", 0)) != now:
+        return False, "این اسکرول همین حالا فعال شده است؛ اثر تکراری اعمال نشد."
+    return True, f"اسکرول «{SCROLLS[kind]['title']}» فعال شد و تا ۲ ساعت اثر دارد."
+
+async def active_buffs(telegram_id: int) -> list[tuple[str, dict]]:
+    result = []
+    for kind, data in SCROLLS.items():
+        buff = await get_buff(telegram_id, kind)
+        if buff:
+            result.append((kind, buff))
+    return result

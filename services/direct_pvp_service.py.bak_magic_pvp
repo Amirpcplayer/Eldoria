@@ -1,0 +1,337 @@
+from __future__ import annotations
+
+import random
+from datetime import datetime, timedelta
+from typing import Any
+
+from sqlalchemy import select
+
+from database.database import AsyncSessionLocal
+from database.redis import redis
+from models.character import Character
+from models.equipment import CharacterEquipment, Equipment
+from models.world_systems import CharacterActivity, PvpRating, PvpBounty
+from models.social_systems import CharacterPet, Pet
+from services.equipment_service import get_final_character_stats
+from services.combat_service import has_active_battle
+from services.death_service import ensure_character_alive
+from services.pvp_service import _has_active_pvp
+
+ATTACK_COOLDOWN_SECONDS = 10
+PAIR_COOLDOWN_SECONDS = 10
+
+
+def _remaining_death_text(dead_until: datetime | None, now: datetime | None = None) -> str:
+    now = now or datetime.utcnow()
+    if dead_until is None or dead_until <= now:
+        return "اکنون"
+    seconds = max(1, int((dead_until - now).total_seconds()))
+    minutes, seconds = divmod(seconds, 60)
+    if minutes >= 60:
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours} ساعت و {minutes} دقیقهٔ دیگر"
+    if minutes:
+        return f"{minutes} دقیقه و {seconds} ثانیهٔ دیگر"
+    return f"{seconds} ثانیهٔ دیگر"
+
+
+async def _dead_target_message(target_id: int) -> str:
+    async with AsyncSessionLocal() as session:
+        target = await session.scalar(select(Character).where(Character.telegram_id == target_id))
+        if target is None:
+            return "❌ برای این بازیکن شخصیت اِلدوریا پیدا نشد."
+        until = target.dead_until
+        if until and until > datetime.utcnow():
+            return f"💀 این قهرمان مرده است؛ تا {_remaining_death_text(until)} نمی‌توانی به او حمله کنی."
+    return "❌ این بازیکن در حال حاضر قابل‌حمله نیست."
+
+
+async def _active_pet_combat_profile(session, character_id: int) -> dict[str, int | str] | None:
+    row = (await session.execute(
+        select(CharacterPet, Pet).join(Pet, Pet.id == CharacterPet.pet_id)
+        .where(CharacterPet.character_id == character_id, CharacterPet.active.is_(True))
+        .limit(1)
+    )).first()
+    if row is None:
+        return None
+    pet_row, pet = row
+    level = max(1, min(100, int(pet_row.level or 1)))
+    return {
+        "level": level, "name": str(pet.name),
+        "bonus_attack": max(0, int(pet.bonus_attack or 0)),
+        "bonus_defense": max(0, int(pet.bonus_defense or 0)),
+        "critical_bonus": min(5, level // 20),
+        "guard_percent": min(5, level // 20),
+    }
+
+
+async def _claim_bounties(session, target_character_id: int, killer_character_id: int, now: datetime) -> int:
+    rows = (await session.scalars(select(PvpBounty).where(
+        PvpBounty.target_character_id == target_character_id, PvpBounty.status == "active"
+    ).with_for_update())).all()
+    total = 0
+    for row in rows:
+        row.claimed_at = now
+        if row.sponsor_character_id == killer_character_id:
+            # No self-claiming: refund the sponsor's own bounty instead of paying it to them.
+            sponsor = await session.scalar(select(Character).where(Character.id == killer_character_id).with_for_update())
+            if sponsor is not None:
+                sponsor.gold = min(2_147_483_647, int(sponsor.gold or 0) + max(0, int(row.amount or 0)))
+            row.status = "cancelled_self_claim"
+            row.claimed_by_character_id = None
+        else:
+            row.status = "claimed"
+            row.claimed_by_character_id = killer_character_id
+            total += max(0, int(row.amount or 0))
+    if total:
+        killer = await session.scalar(select(Character).where(Character.id == killer_character_id).with_for_update())
+        if killer is not None:
+            killer.gold = min(2_147_483_647, int(killer.gold or 0) + total)
+    return total
+
+
+def _cooldown_key(attacker_id: int, target_id: int) -> str:
+    # One shared cooldown per attacker: switching targets or attack types cannot bypass it.
+    return f"eldoria:direct_pvp:attacker_cooldown:{attacker_id}"
+
+
+async def direct_attack(attacker_id: int, target_id: int) -> dict[str, Any]:
+    if attacker_id == target_id:
+        return {"ok": False, "message": "❌ نمی‌توانی به خودت حمله کنی."}
+
+    alive, msg = await ensure_character_alive(attacker_id)
+    if not alive:
+        return {"ok": False, "message": msg}
+    alive, msg = await ensure_character_alive(target_id)
+    if not alive:
+        return {"ok": False, "message": await _dead_target_message(target_id)}
+
+    if await has_active_battle(attacker_id) or await _has_active_pvp(attacker_id):
+        return {"ok": False, "message": "⚔️ تا پایان نبرد فعلی نمی‌توانی حملهٔ جدیدی آغاز کنی."}
+    if await has_active_battle(target_id) or await _has_active_pvp(target_id):
+        return {"ok": False, "message": "🛡️ این بازیکن در نبرد دیگری حضور دارد و فعلاً قابل‌حمله نیست."}
+
+    key = _cooldown_key(attacker_id, target_id)
+    acquired = await redis.set(key, "1", nx=True, ex=PAIR_COOLDOWN_SECONDS)
+    if not acquired:
+        ttl = max(1, int(await redis.ttl(key)))
+        return {"ok": False, "message": f"⏳ برای حملهٔ دوباره به این قهرمان {ttl} ثانیه صبر کن."}
+
+    attacker_stats = await get_final_character_stats(attacker_id)
+    target_stats = await get_final_character_stats(target_id)
+    if not attacker_stats or not target_stats:
+        await redis.delete(key)
+        return {"ok": False, "message": "❌ دریافت مشخصات مبارزه ناموفق بود."}
+
+    try:
+        async with AsyncSessionLocal() as session:
+            attacker = await session.scalar(select(Character).where(Character.telegram_id == attacker_id).with_for_update())
+            target = await session.scalar(select(Character).where(Character.telegram_id == target_id).with_for_update())
+            if attacker is None or target is None:
+                await redis.delete(key)
+                return {"ok": False, "message": "❌ هر دو بازیکن باید شخصیت ساخته باشند."}
+            now = datetime.utcnow()
+            if attacker.dead_until and attacker.dead_until > now:
+                await redis.delete(key)
+                return {"ok": False, "message": "💀 تو هنوز در دورهٔ احیا هستی و نمی‌توانی بجنگی."}
+            if target.dead_until and target.dead_until > now:
+                await redis.delete(key)
+                return {"ok": False, "message": f"💀 این قهرمان مرده است؛ تا {_remaining_death_text(target.dead_until, now)} نمی‌توانی به او حمله کنی."}
+
+            weapon_name = "سلاح رزمی"
+            weapon = await session.scalar(
+                select(Equipment.name)
+                .join(CharacterEquipment, CharacterEquipment.equipment_id == Equipment.id)
+                .where(CharacterEquipment.character_id == attacker.id,
+                       CharacterEquipment.equipped.is_(True),
+                       Equipment.equipment_type == "weapon")
+                .limit(1)
+            )
+            if weapon:
+                weapon_name = str(weapon)
+
+            base_attack = max(1, int(attacker_stats.get("attack", attacker.attack or 1)))
+            defense = max(0, int(target_stats.get("defense", target.defense or 0)))
+            attacker_title = str(attacker.active_title or "شاگرد اِلدوریا")
+            target_title = str(target.active_title or "شاگرد اِلدوریا")
+            damage = max(1, base_attack - defense // 2 + random.randint(0, max(1, base_attack // 8)))
+            attacker_pet_profile = await _active_pet_combat_profile(session, attacker.id)
+            target_pet_profile = await _active_pet_combat_profile(session, target.id)
+            pet_crit_bonus = int(attacker_pet_profile.get("critical_bonus", 0)) if attacker_pet_profile else 0
+            crit_chance = max(0, min(50, int(attacker_stats.get("critical", attacker.critical or 0)) + pet_crit_bonus))
+            critical = random.randint(1, 100) <= crit_chance
+            if critical:
+                damage = int(damage * 1.5)
+            pet_guard = int(target_pet_profile.get("guard_percent", 0)) if target_pet_profile else 0
+            if pet_guard:
+                damage = max(1, int(damage * (100 - pet_guard) / 100))
+            old_target_gold = max(0, int(target.gold or 0))
+            attack_reward = int(old_target_gold * 0.015)
+            target.hp = max(0, int(target.hp or 0) - damage)
+            killed = target.hp <= 0
+            loot = int(old_target_gold * 0.05) if killed else 0
+            attacker.gold = min(2_147_483_647, int(attacker.gold or 0) + attack_reward + loot)
+            bounty_reward = 0
+            if killed:
+                target.gold = max(0, old_target_gold - loot)
+                target.dead_until = now + timedelta(minutes=10)
+                target.mana = max(0, int(target.mana or 0))
+                bounty_reward = await _claim_bounties(session, target.id, attacker.id, now)
+                rating = await session.scalar(select(PvpRating).where(PvpRating.character_id == attacker.id).with_for_update())
+                if rating is None:
+                    rating = PvpRating(character_id=attacker.id, rating=1000, wins=0, losses=0)
+                    session.add(rating)
+                    await session.flush()
+                rating.rating += 20
+                rating.wins += 1
+                rating.updated_at = now
+                loser_rating = await session.scalar(select(PvpRating).where(PvpRating.character_id == target.id).with_for_update())
+                if loser_rating is None:
+                    loser_rating = PvpRating(character_id=target.id, rating=1000, wins=0, losses=0)
+                    session.add(loser_rating)
+                    await session.flush()
+                loser_rating.rating = max(0, int(loser_rating.rating) - 10)
+                loser_rating.losses += 1
+                loser_rating.updated_at = now
+                session.add(CharacterActivity(character_id=attacker.id, event_type="pvp_win", details=f"direct_attack;damage={damage};attack_reward={attack_reward};loot={loot}"))
+                session.add(CharacterActivity(character_id=target.id, event_type="pvp_loss", details=f"direct_attack;damage={damage};loot_lost={loot}"))
+            else:
+                session.add(CharacterActivity(character_id=attacker.id, event_type="pvp_attack", details=f"target={target.id};damage={damage};attack_reward={attack_reward}"))
+            await session.commit()
+            return {
+                "ok": True, "attacker_name": attacker.name, "target_name": target.name,
+                "weapon_name": weapon_name, "damage": damage, "critical": critical,
+                "attacker_title": attacker_title, "target_title": target_title,
+                "attacker_stats": attacker_stats, "target_stats": target_stats,
+                "attacker_pet_ability": (f"افزایش {pet_crit_bonus}% احتمال بحرانی" if pet_crit_bonus else None),
+                "target_pet_ability": (f"کاهش {pet_guard}% آسیب دریافتی" if pet_guard else None),
+                "bounty_reward": bounty_reward,
+                "target_hp": int(target.hp or 0), "target_max_hp": max(1, int(target.max_hp or 100)),
+                "target_gold": max(0, int(target.gold or 0)), "attack_reward": attack_reward,
+                "loot": loot, "killed": killed, "revive_at": target.dead_until,
+            }
+    except Exception:
+        await redis.delete(key)
+        raise
+
+
+PET_ATTACKS_PER_WINDOW = 3
+PET_ATTACK_WINDOW = timedelta(hours=24)
+
+def _pet_cooldown_key(attacker_id: int, target_id: int) -> str:
+    # Share the normal PvP cooldown so pet attacks cannot bypass the 10-second limit.
+    return f"eldoria:direct_pvp:attacker_cooldown:{attacker_id}"
+
+async def direct_pet_attack(attacker_id: int, target_id: int) -> dict[str, Any]:
+    """Attack a replied-to player with the active pet (3 attacks per rolling 24h)."""
+    if attacker_id == target_id:
+        return {"ok": False, "message": "❌ پتت نمی‌تواند به صاحبش حمله کند."}
+    alive, msg = await ensure_character_alive(attacker_id)
+    if not alive:
+        return {"ok": False, "message": msg}
+    alive, msg = await ensure_character_alive(target_id)
+    if not alive:
+        return {"ok": False, "message": await _dead_target_message(target_id)}
+    if await has_active_battle(attacker_id) or await _has_active_pvp(attacker_id):
+        return {"ok": False, "message": "⚔️ تا پایان نبرد فعلی نمی‌توانی حملهٔ پت انجام بدهی."}
+    if await has_active_battle(target_id) or await _has_active_pvp(target_id):
+        return {"ok": False, "message": "🛡️ این بازیکن در نبرد دیگری حضور دارد و فعلاً قابل‌حمله نیست."}
+
+    key = _pet_cooldown_key(attacker_id, target_id)
+    if not await redis.set(key, "1", nx=True, ex=PAIR_COOLDOWN_SECONDS):
+        ttl = max(1, int(await redis.ttl(key)))
+        return {"ok": False, "message": f"⏳ برای حملهٔ دوباره به این بازیکن {ttl} ثانیه صبر کن."}
+
+    attacker_stats = await get_final_character_stats(attacker_id)
+    target_stats = await get_final_character_stats(target_id)
+    if not attacker_stats or not target_stats:
+        await redis.delete(key)
+        return {"ok": False, "message": "❌ دریافت مشخصات مبارزه ناموفق بود."}
+
+    try:
+        async with AsyncSessionLocal() as session:
+            attacker = await session.scalar(select(Character).where(Character.telegram_id == attacker_id).with_for_update())
+            target = await session.scalar(select(Character).where(Character.telegram_id == target_id).with_for_update())
+            if attacker is None or target is None:
+                await redis.delete(key)
+                return {"ok": False, "message": "❌ هر دو بازیکن باید شخصیت ساخته باشند."}
+            now = datetime.utcnow()
+            if attacker.dead_until and attacker.dead_until > now:
+                await redis.delete(key)
+                return {"ok": False, "message": f"💀 خودت هنوز مرده‌ای؛ تا {_remaining_death_text(attacker.dead_until, now)} نمی‌توانی حمله کنی."}
+            if target.dead_until and target.dead_until > now:
+                await redis.delete(key)
+                return {"ok": False, "message": f"💀 این قهرمان مرده است؛ تا {_remaining_death_text(target.dead_until, now)} نمی‌توانی به او حمله کنی."}
+
+            pet_row = await session.scalar(select(CharacterPet).where(CharacterPet.character_id == attacker.id, CharacterPet.active.is_(True)).with_for_update())
+            if pet_row is None:
+                await redis.delete(key)
+                return {"ok": False, "message": "🐾 برای حمله باید یک پت فعال انتخاب کرده باشی."}
+            pet = await session.get(Pet, pet_row.pet_id)
+            if pet is None:
+                await redis.delete(key)
+                return {"ok": False, "message": "🐾 پت فعال پیدا نشد."}
+
+            window_started = pet_row.pet_attack_window_started_at
+            uses = int(pet_row.pet_attack_uses or 0)
+            if window_started is None or now - window_started >= PET_ATTACK_WINDOW:
+                window_started = now
+                uses = 0
+            if uses >= PET_ATTACKS_PER_WINDOW:
+                remaining = max(1, int((window_started + PET_ATTACK_WINDOW - now).total_seconds()))
+                await redis.delete(key)
+                return {"ok": False, "message": f"🐾 هر ۲۴ ساعت فقط ۳ حمله با پت داری. تلاش بعدی تا {remaining // 3600} ساعت و {(remaining % 3600) // 60} دقیقهٔ دیگر ممکن است."}
+
+            pet_level = max(1, min(100, int(pet_row.level or 1)))
+            # Pet partnership scales with pet level and its own combat stats.
+            # The central character stats already include the pet's passive bonus;
+            # this ratio is the pet's separate active strike.
+            power_ratio = 0.25 + (pet_level - 1) * (0.85 / 99)
+            hero_attack = max(1, int(attacker_stats.get("attack", attacker.attack or 1)))
+            pet_attack = max(1, int(hero_attack * power_ratio) + int(pet.bonus_attack or 0) * pet_level // 100)
+            attacker_title = str(attacker.active_title or "شاگرد اِلدوریا")
+            target_title = str(target.active_title or "شاگرد اِلدوریا")
+            target_defense = max(0, int(target_stats.get("defense", target.defense or 0)))
+            damage = max(1, pet_attack - target_defense // 2 + random.randint(0, max(1, pet_attack // 10)))
+            attacker_pet_profile = {"critical_bonus": min(5, pet_level // 20)}
+            target_pet_profile = await _active_pet_combat_profile(session, target.id)
+            crit_chance = max(0, min(50, int(attacker_stats.get("critical", attacker.critical or 0)) + int(attacker_pet_profile["critical_bonus"])))
+            critical = random.randint(1, 100) <= crit_chance
+            if critical:
+                damage = int(damage * 1.5)
+            pet_guard = int(target_pet_profile.get("guard_percent", 0)) if target_pet_profile else 0
+            if pet_guard:
+                damage = max(1, int(damage * (100 - pet_guard) / 100))
+
+            old_target_gold = max(0, int(target.gold or 0))
+            attack_reward = int(old_target_gold * 0.015)
+            target.hp = max(0, int(target.hp or 0) - damage)
+            killed = target.hp <= 0
+            loot = int(old_target_gold * 0.05) if killed else 0
+            attacker.gold = min(2_147_483_647, int(attacker.gold or 0) + attack_reward + loot)
+            bounty_reward = 0
+            if killed:
+                target.gold = max(0, old_target_gold - loot)
+                target.dead_until = now + timedelta(minutes=10)
+                bounty_reward = await _claim_bounties(session, target.id, attacker.id, now)
+                winner = await session.scalar(select(PvpRating).where(PvpRating.character_id == attacker.id).with_for_update())
+                if winner is None:
+                    winner = PvpRating(character_id=attacker.id, rating=1000, wins=0, losses=0)
+                    session.add(winner); await session.flush()
+                winner.rating += 20; winner.wins += 1; winner.updated_at = now
+                loser = await session.scalar(select(PvpRating).where(PvpRating.character_id == target.id).with_for_update())
+                if loser is None:
+                    loser = PvpRating(character_id=target.id, rating=1000, wins=0, losses=0)
+                    session.add(loser); await session.flush()
+                loser.rating = max(0, int(loser.rating) - 10); loser.losses += 1; loser.updated_at = now
+                session.add(CharacterActivity(character_id=attacker.id, event_type="pvp_win", details=f"pet_attack;pet={pet.id};damage={damage};attack_reward={attack_reward};loot={loot}"))
+                session.add(CharacterActivity(character_id=target.id, event_type="pvp_loss", details=f"pet_attack;damage={damage};loot_lost={loot}"))
+            else:
+                session.add(CharacterActivity(character_id=attacker.id, event_type="pvp_pet_attack", details=f"target={target.id};pet={pet.id};damage={damage};attack_reward={attack_reward}"))
+            pet_row.pet_attack_window_started_at = window_started
+            pet_row.pet_attack_uses = uses + 1
+            await session.commit()
+            return {"ok": True, "attacker_name": attacker.name, "target_name": target.name, "attacker_title": attacker_title, "target_title": target_title, "attacker_stats": attacker_stats, "target_stats": target_stats, "attacker_pet_ability": (f"افزایش {int(attacker_pet_profile['critical_bonus'])}% احتمال بحرانی" if int(attacker_pet_profile['critical_bonus']) else None), "target_pet_ability": (f"کاهش {pet_guard}% آسیب دریافتی" if pet_guard else None), "pet_name": pet.name, "pet_level": pet_level, "damage": damage, "critical": critical, "bounty_reward": bounty_reward, "target_hp": int(target.hp or 0), "target_max_hp": max(1, int(target.max_hp or 100)), "target_gold": max(0, int(target.gold or 0)), "attack_reward": attack_reward, "loot": loot, "killed": killed, "revive_at": target.dead_until, "uses_left": max(0, PET_ATTACKS_PER_WINDOW - (uses + 1))}
+    except Exception:
+        await redis.delete(key)
+        raise

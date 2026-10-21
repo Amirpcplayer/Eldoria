@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from sqlalchemy import (
@@ -33,6 +35,13 @@ class Equipment(Base):
         nullable=True,
     )
 
+    # گروه ست برای پاداش چندقطعه‌ای؛ NULL یعنی تجهیز بدون ست.
+    set_key: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+        index=True,
+    )
+
     # weapon / helmet / armor / boots / ring / necklace
     equipment_type: Mapped[str] = mapped_column(
         String(32),
@@ -53,6 +62,14 @@ class Equipment(Base):
         default=1,
         nullable=False,
     )
+
+    shop_price: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    gem_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     attack: Mapped[int] = mapped_column(
         Integer,
@@ -161,6 +178,8 @@ class CharacterEquipment(Base):
         default=False,
         nullable=False,
     )
+
+    enhancement_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

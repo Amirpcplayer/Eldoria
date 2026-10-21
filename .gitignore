@@ -1,8 +1,26 @@
+# Secrets and local configuration
 .env
+.env.*
+!.env.example
+
+# Python artifacts
 .venv/
+.venv-*/
+venv/
 __pycache__/
-*.pyc
-.idea/
-.vscode/
+*.py[cod]
 .pytest_cache/
 .coverage
+htmlcov/
+
+# Editors and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local audit/debug exports (may contain identifiers or operational details)
+admin_search_audit.txt
+fanart_delete_audit.txt
+project_files.txt
+proxy_test.py

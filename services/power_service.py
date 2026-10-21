@@ -54,19 +54,21 @@ def get_hero_base_stats(level: int) -> HeroBaseStats:
 
     level = max(1, min(level, MAX_LEVEL))
 
-    multiplier = get_level_multiplier(level)
-
+    # Level 100 baseline is intentionally endgame-scale so an unequipped
+    # hero can survive and contribute against a level-150 group boss.
+    # Equipment is added separately by character_stats_service.
+    growth = (level - 1) ** 2
     return HeroBaseStats(
-        hp=max(1, round(100 * multiplier)),
-        mana=max(1, round(100 * multiplier)),
-        attack=max(1, round(10 * multiplier)),
-        magic_power=max(1, round(10 * multiplier)),
-        defense=max(1, round(8 * multiplier)),
-        magic_defense=max(1, round(8 * multiplier)),
-        speed=max(1, round(10 * multiplier)),
-        accuracy=max(1, round(10 * multiplier)),
-        luck=max(1, round(5 * multiplier)),
-        critical=max(1, round(5 * multiplier)),
+        hp=max(100, 100 + 50 * growth),
+        mana=max(100, 100 + 50 * growth),
+        attack=max(10, 10 + int(5.1 * growth)),
+        magic_power=max(10, 10 + int(5.1 * growth)),
+        defense=max(8, 8 + int(2.55 * growth)),
+        magic_defense=max(8, 8 + int(2.55 * growth)),
+        speed=max(10, 10 + int(0.35 * growth)),
+        accuracy=max(10, 10 + int(0.35 * growth)),
+        luck=max(5, 5 + int(0.08 * growth)),
+        critical=max(5, min(75, 5 + int(0.08 * growth))),
     )
 
 
