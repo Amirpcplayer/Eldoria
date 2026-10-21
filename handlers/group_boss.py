@@ -14,6 +14,7 @@ from sqlalchemy import select, delete
 
 from bot.bot import bot
 from database.database import AsyncSessionLocal
+from database.redis import redis
 from models.character import Character
 from models.character_skill import CharacterSkill
 from models.inventory import Inventory
@@ -24,6 +25,7 @@ from models.world_systems import GroupBoss, GroupBossContribution, GroupBossAtta
 from services.equipment_service import get_final_character_stats
 from services.skill_service import get_skill_mana_cost, get_skill_power
 from services.xp_service import add_character_xp
+from services.story_encounters import STORY_ENCOUNTERS
 from config.settings import settings
 
 router = Router(name="group_boss")
@@ -1223,8 +1225,68 @@ async def group_boss_status(message: Message):
     await message.reply(text, parse_mode="HTML")
 
 
+async def _story_attack(message: Message) -> None:
+    """Resolve a no-reply story encounter with a per-player five-minute cooldown."""
+    if message.from_user is None:
+        return
+
+    telegram_id = message.from_user.id
+    cooldown_key = f"eldoria:story_attack_cooldown:{telegram_id}"
+    acquired = await redis.set(cooldown_key, "1", ex=300, nx=True)
+    if not acquired:
+        try:
+            remaining = max(1, int(await redis.ttl(cooldown_key)))
+        except Exception:
+            remaining = 300
+        await message.reply(
+            f"⏳ برخورد داستانی هنوز در حال استراحت است؛ {remaining // 60} دقیقه و {remaining % 60} ثانیه دیگر دوباره تلاش کن."
+        )
+        return
+
+    encounter = random.choice(STORY_ENCOUNTERS)
+    gold_reward = int(encounter["gold"])
+    xp_reward = int(encounter["xp"])
+
+    try:
+        from services.scroll_service import has_buff
+        if await has_buff(telegram_id, "explorer"):
+            gold_reward = int(gold_reward * 1.30)
+            xp_reward = int(xp_reward * 1.30)
+    except Exception:
+        logger.exception("Could not apply explorer scroll to story encounter")
+
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == telegram_id).with_for_update()
+        )
+        if character is None:
+            await redis.delete(cooldown_key)
+            await message.reply("ابتدا با /start قهرمانت را بساز، بعد می‌توانی وارد نبرد داستانی شوی.")
+            return
+        character.gold = int(character.gold or 0) + gold_reward
+        await session.commit()
+        hero_name = html.escape(str(character.name or "قهرمان"))
+
+    await add_character_xp(telegram_id, xp_reward)
+    await message.reply(
+        "╔══════ ✦ برخورد داستانی اِلدوریا ✦ ══════╗\n\n"
+        f"📖 {encounter['description']}\n\n"
+        f"⚔️ {encounter['victory']}\n\n"
+        f"🛡️ قهرمان: <b>{hero_name}</b>\n"
+        f"✨ تجربه: +{xp_reward:,} XP\n"
+        f"💰 طلا: +{gold_reward:,} Gold\n\n"
+        "⏳ برخورد داستانی بعدی پس از ۵ دقیقه در دسترس است.\n"
+        "╚════════ ✦ اِلدوریا ✦ ════════╝",
+        parse_mode="HTML",
+    )
+
+
 @router.message(Command("attack", ignore_case=True))
+@router.message(F.text.regexp(r"(?i)^\\s*حمله\\s*$"))
 async def group_boss_attack(message: Message):
+    if message.reply_to_message is None:
+        await _story_attack(message)
+        return
     await _attack(message)
 
 
