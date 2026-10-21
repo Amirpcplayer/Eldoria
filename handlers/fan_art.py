@@ -283,8 +283,9 @@ async def fan_art_buy(
     if callback.message.photo:
         await callback.message.edit_caption(
             caption=caption,
-            reply_markup=fan_art_payment_keyboard(
-                fan_art.id,
+            reply_markup=protect_keyboard(
+                fan_art_payment_keyboard(fan_art.id),
+                callback.from_user.id,
             ),
         )
     else:
@@ -402,11 +403,8 @@ async def fan_art_paid(
             FanArtStates.waiting_receipt,
         )
 
-        try:
-            if callback.message.photo:
-                await callback.message.delete()
-        except Exception:
-            pass
+        # Keep the payment panel in chat history so the user can refer back to it.
+        # The next receipt instructions are sent as a separate message.
 
         await callback.message.answer(
             "📷 ارسال رسید پرداخت\n\n"
