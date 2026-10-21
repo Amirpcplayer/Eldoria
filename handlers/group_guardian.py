@@ -135,6 +135,8 @@ async def callback(callback: CallbackQuery, state: FSMContext):
         for item in ids:
             try:
                 member = await callback.bot.get_chat_member(chat_id, int(item))
+                if member.status == "creator":
+                    continue
                 lines.append(f"🛡️ {html.escape(member.user.full_name)} — <code>{item}</code>")
             except TelegramAPIError:
                 lines.append(f"🛡️ <code>{item}</code>")
@@ -271,6 +273,8 @@ async def admin_roster(message: Message):
         for item in ids:
             try:
                 m = await message.bot.get_chat_member(chat_id, int(item))
+                if m.status == "creator":
+                    continue
                 lines.append(f"🛡️ {html.escape(m.user.full_name)} — <code>{item}</code>")
             except TelegramAPIError:
                 lines.append(f"🛡️ <code>{item}</code>")
