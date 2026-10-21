@@ -26,6 +26,12 @@ def inventory_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="📦 همه آیتم‌های موجود",
+                    callback_data="inventory:all",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎨 فن‌آرت‌های من",
                     callback_data="inventory:fanart",
                 ),
