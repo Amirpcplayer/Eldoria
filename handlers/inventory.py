@@ -563,7 +563,7 @@ async def item_details_handler(
             text += f"\n\n⏳ <b>اثر فعال</b>: {hours} ساعت و {minutes} دقیقه باقی مانده است."
         rows = []
         if not active:
-            rows.append([InlineKeyboardButton(text="✨ استفاده از اسکرول", callback_data=f"item:use_scroll:{item.id}")])
+            rows.append([InlineKeyboardButton(text="📖 خواندن و فعال‌سازی اسکرول", callback_data=f"item:use_scroll:{item.id}")])
         else:
             rows.append([InlineKeyboardButton(text="⏳ اثر این اسکرول فعال است", callback_data="inventory:noop")])
         rows.extend([
