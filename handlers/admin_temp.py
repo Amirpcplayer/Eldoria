@@ -798,6 +798,23 @@ async def delete_player_confirm(callback: CallbackQuery):
         )
         return
 
+    # Notify the player after the database deletion succeeds.
+    try:
+        await bot.send_message(
+            telegram_id,
+            "༺ ✦ اِلدوریا ✦ ༻\n\n"
+            "حساب شما از طرف ادمین با موفقیت حذف شد.\n"
+            "برای شروع دوباره /start بزنید.\n\n"
+            "پشتیبانی : @P_ERSIAN19",
+        )
+    except Exception:
+        # A blocked bot or a player who never opened the bot must not undo deletion.
+        logger.warning(
+            "Could not notify deleted player. telegram_id=%s",
+            telegram_id,
+            exc_info=True,
+        )
+
     logger.info(
         "Player deleted by admin. telegram_id=%s admin_id=%s "
         "deleted_quests=%s deleted_fan_art_ownerships=%s",
