@@ -36,10 +36,42 @@ async def get_guild_for_player(telegram_id: int) -> dict | None:
             .where(GuildMember.telegram_id == telegram_id)
             .limit(1)
         )).first()
+
+        # Compatibility repair: older guild records may have the owner saved on
+        # Guild but lack the corresponding GuildMember row. Recognize the owner
+        # record and restore the missing membership instead of showing the
+        # create/find-guild screen to an existing guild owner.
         if not row:
-            return None
+            owned_guild = await session.scalar(
+                select(Guild).where(Guild.owner_telegram_id == telegram_id).limit(1)
+            )
+            if owned_guild is None:
+                return None
+            member = await session.scalar(
+                select(GuildMember).where(
+                    GuildMember.guild_id == owned_guild.id,
+                    GuildMember.telegram_id == telegram_id,
+                )
+            )
+            if member is None:
+                member = GuildMember(
+                    guild_id=owned_guild.id,
+                    telegram_id=telegram_id,
+                    role="owner",
+                )
+                session.add(member)
+                try:
+                    await session.flush()
+                except IntegrityError:
+                    await session.rollback()
+                    return await get_guild_for_player(telegram_id)
+            row = (owned_guild, member)
+
         guild, member = row
-        count = await session.scalar(select(func.count(GuildMember.id)).where(GuildMember.guild_id == guild.id)) or 0
+        count = await session.scalar(
+            select(func.count(GuildMember.id)).where(GuildMember.guild_id == guild.id)
+        ) or 0
+        await session.commit()
         return {
             "id": guild.id, "name": guild.name, "tag": guild.tag,
             "owner_telegram_id": guild.owner_telegram_id,
