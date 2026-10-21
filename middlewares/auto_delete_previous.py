@@ -76,8 +76,9 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
                 except Exception:
                     # A previous message may already have been deleted or be
                     # too old to delete. Never block the new reply because of it.
-                    logger.debug(
-                        "Could not delete previous bot message chat_id=%s message_id=%s",
+                    logger.warning(
+                        "Could not delete previous bot message chat_id=%s message_id=%s; "
+                        "Telegram API error follows",
                         chat_id,
                         message_id,
                         exc_info=True,
@@ -85,6 +86,12 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
 
             result = await make_request(bot, method)
             if isinstance(result, Message):
+                logger.info(
+                    "Tracked bot message chat_id=%s message_id=%s method=%s",
+                    chat_id,
+                    result.message_id,
+                    method_name,
+                )
                 self._last_messages[chat_id] = [result.message_id]
             elif isinstance(result, list):
                 ids = [
