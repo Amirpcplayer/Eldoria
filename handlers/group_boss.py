@@ -1077,8 +1077,11 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
             from services.scroll_service import has_buff
             if await has_buff(telegram_id, "power"):
                 damage = int(damage * 1.20)
+            # The skill scroll only boosts magic/skill attacks, not normal hits.
+            if skill_id is not None and await has_buff(telegram_id, "skill_power"):
+                damage = int(damage * 1.20)
         except Exception:
-            logger.exception("Could not apply power scroll to group boss attack")
+            logger.exception("Could not apply power/skill scrolls to group boss attack")
         damage = min(int(boss.hp), damage)
         boss.hp -= damage
         contribution = await session.scalar(select(GroupBossContribution).where(
