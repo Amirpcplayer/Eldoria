@@ -15,7 +15,7 @@ SCROLLS = {
 }
 
 def scroll_kind(item_name: str) -> str | None:
-    """Recognize scrolls even if the database name omits the decorative scroll emoji."""
+    """Map current and legacy Persian scroll names to their buff kind."""
     normalized = " ".join(str(item_name or "").replace("📜", "").split()).casefold()
     if not normalized:
         return None
@@ -24,14 +24,13 @@ def scroll_kind(item_name: str) -> str | None:
             known_normalized = " ".join(known_name.replace("📜", "").split()).casefold()
             if normalized == known_normalized or known_normalized in normalized:
                 return kind
-    # Older item rows may use a shorter display name.
     aliases = {
-        "power": ("اسکرول قدرت",),
-        "defense": ("اسکرول دفاع",),
-        "resistance": ("اسکرول مقاومت", "مقاومت شکن"),
-        "healing": ("اسکرول درمان",),
-        "mana": ("اسکرول مانا",),
-        "explorer": ("اسکرول شکارچی", "اسکرول کاوشگر"),
+        "power": ("اسکرول قدرت", "طومار قدرت", "قدرت"),
+        "defense": ("اسکرول دفاع", "طومار دفاع", "دفاع"),
+        "resistance": ("اسکرول مقاومت", "طومار مقاومت", "مقاومت شکن", "مقاومت‌شکن"),
+        "healing": ("اسکرول درمان", "طومار درمان", "درمان"),
+        "mana": ("اسکرول مانا", "طومار مانا", "مانا"),
+        "explorer": ("اسکرول شکارچی", "طومار شکارچی", "اسکرول کاوشگر", "طومار کاوشگر", "کاوشگر"),
     }
     for kind, names in aliases.items():
         if any(name.casefold() in normalized for name in names):
