@@ -72,7 +72,7 @@ async def settings_panel(
         panel_name="settings",
         text=text,
         reply_markup=keyboard,
-        parse_mode=None,
+        parse_mode="HTML",
     )
 
     try:
