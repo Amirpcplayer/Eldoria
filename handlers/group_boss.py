@@ -500,15 +500,17 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def resolve_boss_image(cfg: dict) -> Path | None:
     """Resolve boss artwork from one shared path for automatic and admin spawns."""
+    # Resolve the project root locally so this helper never depends on a module global.
+    root = Path(__file__).resolve().parent.parent
     candidates: list[Path] = []
     for key in ("image", "fallback_image"):
         raw = cfg.get(key)
         if not raw:
             continue
         relative = Path(str(raw).replace("\\", "/"))
-        candidates.append(relative if relative.is_absolute() else ROOT / relative)
+        candidates.append(relative if relative.is_absolute() else root / relative)
         # Some project versions store the same art in a different directory.
-        candidates.extend(ROOT / folder / relative.name for folder in (
+        candidates.extend(root / folder / relative.name for folder in (
             "assets/bosses", "assets/boss", "assets/dungeons", "assets/dungeon"
         ))
     seen: set[str] = set()
@@ -524,7 +526,7 @@ def resolve_boss_image(cfg: dict) -> Path | None:
         raw = cfg.get(key)
         if raw:
             name = Path(str(raw).replace("\\", "/")).name
-            for folder in (ROOT / "assets",):
+            for folder in (root / "assets",):
                 if folder.is_dir():
                     try:
                         found = next(folder.rglob(name), None)
