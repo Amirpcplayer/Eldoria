@@ -80,6 +80,23 @@ async def _save_fan_art_panel(callback: CallbackQuery, message: Message) -> None
         logging.getLogger(__name__).exception("Could not save Fan Art panel reference")
 
 
+async def _remove_active_shop_panel(chat_id: int, owner_id: int, bot) -> None:
+    """Remove only this player's shop panel when they enter the Fan Art flow."""
+    key = f"eldoria:active_panel:{chat_id}:{owner_id}:shop"
+    try:
+        previous = await redis.get(key)
+        if previous:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=int(previous))
+            except Exception:
+                # The panel may already be gone or no longer deletable.
+                pass
+        await redis.delete(key)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Could not remove previous shop panel")
+
+
 router = Router()
 
 
@@ -133,6 +150,12 @@ async def fan_art_main(
     callback: CallbackQuery,
 ):
     await callback.answer()
+    if callback.message is not None:
+        await _remove_active_shop_panel(
+            callback.message.chat.id,
+            callback.from_user.id,
+            callback.bot,
+        )
 
     await show_text(
         callback,
@@ -776,6 +799,12 @@ async def fan_art_sell(callback: CallbackQuery):
 @router.message(F.text.regexp(r"(?i)^\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\s*$"))
 async def fan_art_text_entry(message: Message):
     """Open the Fan Art section from a slash command or Persian shortcut."""
+    if message.from_user is not None:
+        await _remove_active_shop_panel(
+            message.chat.id,
+            message.from_user.id,
+            message.bot,
+        )
     await message.answer(
         "🎨 <b>تالار فن‌آرت اِلدوریا</b>\n\n"
         "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین.",
