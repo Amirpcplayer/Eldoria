@@ -251,7 +251,7 @@ def player_search_results_keyboard(
             )
         ]
         for character in characters
-        if character.telegram_id != settings.admin_id
+        if character.telegram_id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
     ]
 
     rows.append(
@@ -566,7 +566,7 @@ async def search_player_submit(
     characters = [
         character
         for character in characters
-        if character.telegram_id != settings.admin_id
+        if character.telegram_id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
     ]
 
     if not characters:
@@ -727,7 +727,7 @@ async def delete_player_confirm(callback: CallbackQuery):
         await callback.answer("شناسه پلیر نامعتبر است.", show_alert=True)
         return
 
-    if telegram_id == settings.admin_id:
+    if telegram_id in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await callback.answer(
             "حذف ادمین اصلی مجاز نیست.",
             show_alert=True,
