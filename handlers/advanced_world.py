@@ -23,7 +23,7 @@ class MarketSellStates(StatesGroup):
     waiting_quantity_price = State()
     waiting_edit_price = State()
 
-async def panel(cb:CallbackQuery,text:str,kb:InlineKeyboardMarkup,panel_name:str='shop'):
+async def panel(cb:CallbackQuery,text:str,kb:InlineKeyboardMarkup,panel_name:str='main_menu'):
     await show_panel(callback=cb,panel_name=panel_name,text=text,reply_markup=kb,parse_mode='HTML')
     try: await cb.answer()
     except Exception: pass
@@ -105,18 +105,18 @@ async def marketplace_menu(cb: CallbackQuery):
         [InlineKeyboardButton(text='❔ راهنمای بازار', callback_data='market:help')],
         back_row(),
     ])
-    await panel(cb, text, kb)
+    await panel(cb, text, kb, panel_name='shop')
 
 
 @router.callback_query(F.data.startswith('market:browse'))
-async def marketplace_browse(cb: CallbackQuery):
+async def marketplace_browse(cb: CallbackQuery, page_override: int | None = None, kind_override: str | None = None):
     # market:browse:<page>:<kind>; kind can be all, item, equipment
     parts = (cb.data or '').split(':')
     try:
-        page = max(0, int(parts[2])) if len(parts) > 2 else 0
+        page = max(0, int(page_override if page_override is not None else (parts[2] if len(parts) > 2 else 0)))
     except ValueError:
         page = 0
-    kind = parts[3] if len(parts) > 3 and parts[3] in {'all', 'item', 'equipment'} else 'all'
+    kind = kind_override if kind_override in {'all', 'item', 'equipment'} else (parts[3] if len(parts) > 3 and parts[3] in {'all', 'item', 'equipment'} else 'all')
     page_size = 6
     listings, total = await list_market_page(page=page, page_size=page_size, item_kind=None if kind == 'all' else kind)
     if total and page * page_size >= total:
@@ -175,7 +175,7 @@ async def marketplace_browse(cb: CallbackQuery):
         [InlineKeyboardButton(text='❔ راهنمای بازار', callback_data='market:help')],
         back_row('menu:marketplace'),
     ])
-    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=rows))
+    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=rows), panel_name='shop')
 
 
 @router.callback_query(F.data == 'market:mine')
@@ -197,7 +197,7 @@ async def marketplace_mine(cb: CallbackQuery):
         rows.append([InlineKeyboardButton(text=f'✏️ ویرایش قیمت #{listing.id}', callback_data=f'market:edit:{listing.id}')])
         rows.append([InlineKeyboardButton(text=f'↩️ لغو آگهی #{listing.id}', callback_data=f'market:cancel:{listing.id}')])
     rows.extend([[InlineKeyboardButton(text='➕ ثبت آگهی', callback_data='market:sell:home')], back_row('menu:marketplace')])
-    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=rows))
+    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=rows), panel_name='shop')
 
 
 @router.callback_query(F.data.startswith('market:edit:'))
@@ -240,7 +240,7 @@ async def marketplace_sell_home(cb: CallbackQuery):
         [InlineKeyboardButton(text='🛡 فروش تجهیزاتِ خارج از تن', callback_data='market:sell:list:equipment')],
         back_row('menu:marketplace'),
     ])
-    await panel(cb, '📦 <b>فروش از صندوقچه</b>\nنوع موجودی را انتخاب کن. بعد از انتخاب کالا، تعداد و قیمت هر عدد را وارد می‌کنی.', kb)
+    await panel(cb, '📦 <b>فروش از صندوقچه</b>\nنوع موجودی را انتخاب کن. بعد از انتخاب کالا، تعداد و قیمت هر عدد را وارد می‌کنی.', kb, panel_name='shop')
 
 @router.callback_query(F.data.startswith('market:sell:list:'))
 async def marketplace_sell_list(cb: CallbackQuery):
@@ -258,7 +258,7 @@ async def marketplace_sell_list(cb: CallbackQuery):
     if not buttons:
         lines.append('مورد قابل فروش پیدا نشد. تجهیزات پوشیده‌شده یا ارتقایافته در بازار قابل ثبت نیستند.')
     buttons.append(back_row('market:sell:home'))
-    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=buttons))
+    await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=buttons), panel_name='shop')
 
 @router.callback_query(F.data.startswith('market:sell:choose:'))
 async def marketplace_sell_choose(cb: CallbackQuery, state: FSMContext):
@@ -329,12 +329,26 @@ async def marketplace_sell_submit(message: Message, state: FSMContext):
     await message.answer(('✅ ' if ok else '❌ ') + html.escape(str(result)), parse_mode='HTML')
 
 @router.callback_query(F.data.startswith('market:buy:'))
-async def marketplace_buy(cb:CallbackQuery):
-    try: listing_id=int((cb.data or '').rsplit(':',1)[-1])
-    except ValueError: await cb.answer('آگهی معتبر نیست.',show_alert=True);return
-    ok,msg=await buy_market_listing(cb.from_user.id,listing_id)
-    if not ok: await cb.answer(msg,show_alert=True);return
-    await cb.answer(msg[:180],show_alert=True);await marketplace_menu(cb)
+async def marketplace_buy(cb: CallbackQuery):
+    parts = (cb.data or '').split(':')
+    try:
+        listing_id = int(parts[2])
+        page = max(0, int(parts[3])) if len(parts) > 3 else 0
+    except (ValueError, IndexError):
+        await cb.answer('شناسهٔ آگهی معتبر نیست.', show_alert=True)
+        return
+    kind = parts[4] if len(parts) > 4 and parts[4] in {'all', 'item', 'equipment'} else 'all'
+    ok, msg = await buy_market_listing(cb.from_user.id, listing_id)
+    if not ok:
+        await cb.answer(msg[:180], show_alert=True)
+        return
+    await cb.answer('✅ خرید با موفقیت انجام شد.', show_alert=True)
+    await marketplace_browse_page_after_buy(cb, page, kind)
+
+
+async def marketplace_browse_page_after_buy(cb: CallbackQuery, page: int, kind: str):
+    await marketplace_browse(cb, page_override=page, kind_override=kind)
+
 
 @router.message(Command('market_sell'))
 async def marketplace_sell(message:Message):
@@ -619,4 +633,4 @@ async def marketplace_help(cb: CallbackQuery):
         "۵) از «آگهی‌های من» می‌توانی قیمت هر آگهی را ویرایش یا آن را لغو کنی؛ آیتم‌های لغوشده به صندوقچه برمی‌گردند.\n\n"
         "خرید آگهی خودت ممکن نیست. قیمت را با توجه به سطح و کمیابی آیتم تعیین کن."
     )
-    await panel(cb, text, InlineKeyboardMarkup(inline_keyboard=[back_row('menu:marketplace')]))
+    await panel(cb, text, InlineKeyboardMarkup(inline_keyboard=[back_row('menu:marketplace')]), panel_name='shop')
