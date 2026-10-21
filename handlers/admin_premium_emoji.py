@@ -95,7 +95,7 @@ async def home(c: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:emoji:group:"))
 async def group_page(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True)
         return
     parts = (c.data or "").split(":")
@@ -122,7 +122,7 @@ async def group_page(c: CallbackQuery):
 
 @router.callback_query(F.data == "admin:emoji:toggle")
 async def toggle(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True)
         return
     data = load()
@@ -134,7 +134,7 @@ async def toggle(c: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:emoji:delete:"))
 async def delete(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True)
         return
     key = (c.data or "").rsplit(":", 1)[-1]
@@ -158,7 +158,7 @@ async def delete(c: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:emoji:set:"))
 async def set_id(c: CallbackQuery, state: FSMContext):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True)
         return
     key = (c.data or "").rsplit(":", 1)[-1]
@@ -218,7 +218,7 @@ SECTION_GROUPS = {
 
 @router.callback_query(F.data == "admin:emoji:sections")
 async def sections(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True); return
     rows = [[_btn(KEY_TITLES.get("menu_"+name, name), "admin:emoji:section:"+name)] for name in SECTION_GROUPS]
     rows.append([_btn("⬅️ بازگشت", "admin:emoji:home")])
@@ -227,7 +227,7 @@ async def sections(c: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:emoji:section:"))
 async def section(c: CallbackQuery):
-    if c.from_user.id != settings.admin_id:
+    if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
         await c.answer("دسترسی ندارید", show_alert=True); return
     name = c.data.rsplit(":", 1)[-1]
     if name not in SECTION_GROUPS:
