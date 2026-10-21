@@ -277,6 +277,20 @@ async def manage_action(message: Message, command: str, arg: str):
                         # برای بن، شناسه به‌تنهایی کافی است.
                         if command != "ban":
                             target_id = None
+                else:
+                    # یوزرنیم فقط وقتی قابل تبدیل است که ربات قبلاً آن را از پیام عضو دیده باشد.
+                    username_match = re.search(r"(?<![\\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])", replied_text)
+                    if username_match:
+                        cached_id = await redis.get(f"guardian:{chat_id}:username:{username_match.group(1).casefold()}")
+                        if cached_id and str(cached_id).lstrip("-").isdigit():
+                            target_id = int(cached_id)
+                            try:
+                                member = await message.bot.get_chat_member(chat_id, target_id)
+                                if member.status not in ("left", "kicked"):
+                                    target = member.user
+                            except TelegramAPIError:
+                                if command != "ban":
+                                    target_id = None
     if target_id is None:
         await message.answer("روی پیام عضو ریپلای کن؛ یا یک پیام شامل شناسهٔ عددی او بفرست و روی همان پیام دستور «بن» را اجرا کن.")
         return
@@ -433,6 +447,13 @@ class GuardianMiddleware(BaseMiddleware):
         if not isinstance(event, Message) or not group(event.chat):
             return await handler(event, data)
         chat_id = event.chat.id
+        # نگاشت یوزرنیم اعضایی که ربات پیامشان را می‌بیند؛ برای دستور بن روی پیام حاوی @username.
+        if event.from_user and event.from_user.username:
+            await redis.set(
+                f"guardian:{chat_id}:username:{event.from_user.username.casefold()}",
+                str(event.from_user.id),
+                ex=60 * 60 * 24 * 90,
+            )
         values = await settings(chat_id)
         if event.new_chat_members:
             if values["bots"] and await bot_rights(event.bot, chat_id, "can_restrict_members"):
