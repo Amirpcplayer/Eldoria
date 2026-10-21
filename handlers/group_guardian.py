@@ -230,7 +230,7 @@ async def manage_action(message: Message, command: str, arg: str):
                             # مثل بن: اگر پیام ریپلای‌شده حاوی @username باشد،
                             # ابتدا نگاشت گروه و سپس نام کاربری ذخیره‌شده در دیتابیس را بررسی کن.
                             username_match = re.search(
-                                r"(?<![\\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])",
+                                r"(?<![\w])@([A-Za-z0-9_]{5,32})(?![A-Za-z0-9_])",
                                 replied_text,
                             )
                             if username_match:
