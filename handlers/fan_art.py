@@ -35,6 +35,49 @@ from services.fan_art_service import (
     sell_owned_fan_art,
 )
 from states.fan_art import FanArtStates
+from database.redis import redis
+
+FAN_ART_PANEL_TTL = 60 * 60 * 24 * 30
+
+
+def _fan_art_panel_key(chat_id: int, owner_id: int) -> str:
+    return f"eldoria:fanart_panel:{chat_id}:{owner_id}"
+
+
+async def _replace_previous_fan_art_panel(callback: CallbackQuery) -> None:
+    """Delete only this player's previous Fan Art navigation panel."""
+    message = callback.message
+    if message is None:
+        return
+    key = _fan_art_panel_key(message.chat.id, callback.from_user.id)
+    try:
+        previous = await redis.get(key)
+        if previous:
+            previous_id = int(previous)
+            if previous_id != message.message_id:
+                try:
+                    await message.bot.delete_message(
+                        chat_id=message.chat.id,
+                        message_id=previous_id,
+                    )
+                except Exception:
+                    pass
+        await redis.delete(key)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Could not replace previous Fan Art panel")
+
+
+async def _save_fan_art_panel(callback: CallbackQuery, message: Message) -> None:
+    try:
+        await redis.set(
+            _fan_art_panel_key(message.chat.id, callback.from_user.id),
+            str(message.message_id),
+            ex=FAN_ART_PANEL_TTL,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Could not save Fan Art panel reference")
 
 
 router = Router()
@@ -57,9 +100,11 @@ async def show_text(
     """Send a new Fan Art panel while preserving earlier chat messages."""
     if callback.message is None:
         return
+    await _replace_previous_fan_art_panel(callback)
     if reply_markup is not None:
         reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-    await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+    sent = await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+    await _save_fan_art_panel(callback, sent)
 
 
 async def show_photo(
@@ -71,14 +116,16 @@ async def show_photo(
     """Send a new Fan Art image panel; never replace the previous message."""
     if callback.message is None:
         return
+    await _replace_previous_fan_art_panel(callback)
     if reply_markup is not None:
         reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-    await callback.message.answer_photo(
+    sent = await callback.message.answer_photo(
         photo=photo,
         caption=caption,
         reply_markup=reply_markup,
         parse_mode="HTML",
     )
+    await _save_fan_art_panel(callback, sent)
 
 
 @router.callback_query(F.data == "menu:fanart")
@@ -266,6 +313,9 @@ async def fan_art_buy(
             show_alert=True,
         )
         return
+
+    # Keep payment details in chat history, outside navigation-panel cleanup.
+    await _replace_previous_fan_art_panel(callback)
 
     payment_info = settings.fanart_payment_info
 
