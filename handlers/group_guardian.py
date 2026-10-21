@@ -72,7 +72,7 @@ async def guardian_admin(bot, chat_id, user_id):
         member = await bot.get_chat_member(chat_id, user_id)
     except TelegramAPIError:
         return False
-    if member.status == "creator":
+    if member.status in ("creator", "administrator"):
         return True
     return str(user_id) in await redis.smembers(f"guardian:{chat_id}:admins")
 
@@ -667,6 +667,9 @@ def _welcome_text(template, title, member_name):
     import random
     now = datetime.now(ZoneInfo("Asia/Tehran"))
     values = {"اسم_گروه": title, "ایموجی": random.choice(["✨","🌟","⚔️","🌿","🦋","🔥","🌙","💎"]), "تاریخ": _jalali_date(now), "ساعت": now.strftime("%H:%M:%S"), "اسم_عضو": member_name}
+    # Treat the template as plain text: escape HTML first, then insert escaped values.
+    # This prevents a typo or a group/member name containing '<' from breaking Telegram HTML.
+    template = html.escape(template or "")
     # پشتیبانی از کلمات ساده؛ نوشتن آکولاد یا تگ لازم نیست. قالب‌های قدیمی آکولاددار هم کار می‌کنند.
     for key, value in values.items():
         safe_value = html.escape(str(value))
