@@ -126,7 +126,12 @@ async def callback(callback: CallbackQuery, state: FSMContext):
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
     elif action == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>", "♛ شاه: مالک واقعی گروه"]
+        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>"]
+        try:
+            owner = next((x for x in await callback.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
+            lines.append(f"♛ شاه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♛ شاه: مالک واقعی گروه")
+        except TelegramAPIError:
+            lines.append("♛ شاه: مالک واقعی گروه")
         for item in ids:
             try:
                 member = await callback.bot.get_chat_member(chat_id, int(item))
@@ -257,7 +262,12 @@ async def admin_roster(message: Message):
     arg = message.text.partition(" ")[2].strip()
     if cmd == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>فهرست مدیران نگهبان</b>", "♛ شاه: مالک واقعی گروه"]
+        lines = ["👑 <b>فهرست مدیران نگهبان</b>"]
+        try:
+            owner = next((x for x in await message.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
+            lines.append(f"♛ شاه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♛ شاه: مالک واقعی گروه")
+        except TelegramAPIError:
+            lines.append("♛ شاه: مالک واقعی گروه")
         for item in ids:
             try:
                 m = await message.bot.get_chat_member(chat_id, int(item))
@@ -470,7 +480,7 @@ async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer("ذخیره شد.")
     await callback.message.answer("✅ خوشامدگویی ذخیره و فعال شد.")
 
-@router.message(F.text.regexp(r"^(اخطار|سکوت|حذف سکوت|حذف‌سکوت|بن|حذف بن|حذف‌بن|اخطارها|پاک کردن اخطارها|فیلترها|قوانین)(?:\\s+.*)?$"))
+@router.message(F.text.regexp(r"^(اخطار|سکوت|حذف سکوت|حذف‌سکوت|بن|حذف بن|حذف‌بن|اخطارها|پاک کردن اخطارها|فیلترها|قوانین)"))
 async def persian_moderation_alias(message: Message):
     if not group(message.chat) or not message.from_user:
         return
