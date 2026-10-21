@@ -350,12 +350,16 @@ async def fanart_add_name(
         name=name,
     )
 
-    await state.set_state(
-        FanArtStates.add_description,
-    )
-
+    # Descriptions are not collected for Fan Art anymore.
+    await state.set_state(FanArtStates.add_rarity)
     await message.answer(
-        "📖 توضیحات Fan Art را ارسال کن."
+        "💎 رریتی Fan Art را ارسال کن.\n\n"
+        "گزینه‌ها:\n"
+        "common\n"
+        "rare\n"
+        "epic\n"
+        "legendary\n"
+        "mythic"
     )
 
 
@@ -598,7 +602,6 @@ async def create_fan_art(
     required = [
         "image_file_id",
         "name",
-        "description",
         "rarity",
         "price",
         "value_gold",
@@ -621,7 +624,7 @@ async def create_fan_art(
     async with AsyncSessionLocal() as session:
         fan_art = FanArt(
             name=data["name"],
-            description=data["description"],
+            description="",
             image_file_id=data["image_file_id"],
             rarity=data["rarity"],
             price=data["price"],
