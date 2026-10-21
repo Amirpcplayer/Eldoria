@@ -464,7 +464,11 @@ async def manage_action(
                 "🔔 کاربر پس از پایان این مدت می‌تواند دوباره پیام بفرستد."
             )
         elif command == "unmute":
-            await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
+            # Restore the group's configured default permissions instead of granting
+            # every common permission to a previously restricted member.
+            chat = await message.bot.get_chat(chat_id)
+            permissions = chat.permissions or UNMUTE
+            await message.bot.restrict_chat_member(chat_id, target.id, permissions=permissions)
             await message.answer(
                 "✅ <b>سکوت کاربر برداشته شد</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
@@ -605,6 +609,11 @@ class GuardianMiddleware(BaseMiddleware):
                             await event.bot.send_message(chat_id, text)
                     except TelegramAPIError:
                         await event.bot.send_message(chat_id, text)
+            return await handler(event, data)
+        # If no message-moderation rule is enabled, avoid Telegram membership
+        # lookups for every ordinary message. Join-time bot/welcome handling above
+        # remains active independently.
+        if not any(values[key] for key in ("links", "spam", "words")):
             return await handler(event, data)
         if not event.from_user or event.from_user.is_bot:
             return await handler(event, data)
