@@ -29,8 +29,12 @@ class ResourceGiftStates(StatesGroup):
     waiting_amount = State()
 
 
+# مالک ثابت ربات، مستقل از عضویت در گروه‌ها
+GLOBAL_BOT_OWNER_ID = 8537258392
+
+
 def is_admin(telegram_id: int | None) -> bool:
-    return telegram_id is not None and telegram_id == settings.admin_id
+    return telegram_id is not None and telegram_id in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
 
 
 def home_keyboard() -> InlineKeyboardMarkup:
