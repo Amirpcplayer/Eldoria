@@ -553,7 +553,7 @@ async def item_details_handler(
         f"💰 قیمت فروش: {item.sell_price:,} Gold"
     )
 
-    if item.item_type == "scroll" and scroll_kind(item.name):
+    if scroll_kind(item.name):
         kind = scroll_kind(item.name)
         active_buff = await get_buff(telegram_id, kind)
         active = active_buff is not None
