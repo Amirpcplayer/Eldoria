@@ -23,7 +23,6 @@ from models.character import Character
 router = Router()
 
 # مالک ثابت پنل نگهبان در تمام گروه‌ها
-app_settings.admin_id = 8537258392
 
 class WelcomeWizard(StatesGroup):
     media = State()
