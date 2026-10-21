@@ -290,6 +290,22 @@ async def cancel_active_order(telegram_id: int) -> bool:
         return True
 
 
+async def cancel_all_active_orders() -> int:
+    """Cancel every active Fan Art order while preserving order history."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArtOrder).where(
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES)
+            )
+        )
+        orders = list(result.scalars().all())
+        for order in orders:
+            order.status = CANCELLED
+        if orders:
+            await session.commit()
+        return len(orders)
+
+
 async def approve_order(order_id: int) -> FanArtOrder | None:
     async with AsyncSessionLocal() as session:
         order = await session.scalar(
