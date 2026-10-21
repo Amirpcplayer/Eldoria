@@ -562,26 +562,28 @@ async def item_details_handler(
             remaining = max(1, int(float(active_buff.get("expires_at", 0)) - datetime.utcnow().timestamp()))
             hours, minutes = divmod(remaining // 60, 60)
             text += f"\n\n⏳ <b>اثر فعال</b>: {hours} ساعت و {minutes} دقیقه باقی مانده است."
-        rows = []
-        # Put all three scroll actions together directly beneath this scroll's details.
-        rows.append([
-            InlineKeyboardButton(
-                text=("⏳ فعال است" if active else "📖 خواندن و فعال‌سازی"),
-                callback_data=("inventory:noop" if active else f"item:use_scroll:{item.id}"),
-            ),
-            InlineKeyboardButton(
-                text="💰 فروش به فروشگاه",
-                callback_data=f"item:sell:{item.id}",
-            ),
-            InlineKeyboardButton(
+        rows = [
+            [InlineKeyboardButton(
                 text="👤 فروش به بازیکن",
                 callback_data=f"item:sell_player:{item.id}",
-            ),
-        ])
-        rows.extend([
-            [InlineKeyboardButton(text="🔙 بازگشت به اسکرول‌ها", callback_data="inventory:scrolls")],
-            [InlineKeyboardButton(text="🗃 بازگشت به صندوقچه", callback_data="menu:inventory")],
-        ])
+            )],
+            [InlineKeyboardButton(
+                text="💰 فروش به فروشگاه",
+                callback_data=f"item:sell:{item.id}",
+            )],
+            [InlineKeyboardButton(
+                text=("⏳ فعال است" if active else "📖 فعال‌سازی"),
+                callback_data=("inventory:noop" if active else f"item:use_scroll:{item.id}"),
+            )],
+            [InlineKeyboardButton(
+                text="🔙 بازگشت به اسکرول‌ها",
+                callback_data="inventory:scrolls",
+            )],
+            [InlineKeyboardButton(
+                text="🗃 بازگشت به صندوقچه",
+                callback_data="menu:inventory",
+            )],
+        ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
     else:
         keyboard = item_details_keyboard(item.id)
