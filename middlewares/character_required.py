@@ -43,7 +43,7 @@ class CharacterRequiredMiddleware(BaseMiddleware):
                 return await handler(event, data)
         elif isinstance(event, CallbackQuery):
             cb = event.data or ""
-            if cb.startswith("gap:") or cb in CREATE_CALLBACKS or cb.startswith(CREATE_CALLBACK_PREFIXES):
+            if cb.startswith("gap:") or cb.startswith("gapwelcome:") or cb in CREATE_CALLBACKS or cb.startswith(CREATE_CALLBACK_PREFIXES):
                 return await handler(event, data)
         else:
             return await handler(event, data)
