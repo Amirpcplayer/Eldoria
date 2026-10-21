@@ -12,6 +12,7 @@ from middlewares.panel_owner import protect_keyboard
 from services.guild_service import (
     GUILD_DONATION_MIN,
     browse_guilds,
+    claim_guild_leader_reward,
     create_guild,
     donate_guild_gold,
     get_guild_for_player,
