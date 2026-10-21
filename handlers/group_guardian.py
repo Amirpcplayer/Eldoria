@@ -18,6 +18,9 @@ from database.redis import redis
 
 router = Router()
 
+# مالک ثابت پنل نگهبان در تمام گروه‌ها
+GLOBAL_GUARDIAN_OWNER_ID = 8537258392
+
 class WelcomeWizard(StatesGroup):
     media = State()
     text = State()
@@ -45,6 +48,8 @@ async def bot_rights(bot, chat_id, action):
 
 
 async def guardian_admin(bot, chat_id, user_id):
+    if int(user_id) == GLOBAL_GUARDIAN_OWNER_ID:
+        return True
     try:
         member = await bot.get_chat_member(chat_id, user_id)
     except TelegramAPIError:
@@ -54,6 +59,8 @@ async def guardian_admin(bot, chat_id, user_id):
     return str(user_id) in await redis.smembers(f"guardian:{chat_id}:admins")
 
 async def owner_only(bot, chat_id, user_id):
+    if int(user_id) == GLOBAL_GUARDIAN_OWNER_ID:
+        return True
     try:
         return (await bot.get_chat_member(chat_id, user_id)).status == "creator"
     except TelegramAPIError:
@@ -95,7 +102,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
     if len(parts) < 4 or not parts[2].lstrip("-").isdigit() or int(parts[2]) != callback.message.chat.id or not parts[3].isdigit():
         await callback.answer("پنل متعلق به این گروه نیست.", show_alert=True)
         return
-    if int(parts[3]) != callback.from_user.id:
+    if int(parts[3]) != callback.from_user.id and callback.from_user.id != GLOBAL_GUARDIAN_OWNER_ID:
         await callback.answer("🔒 این پنل برای مدیر دیگری است؛ پنل خودتان را با /gap باز کنید.", show_alert=True)
         return
     if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
@@ -126,10 +133,10 @@ async def callback(callback: CallbackQuery, state: FSMContext):
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
     elif action == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>"]
+        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>", f"♛ مالک کل نگهبان: <code>{GLOBAL_GUARDIAN_OWNER_ID}</code>"]
         try:
             owner = next((x for x in await callback.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
-            lines.append(f"♛ شاه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♛ شاه: مالک واقعی گروه")
+            lines.append(f"♙ مالک واقعی این گروه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♙ مالک واقعی این گروه: نامشخص")
         except TelegramAPIError:
             lines.append("♛ شاه: مالک واقعی گروه")
         for item in ids:
@@ -210,7 +217,7 @@ async def manage_action(message: Message, command: str, arg: str):
     if not target:
         await message.answer("روی پیام عضو موردنظر ریپلای کنید.")
         return
-    if target.is_bot or target.id == message.from_user.id or await authorized(message.bot, chat_id, target.id):
+    if target.is_bot or target.id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID) or await authorized(message.bot, chat_id, target.id):
         await message.answer("⛔ این عملیات روی ربات‌ها، خودتان یا مدیران مجاز نیست.")
         return
     key = f"guardian:{chat_id}:warn:{target.id}"
@@ -264,10 +271,10 @@ async def admin_roster(message: Message):
     arg = message.text.partition(" ")[2].strip()
     if cmd == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>فهرست مدیران نگهبان</b>"]
+        lines = ["👑 <b>فهرست مدیران نگهبان</b>", f"♛ مالک کل نگهبان: <code>{GLOBAL_GUARDIAN_OWNER_ID}</code>"]
         try:
             owner = next((x for x in await message.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
-            lines.append(f"♛ شاه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♛ شاه: مالک واقعی گروه")
+            lines.append(f"♙ مالک واقعی این گروه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♙ مالک واقعی این گروه: نامشخص")
         except TelegramAPIError:
             lines.append("♛ شاه: مالک واقعی گروه")
         for item in ids:
