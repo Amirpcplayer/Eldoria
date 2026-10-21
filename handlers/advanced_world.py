@@ -15,7 +15,7 @@ from models.inventory import Inventory
 from models.social_systems import Pet, CharacterPet
 from models.world_systems import WorldBossContribution, WorldBoss, PvpRating
 from services.panel_image_service import show_panel
-from services.world_progression_service import (get_bestiary, ensure_world_boss, attack_world_boss, list_market, buy_market_listing, create_market_listing, create_equipment_market_listing, evolve_active_pet, upgrade_equipment, get_notifications, mark_notifications_read, cancel_market_listing, get_owned_market_listings, get_inventory_item_ids, get_inventory_equipment_ids, update_market_listing_price)
+from services.world_progression_service import (list_market_page, get_bestiary, ensure_world_boss, attack_world_boss, list_market, buy_market_listing, create_market_listing, create_equipment_market_listing, evolve_active_pet, upgrade_equipment, get_notifications, mark_notifications_read, cancel_market_listing, get_owned_market_listings, get_inventory_item_ids, get_inventory_equipment_ids, update_market_listing_price)
 from services.social_service import active_pets, activate_pet
 router=Router(name='advanced_world')
 
@@ -23,8 +23,8 @@ class MarketSellStates(StatesGroup):
     waiting_quantity_price = State()
     waiting_edit_price = State()
 
-async def panel(cb:CallbackQuery,text:str,kb:InlineKeyboardMarkup):
-    await show_panel(callback=cb,panel_name='main_menu',text=text,reply_markup=kb,parse_mode='HTML')
+async def panel(cb:CallbackQuery,text:str,kb:InlineKeyboardMarkup,panel_name:str='shop'):
+    await show_panel(callback=cb,panel_name=panel_name,text=text,reply_markup=kb,parse_mode='HTML')
     try: await cb.answer()
     except Exception: pass
 
@@ -108,22 +108,73 @@ async def marketplace_menu(cb: CallbackQuery):
     await panel(cb, text, kb)
 
 
-@router.callback_query(F.data == 'market:browse')
+@router.callback_query(F.data.startswith('market:browse'))
 async def marketplace_browse(cb: CallbackQuery):
-    listings = await list_market()
-    lines = ['🛒 <b>آگهی‌های فعال بازار</b>', 'قیمت کل = قیمت هر عدد × تعداد. خرید، گلد را به فروشنده می‌رساند.', '']
+    # market:browse:<page>:<kind>; kind can be all, item, equipment
+    parts = (cb.data or '').split(':')
+    try:
+        page = max(0, int(parts[2])) if len(parts) > 2 else 0
+    except ValueError:
+        page = 0
+    kind = parts[3] if len(parts) > 3 and parts[3] in {'all', 'item', 'equipment'} else 'all'
+    page_size = 6
+    listings, total = await list_market_page(page=page, page_size=page_size, item_kind=None if kind == 'all' else kind)
+    if total and page * page_size >= total:
+        page = max(0, (total - 1) // page_size)
+        listings, total = await list_market_page(page=page, page_size=page_size, item_kind=None if kind == 'all' else kind)
+
+    lines = [
+        '🏪 <b>بازار بازیکنان اِلدوریا</b>',
+        '━━━━━━━━━━━━━━━━━━',
+        f'🧾 آگهی‌ها: <b>{total:,}</b>  ·  صفحه <b>{page + 1}</b>',
+        'قیمت نمایش‌داده‌شده برای هر آگهی، قیمت کل همان بسته است.',
+        ''
+    ]
     rows = []
-    for listing, obj in listings:
-        async with AsyncSessionLocal() as session:
-            seller = await session.scalar(select(Character).where(Character.telegram_id == listing.seller_telegram_id))
-        seller_label = f'@{seller.telegram_username}' if seller and seller.telegram_username else (seller.name if seller else 'بازیکن')
-        total = listing.unit_price * listing.quantity
-        lines.append(f'#{listing.id} · {html.escape(obj.name)} ×{listing.quantity} · <b>{total:,} Gold</b> · فروشنده: {html.escape(seller_label)}')
-        if listing.seller_telegram_id != cb.from_user.id:
-            rows.append([InlineKeyboardButton(text=f'🛒 خرید #{listing.id} · {total:,} Gold', callback_data=f'market:buy:{listing.id}')])
     if not listings:
-        lines.append('فعلاً آگهی فعالی وجود ندارد.')
-    rows.extend([[InlineKeyboardButton(text='📦 آگهی‌های من', callback_data='market:mine')], back_row('menu:marketplace')])
+        lines.append('🌙 فعلاً آگهی‌ای در این دسته وجود ندارد.')
+        lines.append('می‌توانی اولین آگهی را از صندوقچه ثبت کنی.')
+    else:
+        seller_ids = {listing.seller_telegram_id for listing, _ in listings}
+        async with AsyncSessionLocal() as session:
+            sellers = (await session.scalars(select(Character).where(Character.telegram_id.in_(seller_ids)))).all() if seller_ids else []
+        seller_map = {seller.telegram_id: seller for seller in sellers}
+        for listing, obj in listings:
+            seller = seller_map.get(listing.seller_telegram_id)
+            seller_label = f'@{seller.telegram_username}' if seller and seller.telegram_username else (seller.name if seller else 'قهرمان اِلدوریا')
+            total_price = listing.unit_price * listing.quantity
+            type_label = '🛡 تجهیز' if listing.item_kind == 'equipment' else '📦 آیتم'
+            lines.append(
+                f'{type_label} <b>{html.escape(obj.name)}</b>\n'
+                f'├ تعداد: <b>{listing.quantity:,}</b>\n'
+                f'├ قیمت هر عدد: <b>{listing.unit_price:,} Gold</b>\n'
+                f'├ قیمت کل: <b>{total_price:,} Gold</b>\n'
+                f'└ فروشنده: {html.escape(seller_label)} · آگهی #{listing.id}'
+            )
+            if listing.seller_telegram_id != cb.from_user.id:
+                rows.append([InlineKeyboardButton(
+                    text=f'🛒 خرید · {total_price:,} Gold',
+                    callback_data=f'market:buy:{listing.id}:{page}:{kind}'
+                )])
+            lines.append('')
+    rows.append([
+        InlineKeyboardButton(text='همه', callback_data=f'market:browse:{page}:all'),
+        InlineKeyboardButton(text='📦 آیتم‌ها', callback_data=f'market:browse:{page}:item'),
+        InlineKeyboardButton(text='🛡 تجهیزات', callback_data=f'market:browse:{page}:equipment'),
+    ])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text='⬅️ قبلی', callback_data=f'market:browse:{page-1}:{kind}'))
+    if (page + 1) * page_size < total:
+        nav.append(InlineKeyboardButton(text='بعدی ➡️', callback_data=f'market:browse:{page+1}:{kind}'))
+    if nav:
+        rows.append(nav)
+    rows.extend([
+        [InlineKeyboardButton(text='📦 آگهی‌های من', callback_data='market:mine'),
+         InlineKeyboardButton(text='➕ فروش از صندوقچه', callback_data='market:sell:home')],
+        [InlineKeyboardButton(text='❔ راهنمای بازار', callback_data='market:help')],
+        back_row('menu:marketplace'),
+    ])
     await panel(cb, '\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=rows))
 
 
@@ -198,10 +249,10 @@ async def marketplace_sell_list(cb: CallbackQuery):
     title = 'آیتم‌ها و مواد' if kind == 'item' else 'تجهیزاتِ خارج از تن'
     buttons = []
     lines = [f'📦 <b>{title}</b>', 'برای انتخاب کالا روی دکمهٔ آن بزن:', '']
-    for owned, obj in rows[:15]:
+    for owned, obj in rows[:30]:
         if kind == 'equipment' and (owned.equipped or int(getattr(owned, 'enhancement_level', 0) or 0) > 0):
             continue
-        label = f'{obj.name} ×{owned.quantity}'
+        label = f'{obj.name} · {owned.quantity} عدد'
         lines.append(f'• {html.escape(obj.name)} ×{owned.quantity}')
         buttons.append([InlineKeyboardButton(text=label[:60], callback_data=f'market:sell:choose:{kind}:{obj.id}')])
     if not buttons:
@@ -226,7 +277,17 @@ async def marketplace_sell_choose(cb: CallbackQuery, state: FSMContext):
     await state.update_data(market_kind=kind, market_item_id=object_id, market_item_name=obj.name, market_max_quantity=int(owned.quantity))
     await state.set_state(MarketSellStates.waiting_quantity_price)
     await cb.answer()
-    await cb.message.answer(f'🛒 ثبت آگهی برای «{html.escape(obj.name)}»\nموجودی: {owned.quantity} عدد\n\nدر یک پیام بنویس: <code>تعداد قیمت_هر_عدد</code>\nمثال: <code>2 1500</code>\nبرای لغو: /cancel', parse_mode='HTML')
+    await cb.message.answer(
+        f'🧾 <b>ثبت آگهی بازار</b>\n━━━━━━━━━━━━━━━━━━\n'
+        f'کالا: <b>{html.escape(obj.name)}</b>\n'
+        f'موجودی قابل فروش: <b>{owned.quantity:,}</b> عدد\n\n'
+        'در <b>یک پیام</b> این دو عدد را بفرست:\n'
+        '<code>تعداد قیمت_هر_عدد</code>\n'
+        'مثال: <code>5 1300</code>\n'
+        'یعنی ۵ عدد، هر عدد ۱۳۰۰ گلد.\n\n'
+        'برای لغو عملیات: /cancel',
+        parse_mode='HTML'
+    )
 
 @router.message(Command('cancel'), MarketSellStates.waiting_quantity_price)
 async def marketplace_sell_cancel(message: Message, state: FSMContext):
@@ -238,10 +299,10 @@ async def marketplace_sell_submit(message: Message, state: FSMContext):
     if not message.from_user or not message.text:
         return
     data = await state.get_data()
-    raw = message.text.strip().replace(',', '').replace('٬', '').replace('_', ' ')
+    raw = message.text.strip().replace(',', '').replace('٬', '').replace('،', ' ').replace('_', ' ')
     parts = raw.split()
     if len(parts) != 2:
-        await message.answer('فقط دو عدد بفرست: تعداد و قیمت هر عدد. مثال: <code>2 1500</code>', parse_mode='HTML'); return
+        await message.answer('⚠️ دو عدد لازم است: <b>تعداد</b> و <b>قیمت هر عدد</b>.\nمثال: <code>5 1300</code>', parse_mode='HTML'); return
     try:
         quantity, unit_price = map(int, parts)
     except ValueError:
@@ -324,37 +385,6 @@ async def marketplace_cancel(cb:CallbackQuery):
     ok,msg=await cancel_market_listing(cb.from_user.id,listing_id)
     await cb.answer(msg,show_alert=not ok)
     if ok: await marketplace_mine(cb)
-
-@router.message(Command('market_sell_equipment'))
-async def marketplace_sell_equipment(message:Message):
-    if not message.from_user or not message.text:
-        return
-    parts = message.text.split()
-    if len(parts) != 4:
-        await message.answer('روش استفاده:\n<code>/market_sell_equipment EQUIPMENT_ID QUANTITY PRICE_PER_ITEM</code>', parse_mode='HTML')
-        return
-    try:
-        equipment_id, quantity, price = map(int, parts[1:])
-    except ValueError:
-        await message.answer('شناسه، تعداد و قیمت باید عدد باشند.')
-        return
-    ok, msg = await create_equipment_market_listing(message.from_user.id, equipment_id, quantity, price)
-    await message.answer(('✅ ' if ok else '❌ ') + html.escape(msg), parse_mode='HTML')
-
-@router.message(Command('market_equipment_items'))
-async def marketplace_equipment_ids(message:Message):
-    if not message.from_user:
-        return
-    rows = await get_inventory_equipment_ids(message.from_user.id)
-    if not rows:
-        await message.answer('تجهیزی در صندوقچه نداری.')
-        return
-    lines = ['🛡️ <b>تجهیزات قابل فروش</b>']
-    for owned, equipment in rows[:40]:
-        state = ' · پوشیده‌شده' if owned.equipped else ''
-        lines.append(f'ID <code>{equipment.id}</code> · {html.escape(equipment.name)} ×{owned.quantity}{state}')
-    lines.append('\nبرای فروش: <code>/market_sell_equipment EQUIPMENT_ID QUANTITY PRICE_PER_ITEM</code>')
-    await message.answer('\n'.join(lines), parse_mode='HTML')
 
 
 @router.message(Command('market_items'))
