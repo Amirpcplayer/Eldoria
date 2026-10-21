@@ -138,12 +138,12 @@ async def callback(callback: CallbackQuery, state: FSMContext):
                 lines.append(f"🛡️ {html.escape(member.user.full_name)} — <code>{item}</code>")
             except TelegramAPIError:
                 lines.append(f"🛡️ <code>{item}</code>")
-        await callback.message.edit_text("\\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
+        await callback.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
     elif action == "welcome":
         await state.clear()
         await state.update_data(guardian_chat_id=chat_id, guardian_owner_id=owner_id)
         await state.set_state(WelcomeWizard.media)
-        await callback.message.answer("🎨 <b>تنظیم خوشامدگویی</b>\\nابتدا عکس، ویدئو یا GIF را بفرست. برای بدون رسانه بنویس: بدون رسانه")
+        await callback.message.answer("🎨 <b>تنظیم خوشامدگویی</b>\nابتدا عکس، ویدئو یا GIF را بفرست. برای بدون رسانه بنویس: بدون رسانه")
     elif action == "home":
         values = await settings(chat_id)
         await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
@@ -274,7 +274,7 @@ async def admin_roster(message: Message):
                 lines.append(f"🛡️ {html.escape(m.user.full_name)} — <code>{item}</code>")
             except TelegramAPIError:
                 lines.append(f"🛡️ <code>{item}</code>")
-        await message.answer("\\n".join(lines))
+        await message.answer("\n".join(lines))
         return
     if cmd == "update":
         if not await owner_only(message.bot, chat_id, uid):
@@ -444,7 +444,7 @@ async def welcome_text_step(message: Message, state: FSMContext):
         await message.answer_video(media_id)
     elif media_type == "animation" and media_id:
         await message.answer_animation(media_id)
-    await message.answer("👁 <b>پیش‌نمایش خوشامدگویی</b>\\n\\n" + preview, reply_markup=markup)
+    await message.answer("👁 <b>پیش‌نمایش خوشامدگویی</b>\n\n" + preview, reply_markup=markup)
     await state.set_state(WelcomeWizard.confirm)
 
 @router.callback_query(F.data.startswith("gapwelcome:"))
