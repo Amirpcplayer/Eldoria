@@ -299,14 +299,22 @@ async def marketplace_sell_submit(message: Message, state: FSMContext):
     if not message.from_user or not message.text:
         return
     data = await state.get_data()
-    raw = message.text.strip().replace(',', '').replace('٬', '').replace('،', ' ').replace('_', ' ')
-    parts = raw.split()
+    # Accept both the recommended "6 1" format and natural labels such as
+    # "6 عدد اسکرول و قیمت هر عدد 1". Normalize Persian/Arabic digits first.
+    raw = message.text.translate(str.maketrans(
+        "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
+        "01234567890123456789",
+    )).replace(',', '').replace('٬', '').replace('،', ' ').replace('_', ' ')
+    import re
+    parts = re.findall(r'(?<![A-Za-z])\d+(?![A-Za-z])', raw)
     if len(parts) != 2:
-        await message.answer('⚠️ دو عدد لازم است: <b>تعداد</b> و <b>قیمت هر عدد</b>.\nمثال: <code>5 1300</code>', parse_mode='HTML'); return
-    try:
-        quantity, unit_price = map(int, parts)
-    except ValueError:
-        await message.answer('تعداد و قیمت باید عدد صحیح باشند.'); return
+        await message.answer(
+            '⚠️ تعداد و قیمت هر عدد را در یک پیام بفرست.\n'
+            'مثال: <code>6 1</code> یعنی ۶ عدد، هر عدد ۱ گلد.',
+            parse_mode='HTML',
+        )
+        return
+    quantity, unit_price = map(int, parts)
     if quantity < 1 or quantity > int(data.get('market_max_quantity', 0)) or unit_price < 1:
         await message.answer(f'تعداد باید بین ۱ و {data.get("market_max_quantity", 0)} باشد و قیمت هم حداقل ۱ گلد.'); return
     kind = data.get('market_kind')
