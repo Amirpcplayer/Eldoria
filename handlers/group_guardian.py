@@ -358,6 +358,9 @@ class GuardianMiddleware(BaseMiddleware):
             return await handler(event, data)
         if not event.from_user or event.from_user.is_bot:
             return await handler(event, data)
+        # مالک کل و مدیران ثبت‌شده نباید پیام‌های مدیریتی‌شان توسط فیلتر ضدفلود/لینک حذف شود.
+        if event.from_user.id == GLOBAL_GUARDIAN_OWNER_ID or await guardian_admin(event.bot, chat_id, event.from_user.id):
+            return await handler(event, data)
         content = event.text or event.caption or ""
         if not content or content.startswith("/"):
             return await handler(event, data)
