@@ -50,25 +50,13 @@ def inventory_items_keyboard(items) -> InlineKeyboardMarkup:
     rows = []
 
     for inventory_item, item in items:
-        item_button = InlineKeyboardButton(
-            text=f"{item.name} × {inventory_item.quantity}",
-            callback_data=f"item:{item.id}",
-        )
-
-        # Keep the activation action on the same row as its own scroll.
-        # The details screen also retains its activation button.
-        if getattr(item, "item_type", None) == "scroll":
-            rows.append(
-                [
-                    item_button,
-                    InlineKeyboardButton(
-                        text="📖 فعال‌سازی",
-                        callback_data=f"item:use_scroll:{item.id}",
-                    ),
-                ]
+        # Actions belong to the item's details page, not the category list.
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{item.name} × {inventory_item.quantity}",
+                callback_data=f"item:{item.id}",
             )
-        else:
-            rows.append([item_button])
+        ])
 
     if not rows:
         rows.append(
