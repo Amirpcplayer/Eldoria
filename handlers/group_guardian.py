@@ -35,13 +35,29 @@ async def bot_rights(bot, chat_id, action):
         return False
     return bool(getattr(member, action, False))
 
+
+async def guardian_admin(bot, chat_id, user_id):
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+    except TelegramAPIError:
+        return False
+    if member.status == "creator":
+        return True
+    return str(user_id) in await redis.smembers(f"guardian:{chat_id}:admins")
+
+async def owner_only(bot, chat_id, user_id):
+    try:
+        return (await bot.get_chat_member(chat_id, user_id)).status == "creator"
+    except TelegramAPIError:
+        return False
+
 async def settings(chat_id):
     values = await redis.hgetall(f"guardian:{chat_id}:settings")
     return {k: values.get(k, "1" if v else "0") == "1" for k, v in DEFAULTS.items()}
 
 def keyboard(chat_id, values):
     rows = [[InlineKeyboardButton(text=f"{label}: {'✅' if values[key] else '❌'}", callback_data=f"gap:toggle:{chat_id}:{key}")] for key, label in FLAGS.items()]
-    rows += [[InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}")]]
+    rows += [[InlineKeyboardButton(text="🎨 تنظیم متن خوشامدگویی", callback_data=f"gap:welcome:{chat_id}")], [InlineKeyboardButton(text="👑 مدیران ثبت‌شده", callback_data=f"gap:admins:{chat_id}")], [InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def panel(values):
@@ -56,7 +72,7 @@ async def gap(message: Message):
     if not group(message.chat):
         await message.answer("🛡️ دستور /gap را در گروه اجرا کنید.")
         return
-    if not await authorized(message.bot, message.chat.id, message.from_user.id):
+    if not await guardian_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("⛔ فقط مدیران گروه به این پنل دسترسی دارند.")
         return
     values = await settings(message.chat.id)
@@ -71,7 +87,7 @@ async def callback(callback: CallbackQuery):
     if len(parts) < 3 or not parts[2].lstrip("-").isdigit() or int(parts[2]) != callback.message.chat.id:
         await callback.answer("پنل متعلق به این گروه نیست.", show_alert=True)
         return
-    if not await authorized(callback.bot, callback.message.chat.id, callback.from_user.id):
+    if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
         await callback.answer("فقط مدیران گروه.", show_alert=True)
         return
     action, chat_id = parts[1], callback.message.chat.id
@@ -119,7 +135,7 @@ async def manage(message: Message):
         rules = await redis.get(f"guardian:{chat_id}:rules")
         await message.answer("📜 <b>قوانین گروه</b>\n" + html.escape(rules or "هنوز قانونی ثبت نشده است."))
         return
-    if not await authorized(message.bot, chat_id, message.from_user.id):
+    if not await guardian_admin(message.bot, chat_id, message.from_user.id):
         await message.answer("⛔ این فرمان مخصوص مدیران گروه است.")
         return
     if command == "rules":
@@ -200,6 +216,61 @@ async def manage(message: Message):
             await message.answer("🚪 عضو اخراج شد.")
     except (TelegramAPIError, ValueError) as exc:
         await message.answer("❌ عملیات ناموفق بود: " + html.escape(str(exc)))
+
+
+@router.message(Command("add_admin", "remove_admin", "admins", "update"))
+async def admin_roster(message: Message):
+    if not group(message.chat) or not message.from_user:
+        await message.answer("این دستور را داخل گروه اجرا کن.")
+        return
+    chat_id, uid = message.chat.id, message.from_user.id
+    cmd = message.text.split()[0].split("@")[0][1:].lower()
+    arg = message.text.partition(" ")[2].strip()
+    if cmd == "admins":
+        ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
+        lines = ["👑 <b>فهرست مدیران نگهبان</b>", "♛ شاه: مالک واقعی گروه"]
+        for item in ids:
+            try:
+                m = await message.bot.get_chat_member(chat_id, int(item))
+                lines.append(f"🛡️ {html.escape(m.user.full_name)} — <code>{item}</code>")
+            except TelegramAPIError:
+                lines.append(f"🛡️ <code>{item}</code>")
+        await message.answer("\\n".join(lines))
+        return
+    if cmd == "update":
+        if not await owner_only(message.bot, chat_id, uid):
+            await message.answer("⛔ فقط مالک واقعی گروه می‌تواند /update را اجرا کند.")
+            return
+        actual = {str(m.user.id) for m in await message.bot.get_chat_administrators(chat_id) if not m.user.is_bot}
+        key = f"guardian:{chat_id}:admins"
+        await redis.delete(key)
+        if actual: await redis.sadd(key, *actual)
+        await message.answer("🔄 فهرست مدیران همگام‌سازی شد؛ فقط مدیران واقعی گروه باقی ماندند.")
+        return
+    if not await owner_only(message.bot, chat_id, uid):
+        await message.answer("⛔ فقط مالک واقعی گروه می‌تواند مدیر تعیین یا عزل کند.")
+        return
+    target_id = None
+    if message.reply_to_message and message.reply_to_message.from_user and not arg:
+        target_id = message.reply_to_message.from_user.id
+    elif arg.lstrip("-").isdigit():
+        target_id = int(arg)
+    if not target_id:
+        await message.answer("شناسه عددی کاربر را بده یا روی پیام او ریپلای کن: /add_admin 123456789")
+        return
+    if target_id == uid:
+        await message.answer("مالک گروه از قبل لقب شاه را دارد.")
+        return
+    try: member = await message.bot.get_chat_member(chat_id, target_id)
+    except TelegramAPIError:
+        await message.answer("این کاربر عضو گروه نیست یا شناسه معتبر نیست."); return
+    key = f"guardian:{chat_id}:admins"
+    if cmd == "add_admin":
+        await redis.sadd(key, str(target_id))
+        await message.answer(f"🛡️ {html.escape(member.user.full_name)} به مدیران نگهبان اضافه شد.")
+    else:
+        await redis.srem(key, str(target_id))
+        await message.answer(f"📉 {html.escape(member.user.full_name)} از مدیران نگهبان عزل شد.")
 
 class GuardianMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: TelegramObject, data):
