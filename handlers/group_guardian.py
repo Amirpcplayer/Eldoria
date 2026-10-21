@@ -313,9 +313,24 @@ class GuardianMiddleware(BaseMiddleware):
                         except TelegramAPIError:
                             pass
             if values["welcome"]:
+                saved = await redis.hgetall(f"guardian:{chat_id}:welcome")
+                template = saved.get("template", "👋 به {اسم_گروه} خوش آمدی، {اسم_عضو}! {ایموجی}")
                 for member in event.new_chat_members:
-                    if not member.is_bot:
-                        await event.answer("👋 به اِلدوریا خوش آمدی، " + html.escape(member.full_name) + "!")
+                    if member.is_bot:
+                        continue
+                    text = _welcome_text(template, event.chat.title or "گروه اِلدوریا", member.full_name)
+                    media_type, media_id = saved.get("media_type", "none"), saved.get("media_id", "")
+                    try:
+                        if media_type == "photo" and media_id:
+                            await event.bot.send_photo(chat_id, media_id, caption=text)
+                        elif media_type == "video" and media_id:
+                            await event.bot.send_video(chat_id, media_id, caption=text)
+                        elif media_type == "animation" and media_id:
+                            await event.bot.send_animation(chat_id, media_id, caption=text)
+                        else:
+                            await event.bot.send_message(chat_id, text)
+                    except TelegramAPIError:
+                        await event.bot.send_message(chat_id, text)
             return await handler(event, data)
         if not event.from_user or event.from_user.is_bot:
             return await handler(event, data)
@@ -451,3 +466,15 @@ async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer("ذخیره شد.")
     await callback.message.answer("✅ خوشامدگویی ذخیره و فعال شد.")
+
+@router.message(F.text.regexp(r"^(اخطار|سکوت|حذف سکوت|حذف‌سکوت|بن|حذف بن|حذف‌بن|اخطارها|پاک کردن اخطارها|فیلترها|قوانین)(?:\\s+.*)?$"))
+async def persian_moderation_alias(message: Message):
+    if not group(message.chat) or not message.from_user:
+        return
+    raw = (message.text or "").strip()
+    aliases = [("پاک کردن اخطارها", "clearwarn"), ("حذف سکوت", "unmute"), ("حذف‌سکوت", "unmute"), ("حذف بن", "unban"), ("حذف‌بن", "unban"), ("اخطارها", "warnings"), ("اخطار", "warn"), ("سکوت", "mute"), ("بن", "ban"), ("فیلترها", "filters"), ("قوانین", "rules")]
+    for phrase, command in aliases:
+        if raw == phrase or raw.startswith(phrase + " "):
+            arg = raw[len(phrase):].strip()
+            await manage_action(message, command, arg)
+            return
