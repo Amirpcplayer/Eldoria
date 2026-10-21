@@ -63,6 +63,34 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
             return await make_request(bot, method)
 
         chat_id = raw_chat_id
+
+        # Group chat messages are persistent game content. Never auto-delete
+        # group messages: boss posts, combat logs, dungeon notices and replies
+        # must remain available to every player.
+        if chat_id < 0:
+            return await make_request(bot, method)
+
+        # Keep private-chat combat/boss/dungeon messages too. Do this before
+        # cleaning the previous UI panel, so a combat message cannot trigger
+        # deletion of earlier game content.
+        message_text = str(getattr(method, "text", "") or "")
+        message_caption = str(getattr(method, "caption", "") or "")
+        content = f"{message_text}\n{message_caption}".casefold()
+        protected_terms = (
+            "combat", "battle", "boss", "dungeon", "fight",
+            "مبارزه", "نبرد", "کامبت", "باس", "دانجن", "سیاهچال",
+            "حمله", "جادو", "ضربه", "آسیب", "غنیمت", "شکست خورد",
+            "مبارزهٔ ماجراجویی", "ماجراجویی",
+        )
+        if any(term in content for term in protected_terms):
+            result = await make_request(bot, method)
+            # Never add this game message to the auto-delete queue.
+            if isinstance(result, Message):
+                tracked = self._last_messages.get(chat_id, [])
+                if result.message_id in tracked:
+                    tracked.remove(result.message_id)
+            return result
+
         async with self._lock_for(chat_id):
             previous_ids = self._last_messages.pop(chat_id, [])
             for message_id in previous_ids:
