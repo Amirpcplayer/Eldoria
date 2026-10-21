@@ -239,7 +239,7 @@ async def manage_action(message: Message, command: str, arg: str):
                     break
             if target is None:
                 replied_text = replied.text or replied.caption or ""
-                id_match = re.search(r"(?<!\\d)\\d{5,15}(?!\\d)", replied_text)
+                id_match = re.search(r"(?<!\d)\d{5,15}(?!\d)", replied_text)
                 if id_match:
                     try:
                         member = await message.bot.get_chat_member(chat_id, int(id_match.group(0)))
