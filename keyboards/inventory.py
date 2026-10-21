@@ -1,7 +1,5 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from services.scroll_service import scroll_kind
-
 
 def inventory_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -52,25 +50,25 @@ def inventory_items_keyboard(items) -> InlineKeyboardMarkup:
     rows = []
 
     for inventory_item, item in items:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{item.name} × {inventory_item.quantity}",
-                    callback_data=f"item:{item.id}",
-                )
-            ]
+        item_button = InlineKeyboardButton(
+            text=f"{item.name} × {inventory_item.quantity}",
+            callback_data=f"item:{item.id}",
         )
-        # Scrolls can be read directly from the scroll list; the handler
-        # validates ownership and enforces the two-hour effect cooldown.
+
+        # Keep the activation action on the same row as its own scroll.
+        # The details screen also retains its activation button.
         if getattr(item, "item_type", None) == "scroll":
             rows.append(
                 [
+                    item_button,
                     InlineKeyboardButton(
-                        text=f"📖 خواندن و فعال‌سازی: {item.name}",
+                        text="📖 فعال‌سازی",
                         callback_data=f"item:use_scroll:{item.id}",
-                    )
+                    ),
                 ]
             )
+        else:
+            rows.append([item_button])
 
     if not rows:
         rows.append(
