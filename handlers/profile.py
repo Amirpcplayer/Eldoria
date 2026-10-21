@@ -903,7 +903,13 @@ async def profile_command(message: Message):
         except Exception:
             photo = None
 
+    # Telegram photo captions are limited to 1024 characters. Never drop
+    # guild, party or active-scroll details to make a profile fit a caption.
     if photo:
-        await message.answer_photo(photo=photo, caption=text, parse_mode=ParseMode.HTML)
+        if len(text) <= 1024:
+            await message.answer_photo(photo=photo, caption=text, parse_mode=ParseMode.HTML)
+        else:
+            await message.answer_photo(photo=photo)
+            await message.answer(text, parse_mode=ParseMode.HTML)
     else:
         await message.answer(text, parse_mode=ParseMode.HTML)
