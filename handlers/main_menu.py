@@ -33,6 +33,7 @@ async def main_menu_back_handler(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() == "منو"))
 @router.message(Command("menu"))
 async def menu_command(message: Message):
     if not message.from_user:
