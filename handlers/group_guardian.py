@@ -338,7 +338,7 @@ class GuardianMiddleware(BaseMiddleware):
                             pass
             if values["welcome"]:
                 saved = await redis.hgetall(f"guardian:{chat_id}:welcome")
-                template = saved.get("template", "👋 به {اسم_گروه} خوش آمدی، {اسم_عضو}! {ایموجی}")
+                template = saved.get("template", "👋 اسم_عضو به گروه اسم_گروه خوش اومدی ایموجی\n📅 تاریخ\n🕒 ساعت ایموجی")
                 for member in event.new_chat_members:
                     if member.is_bot:
                         continue
@@ -412,8 +412,11 @@ def _welcome_text(template, title, member_name):
     import random
     now = datetime.now(ZoneInfo("Asia/Tehran"))
     values = {"اسم_گروه": title, "ایموجی": random.choice(["✨","🌟","⚔️","🌿","🦋","🔥","🌙","💎"]), "تاریخ": _jalali_date(now), "ساعت": now.strftime("%H:%M:%S"), "اسم_عضو": member_name}
+    # پشتیبانی از کلمات ساده؛ نوشتن آکولاد یا تگ لازم نیست. قالب‌های قدیمی آکولاددار هم کار می‌کنند.
     for key, value in values.items():
-        template = template.replace("{" + key + "}", html.escape(str(value)))
+        safe_value = html.escape(str(value))
+        template = template.replace("{" + key + "}", safe_value)
+        template = re.sub(r"(?<![\w])" + re.escape(key) + r"(?![\w])", lambda _match, replacement=safe_value: replacement, template)
     return template
 
 @router.message(WelcomeWizard.media)
@@ -435,7 +438,7 @@ async def welcome_media_step(message: Message, state: FSMContext):
         return
     await state.update_data(welcome_media_type=media_type, welcome_media_id=media_id)
     await state.set_state(WelcomeWizard.text)
-    await message.answer("✍️ متن خوشامدگویی را بفرست. متغیرها: {اسم_گروه}، {ایموجی}، {تاریخ}، {ساعت}، {اسم_عضو}")
+    await message.answer("✍️ متن خوشامدگویی را بفرست. فقط این کلمات را عیناً بنویس؛ بدون آکولاد یا علامت: اسم_گروه، اسم_عضو، تاریخ، ساعت، ایموجی")
 
 @router.message(WelcomeWizard.text)
 async def welcome_text_step(message: Message, state: FSMContext):
@@ -486,7 +489,7 @@ async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
     if data.get("guardian_chat_id") != callback.message.chat.id or data.get("guardian_owner_id") != callback.from_user.id or await state.get_state() != WelcomeWizard.confirm.state:
         await callback.answer("این فرایند منقضی شده؛ از پنل دوباره شروع کن.", show_alert=True)
         return
-    await redis.hset(f"guardian:{callback.message.chat.id}:welcome", mapping={"media_type": data.get("welcome_media_type", "none"), "media_id": data.get("welcome_media_id") or "", "template": data.get("welcome_template", "👋 به {اسم_گروه} خوش آمدی {ایموجی}")})
+    await redis.hset(f"guardian:{callback.message.chat.id}:welcome", mapping={"media_type": data.get("welcome_media_type", "none"), "media_id": data.get("welcome_media_id") or "", "template": data.get("welcome_template", "👋 اسم_عضو به گروه اسم_گروه خوش اومدی ایموجی\n📅 تاریخ\n🕒 ساعت ایموجی")})
     await redis.hset(f"guardian:{callback.message.chat.id}:settings", "welcome", "1")
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
