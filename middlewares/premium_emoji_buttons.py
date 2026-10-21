@@ -26,6 +26,7 @@ EXACT: dict[str, str] = {
     "menu:blacksmith": "menu_blacksmith", "menu:gold_gems": "menu_gold_gems",
     "menu:market": "menu_market",
     "profile:stats": "profile_stats", "profile:fanart": "profile_fanart_select",
+    "profile:titles": "profile_titles",
     "potion:choose:hp": "profile_hp_recovery", "potion:choose:mana": "profile_mana_recovery",
     "party:members": "party_members", "party:kick:list": "party_members",
     "guild:members": "guild_members", "guild:missions": "guild_missions",
@@ -79,7 +80,22 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
         if isinstance(markup, InlineKeyboardMarkup):
             data = load()
             if data.get("enabled") and data.get("ids"):
-                apply_keyboard_icons(markup, data, category_resolver=_category)
+                outgoing_text = str(getattr(method, "text", None) or getattr(method, "caption", None) or "")
+                is_profile_panel = "قهرمان اِلدوریا" in outgoing_text or "قهرمان الدوردیا" in outgoing_text
+                def resolve(callback_data: str | None, text: str) -> str | None:
+                    callback = (callback_data or "").lower()
+                    if is_profile_panel:
+                        profile_exact = {
+                            "menu:inventory": "profile_inventory",
+                            "menu:equipment": "profile_equipment",
+                            "menu:skills": "profile_skills",
+                            "profile:titles": "profile_titles",
+                            "menu:back": "profile_back",
+                        }
+                        if callback in profile_exact:
+                            return profile_exact[callback]
+                    return _category(callback_data, text)
+                apply_keyboard_icons(markup, data, category_resolver=resolve)
                 try:
                     method = method.model_copy(update={
                         "reply_markup": markup.model_copy(update={"inline_keyboard": markup.inline_keyboard})
