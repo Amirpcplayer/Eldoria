@@ -171,7 +171,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @router.message(Command("warn", "mute", "unmute", "ban", "unban", "kick", "warnings", "clearwarn", "filteradd", "filterdel", "filters", "rules"))
-async def manage(message: Message):
+async def manage(message: Message, state: FSMContext):
     if not message.text:
         return
     await manage_action(
@@ -766,7 +766,7 @@ async def receive_filter_word(message: Message, state: FSMContext):
 
 
 @router.message(F.text.regexp(r"^(اخطار|سکوت|حذف سکوت|حذف‌سکوت|بن|حذف بن|حذف‌بن|اخطارها|پاک کردن اخطارها|فیلترها|قوانین)"))
-async def persian_moderation_alias(message: Message):
+async def persian_moderation_alias(message: Message, state: FSMContext):
     if not group(message.chat) or not message.from_user:
         return
     raw = (message.text or "").strip()
