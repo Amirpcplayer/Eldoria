@@ -596,20 +596,30 @@ async def fan_art_receipt(
         "پس از بررسی، نتیجه به شما اعلام می‌شود."
     )
 
-    # Always confirm in the chat where the receipt was sent.
-    await message.answer(receipt_confirmation)
-
-    # If the player submitted the receipt in a group, also send the order
-    # number privately so they can keep it even if group messages get lost.
     if message.chat.type in {"group", "supergroup"} and message.from_user is not None:
+        # Keep the order code and Fan Art name private to prevent impersonation
+        # or fake-order claims in the group.
+        private_sent = False
         try:
             await message.bot.send_message(
                 chat_id=message.from_user.id,
                 text=receipt_confirmation,
             )
+            private_sent = True
         except Exception as exc:
             # The player may not have opened the bot privately yet.
             print("FAN ART PRIVATE CONFIRMATION ERROR:", repr(exc))
+
+        if private_sent:
+            await message.answer("✅ رسید دریافت شد؛ سریال سفارش شما در پی‌وی ربات ارسال شد.")
+        else:
+            await message.answer(
+                "✅ رسید دریافت شد، اما ارسال پیام خصوصی ممکن نشد. "
+                "لطفاً ابتدا پی‌وی ربات را باز کن و /start بزن؛ شماره سفارش در گروه نمایش داده نمی‌شود."
+            )
+    else:
+        # In private chat, show the full order confirmation directly.
+        await message.answer(receipt_confirmation)
 
     try:
         await message.bot.send_photo(
