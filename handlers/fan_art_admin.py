@@ -105,19 +105,19 @@ async def render_order_details(message_or_callback, order):
     receipt_text = "📷 رسید: ثبت شده" if order.receipt_file_id else "📷 رسید: هنوز ارسال نشده"
     art_name = order.fan_art.name if order.fan_art else "فن‌آرت ناموجود"
     details = (
-        "🧾 <b>جزئیات سفارش فن‌آرت</b>\\n\\n"
-        f"🆔 شناسه داخلی: <code>{order.id}</code>\\n"
-        f"🏦 شناسه واریز/سفارش: <code>{order.order_code}</code>\\n"
-        f"👤 Telegram ID خریدار: <code>{order.telegram_id}</code>\\n"
-        f"🎨 فن‌آرت: {art_name}\\n"
-        f"💰 مبلغ ثبت‌شده: {order.price_snapshot}\\n"
-        f"📌 وضعیت: {status}\\n"
-        f"{receipt_text}\\n"
-        f"🕒 ثبت: {order.created_at:%Y-%m-%d %H:%M}\\n"
+        "🧾 <b>جزئیات سفارش فن‌آرت</b>\n\n"
+        f"🆔 شناسه داخلی: <code>{order.id}</code>\n"
+        f"🏦 شناسه واریز/سفارش: <code>{order.order_code}</code>\n"
+        f"👤 Telegram ID خریدار: <code>{order.telegram_id}</code>\n"
+        f"🎨 فن‌آرت: {art_name}\n"
+        f"💰 مبلغ ثبت‌شده: {order.price_snapshot}\n"
+        f"📌 وضعیت: {status}\n"
+        f"{receipt_text}\n"
+        f"🕒 ثبت: {order.created_at:%Y-%m-%d %H:%M}\n"
         f"🔄 آخرین تغییر: {order.updated_at:%Y-%m-%d %H:%M}"
     )
     if order.rejection_reason:
-        details += f"\\n📝 دلیل رد: {order.rejection_reason}"
+        details += f"\n📝 دلیل رد: {order.rejection_reason}"
     target = message_or_callback.message if isinstance(message_or_callback, CallbackQuery) else message_or_callback
     if target is None:
         return
@@ -148,8 +148,8 @@ async def fanart_admin_orders(callback: CallbackQuery):
     orders = all_orders[:ORDER_PAGE_SIZE]
     if callback.message:
         await callback.message.answer(
-            f"🧾 <b>سفارش‌های فن‌آرت</b> · صفحه {page + 1}\\n"
-            "سفارش‌های ناقص، منتظر پرداخت، منتظر رسید و رسیدهای در حال بررسی هم نمایش داده می‌شوند.\\n"
+            f"🧾 <b>سفارش‌های فن‌آرت</b> · صفحه {page + 1}\n"
+            "سفارش‌های ناقص، منتظر پرداخت، منتظر رسید و رسیدهای در حال بررسی هم نمایش داده می‌شوند.\n"
             f"📦 تعداد این صفحه: {len(orders)}",
             reply_markup=admin_orders_keyboard(orders, page, has_next),
             parse_mode="HTML",
@@ -166,9 +166,9 @@ async def fanart_admin_order_search_start(callback: CallbackQuery, state: FSMCon
     await state.set_state(FanArtAdminStates.search_order_code)
     if callback.message:
         await callback.message.answer(
-            "🔎 شناسه واریز/شماره سفارش را دقیق بفرست.\\n"
-            "مثال: ELD-20261021-52120\\n"
-            "شناسه داخلی عددی سفارش هم قابل جست‌وجو است.\\n"
+            "🔎 شناسه واریز/شماره سفارش را دقیق بفرست.\n"
+            "مثال: ELD-20261021-52120\n"
+            "شناسه داخلی عددی سفارش هم قابل جست‌وجو است.\n"
             "لغو جست‌وجو: /cancel"
         )
     await callback.answer()
