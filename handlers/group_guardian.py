@@ -439,13 +439,12 @@ async def welcome_text_step(message: Message, state: FSMContext):
     markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ ذخیره و فعال‌سازی", callback_data=f"gapwelcome:save:{chat_id}:{message.from_user.id}"), InlineKeyboardButton(text="❌ لغو", callback_data=f"gapwelcome:cancel:{chat_id}:{message.from_user.id}")]])
     media_type, media_id = data.get("welcome_media_type"), data.get("welcome_media_id")
     if media_type == "photo" and media_id:
-        await message.answer_photo(media_id, caption=preview, reply_markup=markup)
+        await message.answer_photo(media_id)
     elif media_type == "video" and media_id:
-        await message.answer_video(media_id, caption=preview, reply_markup=markup)
+        await message.answer_video(media_id)
     elif media_type == "animation" and media_id:
-        await message.answer_animation(media_id, caption=preview, reply_markup=markup)
-    else:
-        await message.answer("👁 <b>پیش‌نمایش خوشامدگویی</b>\\n\\n" + preview, reply_markup=markup)
+        await message.answer_animation(media_id)
+    await message.answer("👁 <b>پیش‌نمایش خوشامدگویی</b>\\n\\n" + preview, reply_markup=markup)
     await state.set_state(WelcomeWizard.confirm)
 
 @router.callback_query(F.data.startswith("gapwelcome:"))
