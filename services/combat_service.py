@@ -1156,8 +1156,10 @@ async def player_skill(
         from services.scroll_service import has_buff
         if await has_buff(int(battle["telegram_id"]), "power"):
             damage = int(damage * 1.20)
+        if await has_buff(int(battle["telegram_id"]), "skill_power"):
+            damage = int(damage * 1.20)
     except Exception:
-        logger.exception("Could not apply power scroll to magic attack")
+        logger.exception("Could not apply power/skill scroll to magic attack")
 
     battle["enemy_hp"] = max(
         0,
