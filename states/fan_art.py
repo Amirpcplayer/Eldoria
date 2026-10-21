@@ -16,3 +16,4 @@ class FanArtStates(StatesGroup):
 
 class FanArtAdminStates(StatesGroup):
     reject_reason = State()
+    search_order_code = State()
