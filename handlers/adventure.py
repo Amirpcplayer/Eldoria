@@ -237,6 +237,21 @@ async def adventure_area_details(
         f"💰 Gold: +{area.gold_reward}"
     )
 
+    # Materials are chance-based battle drops, not guaranteed area rewards.
+    # Display the actual shared gathering pool; enemy-specific loot is
+    # detailed on each enemy's page by _adventure_drop_preview.
+    enemies = await get_area_enemies(area.id)
+    if enemies:
+        text += (
+            "\n\n🗃 <b>آیتم‌های احتمالی مبارزه</b>\n"
+            "• 🪵 چوب اِلدوری\n"
+            "• ⛓️ سنگ آهن\n"
+            "• 💎 کریستال جادویی\n"
+            "• 🌿 گیاه اِلدوریا\n"
+            "• 🗃 سنگ جادویی\n"
+            "🔎 غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود."
+        )
+
     if not unlocked:
         text += (
             "\n\n"
