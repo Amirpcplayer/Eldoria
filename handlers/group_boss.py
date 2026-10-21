@@ -484,7 +484,7 @@ def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = No
     story = html.escape(boss_entrance_story(cfg))
     boss_name = html.escape(str(cfg.get("name", "سالار ناشناخته")))
     weak = (
-        f"\\n⚡ <b>WEAKNESS:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
+        f"\n⚡ <b>WEAKNESS:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
         if weakness else ""
     )
     if next_spawn_at:
@@ -493,21 +493,21 @@ def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = No
     else:
         next_spawn = "about 60 min"
     return (
-        "🚨 <b>WORLD BOSS SPAWNED!</b> 🚨\\n"
-        "━━━━━━━━━━━━━━━━━━\\n"
-        f"💀 <b>{boss_name}</b>  |  <b>Lv.{level}</b>\\n"
-        f"📖 <i>{story}</i>\\n\\n"
-        f"❤️ <b>HP:</b> <code>{hp:,} / {hp:,}</code>\\n"
+        "🚨 <b>WORLD BOSS SPAWNED!</b> 🚨\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"💀 <b>{boss_name}</b>  |  <b>Lv.{level}</b>\n"
+        f"📖 <i>{story}</i>\n\n"
+        f"❤️ <b>HP:</b> <code>{hp:,} / {hp:,}</code>\n"
         "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 <b>100%</b>"
-        f"{weak}\\n"
-        "━━━━━━━━━━━━━━━━━━\\n"
-        "⚔️ <b>BATTLE COMMANDS</b>\\n"
-        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\\n"
-        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\\n"
-        "💚 معجون سلامتی: <code>هیل</code> (بدون ریپلای)\\n"
-        "🔷 معجون مانا: <code>ریکاوری مانا</code> (بدون ریپلای)\\n\\n"
-        "🏆 پاداش بر اساس مشارکت محاسبه می‌شود؛ آخرین ضربه جایزهٔ ویژه دارد.\\n"
-        f"⏱️ <b>NEXT SPAWN CHECK:</b> {html.escape(next_spawn)}\\n"
+        f"{weak}\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "⚔️ <b>BATTLE COMMANDS</b>\n"
+        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\n"
+        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\n"
+        "💚 معجون سلامتی: <code>هیل</code> (بدون ریپلای)\n"
+        "🔷 معجون مانا: <code>ریکاوری مانا</code> (بدون ریپلای)\n\n"
+        "🏆 پاداش بر اساس مشارکت محاسبه می‌شود؛ آخرین ضربه جایزهٔ ویژه دارد.\n"
+        f"⏱️ <b>NEXT SPAWN CHECK:</b> {html.escape(next_spawn)}\n"
         "━━━━━━━━━━━━━━━━━━"
     )
 
@@ -1009,8 +1009,8 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
     if not boss_snapshot:
         await message.reply(
             "╔══ ⚔️ فرمان نبرد اِلدوریا ⚔️ ══╗\n"
-            "برای حمله به باس، روی پیام همان باس ریپلای کن.\\n"
-            "برای جادو، ابتدا روی پیام باس ریپلای کن و جادو را انتخاب کن.\\n"
+            "برای حمله به باس، روی پیام همان باس ریپلای کن.\n"
+            "برای جادو، ابتدا روی پیام باس ریپلای کن و جادو را انتخاب کن.\n"
             "╚════ ✦ اِلدوریا ✦ ════╝"
         )
         return
