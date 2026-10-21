@@ -410,7 +410,7 @@ async def fan_art_paid(
             "📷 ارسال رسید پرداخت\n\n"
             f"🆔 شماره سفارش: {order.order_code}\n"
             f"🎨 Fan Art: {order.fan_art.name}\n"
-            f"💰 مبلغ: {order.price_snapshot}\n\n"
+            f"💰 مبلغ: {int(order.price_snapshot):,}\n\n"
             "حالا تصویر رسید پرداخت را به صورت Photo ارسال کن.",
             reply_markup=None,
         )
@@ -524,7 +524,7 @@ async def fan_art_receipt(
                 "💳 رسید جدید Fan Art\n\n"
                 f"🆔 سفارش: {order.order_code}\n"
                 f"🎨 Fan Art: {order.fan_art.name}\n"
-                f"💰 مبلغ: {order.price_snapshot}\n"
+                f"💰 مبلغ: {int(order.price_snapshot):,}\n"
                 f"👤 Telegram ID: {order.telegram_id}\n"
                 f"📌 وضعیت: {order.status}"
             ),
@@ -693,7 +693,7 @@ async def fan_art_orders(
         "🗃 سفارش فعال\n\n"
         f"🆔 سفارش: {order.order_code}\n"
         f"🎨 Fan Art: {order.fan_art.name}\n"
-        f"💰 مبلغ: {order.price_snapshot}\n"
+        f"💰 مبلغ: {int(order.price_snapshot):,}\n"
         f"📌 وضعیت: {status}",
         fan_art_main_keyboard(),
     )
