@@ -287,6 +287,7 @@ async def inventory_handler(
             "inventory:materials",
             "inventory:scrolls",
             "inventory:fanart",
+            "inventory:all",
         }
     )
 )
@@ -318,7 +319,59 @@ async def inventory_category_handler(
             character.telegram_username = username
             await session.commit()
 
-        if category == "equipment":
+        if category == "all":
+            item_result = await session.execute(
+                select(Inventory, Item)
+                .join(Item, Inventory.item_id == Item.id)
+                .where(
+                    Inventory.character_id == character.id,
+                    Inventory.quantity > 0,
+                )
+                .order_by(Item.item_type, Item.name, Inventory.id)
+            )
+            owned_items = list(item_result.all())
+
+            equipment_result = await session.execute(
+                select(CharacterEquipment, Equipment)
+                .join(Equipment, CharacterEquipment.equipment_id == Equipment.id)
+                .where(
+                    CharacterEquipment.character_id == character.id,
+                    CharacterEquipment.quantity > 0,
+                    Equipment.is_active.is_(True),
+                )
+                .order_by(Equipment.name, CharacterEquipment.id)
+            )
+            owned_equipment = list(equipment_result.all())
+
+            text_lines = ["📦 <b>تمام آیتم‌های واقعی صندوقچه</b>", ""]
+            buttons = []
+            if owned_items:
+                text_lines.append("🗃 <b>آیتم‌ها</b>")
+                for inv_item, item in owned_items:
+                    text_lines.append(f"• {item.name} × {inv_item.quantity}")
+                    buttons.append([InlineKeyboardButton(
+                        text=f"{item.name} × {inv_item.quantity}",
+                        callback_data=f"item:{item.id}",
+                    )])
+            if owned_equipment:
+                text_lines.extend(["", "⚔️ <b>تجهیزات</b>"])
+                for owned, equipment in owned_equipment:
+                    suffix = " · مجهز" if owned.equipped else ""
+                    text_lines.append(f"• {equipment.name} × {owned.quantity}{suffix}")
+                    buttons.append([InlineKeyboardButton(
+                        text=f"{equipment.name} × {owned.quantity}{' ✅' if owned.equipped else ''}",
+                        callback_data=f"equipmentitem:{equipment.id}",
+                    )])
+            if not owned_items and not owned_equipment:
+                text_lines.append("📭 صندوقچه‌ات فعلاً خالی است.")
+            buttons.append([InlineKeyboardButton(
+                text="🔙 بازگشت به صندوقچه",
+                callback_data="menu:inventory",
+            )])
+            text = "\\n".join(text_lines)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+        elif category == "equipment":
 
             result = await session.execute(
                 select(
