@@ -15,8 +15,26 @@ SCROLLS = {
 }
 
 def scroll_kind(item_name: str) -> str | None:
+    """Recognize scrolls even if the database name omits the decorative scroll emoji."""
+    normalized = " ".join(str(item_name or "").replace("📜", "").split()).casefold()
+    if not normalized:
+        return None
     for kind, data in SCROLLS.items():
-        if item_name in data["names"]:
+        for known_name in data["names"]:
+            known_normalized = " ".join(known_name.replace("📜", "").split()).casefold()
+            if normalized == known_normalized or known_normalized in normalized:
+                return kind
+    # Older item rows may use a shorter display name.
+    aliases = {
+        "power": ("اسکرول قدرت",),
+        "defense": ("اسکرول دفاع",),
+        "resistance": ("اسکرول مقاومت", "مقاومت شکن"),
+        "healing": ("اسکرول درمان",),
+        "mana": ("اسکرول مانا",),
+        "explorer": ("اسکرول شکارچی", "اسکرول کاوشگر"),
+    }
+    for kind, names in aliases.items():
+        if any(name.casefold() in normalized for name in names):
             return kind
     return None
 
