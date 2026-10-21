@@ -15,14 +15,15 @@ from aiogram.types import CallbackQuery, ChatPermissions, InlineKeyboardButton, 
 from aiogram.exceptions import TelegramAPIError
 from datetime import datetime, timedelta, timezone
 from database.redis import redis
+from config.settings import settings as app_settings
+from utils.text_normalization import normalize_filter_text
 from sqlalchemy import func, select
 from database.database import AsyncSessionLocal
 from models.character import Character
 
 router = Router()
 
-# مالک ثابت پنل نگهبان در تمام گروه‌ها
-GLOBAL_GUARDIAN_OWNER_ID = 8537258392
+# شناسهٔ مدیر اصلی از تنظیمات مرکزی پروژه خوانده می‌شود.
 
 class WelcomeWizard(StatesGroup):
     media = State()
@@ -34,12 +35,14 @@ class FilterWizard(StatesGroup):
 FLAGS = {"links": "🔗 ضد لینک", "spam": "🌊 ضد فلود", "bots": "🤖 ضد ربات", "words": "🚫 فیلتر کلمات", "welcome": "👋 خوشامدگویی"}
 DEFAULTS = {"links": False, "spam": False, "bots": False, "words": False, "welcome": False}
 WINDOW = defaultdict(deque)
+_WINDOW_CLEANUP_COUNTER = 0
 URL = re.compile(r"(?:https?://|www\.|t\.me/|telegram\.me/|(?:[\w-]+\.)+(?:com|net|org|ir|io|gg|me)(?:/|\b))", re.I)
 PERMISSIONS = ChatPermissions(can_send_messages=False)
 UNMUTE = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True, can_invite_users=True)
 
 def group(chat):
     return chat.type in ("group", "supergroup")
+
 
 async def authorized(bot, chat_id, user_id):
     member = await bot.get_chat_member(chat_id, user_id)
@@ -54,18 +57,18 @@ async def bot_rights(bot, chat_id, action):
 
 
 async def guardian_admin(bot, chat_id, user_id):
-    if int(user_id) == GLOBAL_GUARDIAN_OWNER_ID:
+    if int(user_id) == app_settings.admin_id:
         return True
     try:
         member = await bot.get_chat_member(chat_id, user_id)
     except TelegramAPIError:
         return False
-    if member.status == "creator":
+    if member.status in ("creator", "administrator"):
         return True
     return str(user_id) in await redis.smembers(f"guardian:{chat_id}:admins")
 
 async def owner_only(bot, chat_id, user_id):
-    if int(user_id) == GLOBAL_GUARDIAN_OWNER_ID:
+    if int(user_id) == app_settings.admin_id:
         return True
     try:
         return (await bot.get_chat_member(chat_id, user_id)).status == "creator"
@@ -81,8 +84,9 @@ def keyboard(chat_id, values, owner_id):
     rows += [[InlineKeyboardButton(text="🎨 تنظیم متن خوشامدگویی", callback_data=f"gap:welcome:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="👑 مدیران ثبت‌شده", callback_data=f"gap:admins:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="📋 وضعیت و راهنما", callback_data=f"gap:help:{chat_id}:{owner_id}")], [InlineKeyboardButton(text="✖️ بستن", callback_data=f"gap:close:{chat_id}:{owner_id}")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-def panel(values):
-    return ("🛡️ <b>نگهبان اِلدوریا | مدیریت گروه</b>\n━━━━━━━━━━━━━━━━━━\n"
+def panel(values, group_title="گروه"):
+    safe_group_title = html.escape(group_title or "گروه")
+    return (f"🛡️ <b>نگهبان {safe_group_title} | مدیریت گروه</b>\n━━━━━━━━━━━━━━━━━━\n"
             "تنظیمات امنیتی این گروه مستقل از سایر گروه‌هاست.\n"
             "برای تغییر هر قابلیت، دکمهٔ آن را انتخاب کنید.\n\n"
             "⚔️ پیام‌های فرمان بازی از فیلتر لینک و فلود مستثنا هستند.\n"
@@ -97,7 +101,7 @@ async def gap(message: Message):
         await message.answer("⛔ دسترسی فقط برای مدیران گروه و مالک کل ربات مجاز است.")
         return
     values = await settings(message.chat.id)
-    await message.answer(panel(values), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
+    await message.answer(panel(values, message.chat.title), reply_markup=keyboard(message.chat.id, values, message.from_user.id))
 
 @router.callback_query(F.data.startswith("gap:"))
 async def callback(callback: CallbackQuery, state: FSMContext):
@@ -108,7 +112,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
     if len(parts) < 4 or not parts[2].lstrip("-").isdigit() or int(parts[2]) != callback.message.chat.id or not parts[3].isdigit():
         await callback.answer("پنل متعلق به این گروه نیست.", show_alert=True)
         return
-    if int(parts[3]) != callback.from_user.id and callback.from_user.id != GLOBAL_GUARDIAN_OWNER_ID:
+    if int(parts[3]) != callback.from_user.id and callback.from_user.id != app_settings.admin_id:
         await callback.answer("🔒 این پنل برای مدیر دیگری است؛ پنل خودتان را با /gap باز کنید.", show_alert=True)
         return
     if not await guardian_admin(callback.bot, callback.message.chat.id, callback.from_user.id):
@@ -139,7 +143,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 پنل", callback_data=f"gap:home:{chat_id}:{owner_id}")]]))
     elif action == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>", f"♛ مالک کل نگهبان: <code>{GLOBAL_GUARDIAN_OWNER_ID}</code>"]
+        lines = ["👑 <b>مدیران ثبت‌شده نگهبان</b>", f"♛ مالک کل نگهبان: <code>{app_settings.admin_id}</code>"]
         try:
             owner = next((x for x in await callback.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
             lines.append(f"♙ مالک واقعی این گروه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♙ مالک واقعی این گروه: نامشخص")
@@ -161,7 +165,7 @@ async def callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("🎨 <b>تنظیم خوشامدگویی</b>\nابتدا عکس، ویدئو یا GIF را بفرست. برای بدون رسانه بنویس: بدون رسانه")
     elif action == "home":
         values = await settings(chat_id)
-        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
+        await callback.message.edit_text(panel(values, callback.message.chat.title), reply_markup=keyboard(chat_id, values, owner_id))
     elif action == "toggle" and len(parts) == 5 and parts[4] in FLAGS:
         key = parts[4]
         values = await settings(chat_id)
@@ -200,7 +204,21 @@ async def manage_action(
         return
     if command == "filters":
         words = sorted(await redis.smembers(f"guardian:{chat_id}:words"))
-        await message.answer("🚫 واژه‌های فیلترشده:\n" + (html.escape("، ".join(words)) if words else "موردی ثبت نشده است."))
+        if not words:
+            await message.answer("🚫 <b>واژه‌های فیلترشده</b>\nموردی ثبت نشده است.")
+            return
+        # Telegram text messages have a strict length limit. Send the list in
+        # bounded chunks so a large filter set never fails as one oversized message.
+        prefix = "🚫 <b>واژه‌های فیلترشده</b>\n"
+        chunk = prefix
+        for word in words:
+            item = html.escape(word) + "، "
+            if len(chunk) + len(item) > 3500:
+                await message.answer(chunk.rstrip("، "))
+                chunk = "🚫 <b>ادامهٔ فهرست واژه‌ها</b>\n"
+            chunk += item
+        if chunk.strip() not in (prefix.strip(), "🚫 <b>ادامهٔ فهرست واژه‌ها</b>"):
+            await message.answer(chunk.rstrip("، "))
         return
     if command in ("filteradd", "filterdel"):
         if not arg:
@@ -224,11 +242,21 @@ async def manage_action(
             await message.answer("❌ واژه یا عبارت باید حداکثر ۶۰ نویسه باشد.")
             return
         key = f"guardian:{chat_id}:words"
+        normalized_word = normalize_filter_text(arg)
+        if not normalized_word:
+            await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+            return
         if command == "filteradd":
-            await redis.sadd(key, arg.casefold())
-            await message.answer(f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد.")
+            added = await redis.sadd(key, normalized_word)
+            await message.answer(
+                f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد."
+                if added else f"ℹ️ واژهٔ «{html.escape(arg)}» از قبل در فیلتر بود."
+            )
         else:
-            removed = await redis.srem(key, arg.casefold())
+            # Also remove older entries saved before Persian text normalization.
+            stored_words = await redis.smembers(key)
+            matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+            removed = await redis.srem(key, *matches) if matches else 0
             await message.answer(
                 f"✅ واژهٔ «{html.escape(arg)}» از فیلتر گروه حذف شد."
                 if removed else f"ℹ️ واژهٔ «{html.escape(arg)}» در فهرست فیلتر نبود."
@@ -291,7 +319,7 @@ async def manage_action(
         if target_id is None:
             await message.answer("روی پیام عضو ریپلای کن؛ یا شناسهٔ عددی او را بنویس و روی همان پیام ریپلای کن. نمونه: /unban 123456789")
             return
-        if target_id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID):
+        if target_id in (message.from_user.id, app_settings.admin_id):
             await message.answer("⛔ نمی‌توان بن خودت یا مالک کل ربات را از این مسیر تغییر داد.")
             return
         if not await bot_rights(message.bot, chat_id, "can_restrict_members"):
@@ -379,7 +407,7 @@ async def manage_action(
     if target_id is None:
         await message.answer("روی پیام عضو ریپلای کن؛ یا یک پیام شامل شناسهٔ عددی او بفرست و روی همان پیام دستور «بن» را اجرا کن.")
         return
-    if target_id in (message.from_user.id, GLOBAL_GUARDIAN_OWNER_ID):
+    if target_id in (message.from_user.id, app_settings.admin_id):
         await message.answer("⛔ امکان اجرای این عملیات روی خودت یا مالک کل ربات وجود ندارد.")
         return
     if target and target.is_bot:
@@ -442,7 +470,11 @@ async def manage_action(
                 "🔔 کاربر پس از پایان این مدت می‌تواند دوباره پیام بفرستد."
             )
         elif command == "unmute":
-            await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
+            # Restore the group's configured default permissions instead of granting
+            # every common permission to a previously restricted member.
+            chat = await message.bot.get_chat(chat_id)
+            permissions = chat.permissions or UNMUTE
+            await message.bot.restrict_chat_member(chat_id, target.id, permissions=permissions)
             await message.answer(
                 "✅ <b>سکوت کاربر برداشته شد</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
@@ -476,7 +508,7 @@ async def admin_roster(message: Message):
     arg = message.text.partition(" ")[2].strip()
     if cmd == "admins":
         ids = sorted(await redis.smembers(f"guardian:{chat_id}:admins"))
-        lines = ["👑 <b>فهرست مدیران نگهبان</b>", f"♛ مالک کل نگهبان: <code>{GLOBAL_GUARDIAN_OWNER_ID}</code>"]
+        lines = ["👑 <b>فهرست مدیران نگهبان</b>", f"♛ مالک کل نگهبان: <code>{app_settings.admin_id}</code>"]
         try:
             owner = next((x for x in await message.bot.get_chat_administrators(chat_id) if x.status == "creator"), None)
             lines.append(f"♙ مالک واقعی این گروه: {html.escape(owner.user.full_name)} — <code>{owner.user.id}</code>" if owner else "♙ مالک واقعی این گروه: نامشخص")
@@ -584,10 +616,15 @@ class GuardianMiddleware(BaseMiddleware):
                     except TelegramAPIError:
                         await event.bot.send_message(chat_id, text)
             return await handler(event, data)
+        # If no message-moderation rule is enabled, avoid Telegram membership
+        # lookups for every ordinary message. Join-time bot/welcome handling above
+        # remains active independently.
+        if not any(values[key] for key in ("links", "spam", "words")):
+            return await handler(event, data)
         if not event.from_user or event.from_user.is_bot:
             return await handler(event, data)
         # مالک کل و مدیران ثبت‌شده نباید پیام‌های مدیریتی‌شان توسط فیلتر ضدفلود/لینک حذف شود.
-        if event.from_user.id == GLOBAL_GUARDIAN_OWNER_ID or await guardian_admin(event.bot, chat_id, event.from_user.id):
+        if event.from_user.id == app_settings.admin_id or await guardian_admin(event.bot, chat_id, event.from_user.id):
             return await handler(event, data)
         content = event.text or event.caption or ""
         if not content or content.startswith("/"):
@@ -599,9 +636,15 @@ class GuardianMiddleware(BaseMiddleware):
             violation = True
         if values["words"]:
             words = await redis.smembers(f"guardian:{chat_id}:words")
-            if any(word and word in content.casefold() for word in words):
+            normalized_content = normalize_filter_text(content)
+            if any(
+                (normalized_word := normalize_filter_text(word))
+                and normalized_word in normalized_content
+                for word in words
+            ):
                 violation = True
         if values["spam"]:
+            global _WINDOW_CLEANUP_COUNTER
             key = (chat_id, event.from_user.id)
             queue = WINDOW[key]
             now = time.monotonic()
@@ -610,6 +653,16 @@ class GuardianMiddleware(BaseMiddleware):
             queue.append(now)
             if len(queue) >= 6:
                 violation = True
+            # Remove inactive users' empty windows periodically so memory does
+            # not grow forever as different people pass through many groups.
+            _WINDOW_CLEANUP_COUNTER += 1
+            if _WINDOW_CLEANUP_COUNTER >= 256:
+                _WINDOW_CLEANUP_COUNTER = 0
+                for window_key, timestamps in list(WINDOW.items()):
+                    while timestamps and now - timestamps[0] > 8:
+                        timestamps.popleft()
+                    if not timestamps:
+                        WINDOW.pop(window_key, None)
         if violation and await bot_rights(event.bot, chat_id, "can_delete_messages"):
             try:
                 await event.delete()
@@ -640,6 +693,9 @@ def _welcome_text(template, title, member_name):
     import random
     now = datetime.now(ZoneInfo("Asia/Tehran"))
     values = {"اسم_گروه": title, "ایموجی": random.choice(["✨","🌟","⚔️","🌿","🦋","🔥","🌙","💎"]), "تاریخ": _jalali_date(now), "ساعت": now.strftime("%H:%M:%S"), "اسم_عضو": member_name}
+    # Treat the template as plain text: escape HTML first, then insert escaped values.
+    # This prevents a typo or a group/member name containing '<' from breaking Telegram HTML.
+    template = html.escape(template or "")
     # پشتیبانی از کلمات ساده؛ نوشتن آکولاد یا تگ لازم نیست. قالب‌های قدیمی آکولاددار هم کار می‌کنند.
     for key, value in values.items():
         safe_value = html.escape(str(value))
@@ -748,14 +804,21 @@ async def receive_filter_word(message: Message, state: FSMContext):
         await message.answer("❌ واژه یا عبارت باید بین ۱ تا ۶۰ نویسه باشد. دوباره بفرست یا «لغو» بنویس.")
         return
     key = f"guardian:{chat_id}:words"
+    normalized_word = normalize_filter_text(word)
+    if not normalized_word:
+        await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+        return
     if command == "filteradd":
-        added = await redis.sadd(key, word.casefold())
+        added = await redis.sadd(key, normalized_word)
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» به فیلتر گروه اضافه شد."
             if added else f"ℹ️ واژهٔ «{html.escape(word)}» از قبل در فیلتر بود."
         )
     elif command == "filterdel":
-        removed = await redis.srem(key, word.casefold())
+        # Also remove older entries saved before Persian text normalization.
+        stored_words = await redis.smembers(key)
+        matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+        removed = await redis.srem(key, *matches) if matches else 0
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» از فیلتر گروه حذف شد."
             if removed else f"ℹ️ واژهٔ «{html.escape(word)}» در فهرست فیلتر نبود."

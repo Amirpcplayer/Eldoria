@@ -479,24 +479,37 @@ def boss_death_dialogue(cfg: dict) -> str:
     ]
     return random.choice(variants)
 
-def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
+def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None, next_spawn_at: datetime | None = None) -> str:
+    """Render an alert-style world-boss notice while preserving existing battle commands."""
     story = html.escape(boss_entrance_story(cfg))
-    weak = f"\n╟─ 🜂 <b>نقطه‌ضعف:</b> {ELEMENTS.get(weakness, weakness)}" if weakness else ""
-    return (f"╔══════ 🜲 <b>طومار بیداری باس</b> 🜲 ══════╗\n\n"
-            f"📜 <i>{story}</i>\n\n"
-            f"╟─ ⚔️ <b>{html.escape(cfg['name'])}</b> · <b>Lv.{level}</b>\n"
-            f"╟─ ❤️ <b>جانِ باس</b>  <b>{hp:,} / {hp:,}</b>\n"
-            f"╟─ {boss_hp_bar(hp, hp)}{weak}\n\n"
-            "╠═══════ ✦ <b>فرامین نبرد</b> ✦ ═══════╣\n"
-            "🗡️ برای حمله روی <b>BOSS</b> ریپلای کنید و از دستورهای زیر استفاده کنید.\n"
-            "➤ برای اتک دادن عبارت <code>&lt; حمله &gt;</code> ریپلای کنید.\n"
-            "✨ برای استفاده از جادو عبارت <code>&lt; جادو &gt;</code> ریپلای کنید.\n"
-            "💚 برای استفاده از معجون سلامتی عبارت <code>&lt; هیل &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n"
-            "🔷 برای استفاده از معجون مانا عبارت <code>&lt; ریکاوری مانا &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n\n"
-            "🏆 پاداش بر اساس مشارکت محاسبه می‌شود و ضربهٔ آخر جایزهٔ ویژه دارد.\n"
-            "╚══════════════════════════════════════╝")
-ROOT = Path(__file__).resolve().parent.parent
-
+    boss_name = html.escape(str(cfg.get("name", "سالار ناشناخته")))
+    weak = (
+        f"\n⚡ <b>WEAKNESS:</b> {html.escape(str(ELEMENTS.get(weakness, weakness)))}"
+        if weakness else ""
+    )
+    if next_spawn_at:
+        seconds = max(0, int((next_spawn_at - datetime.utcnow()).total_seconds()))
+        next_spawn = f"{seconds // 60} min"
+    else:
+        next_spawn = "about 60 min"
+    return (
+        "🚨 <b>WORLD BOSS SPAWNED!</b> 🚨\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"💀 <b>{boss_name}</b>  |  <b>Lv.{level}</b>\n"
+        f"📖 <i>{story}</i>\n\n"
+        f"❤️ <b>HP:</b> <code>{hp:,} / {hp:,}</code>\n"
+        "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 <b>100%</b>"
+        f"{weak}\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "⚔️ <b>BATTLE COMMANDS</b>\n"
+        "🗡️ برای حمله، روی پیام همین باس ریپلای کن و بنویس <code>حمله</code>.\n"
+        "✨ برای جادو، روی پیام همین باس ریپلای کن و بنویس <code>جادو</code>.\n"
+        "💚 معجون سلامتی: <code>هیل</code> (بدون ریپلای)\n"
+        "🔷 معجون مانا: <code>ریکاوری مانا</code> (بدون ریپلای)\n\n"
+        "🏆 پاداش بر اساس مشارکت محاسبه می‌شود؛ آخرین ضربه جایزهٔ ویژه دارد.\n"
+        f"⏱️ <b>NEXT SPAWN CHECK:</b> {html.escape(next_spawn)}\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
 
 def resolve_boss_image(cfg: dict) -> Path | None:
     """Resolve boss artwork from one shared path for automatic and admin spawns."""
@@ -717,7 +730,7 @@ async def boss_scheduler() -> None:
                     row.next_spawn_at = datetime.utcnow() + timedelta(hours=1)
                     row.message_id = None
                     await session.commit()
-                caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg))
+                caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg), row.next_spawn_at)
                 sent = None
                 image_path = resolve_boss_image(cfg)
                 try:
@@ -996,8 +1009,8 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
     if not boss_snapshot:
         await message.reply(
             "╔══ ⚔️ فرمان نبرد اِلدوریا ⚔️ ══╗\n"
-            "برای حمله به باس، روی پیام همان باس ریپلای کن.\\n"
-            "برای جادو، ابتدا روی پیام باس ریپلای کن و جادو را انتخاب کن.\\n"
+            "برای حمله به باس، روی پیام همان باس ریپلای کن.\n"
+            "برای جادو، ابتدا روی پیام باس ریپلای کن و جادو را انتخاب کن.\n"
             "╚════ ✦ اِلدوریا ✦ ════╝"
         )
         return
