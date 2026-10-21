@@ -255,25 +255,10 @@ async def fan_art_view(
         fan_art.id,
     )
 
-    rarity_name = RARITY_NAMES.get(
-        fan_art.rarity,
-        fan_art.rarity,
-    )
-
-    if fan_art.is_limited:
-        stock_text = (
-            f"🗃 موجودی: {fan_art.stock or 0}"
-        )
-    else:
-        stock_text = "🗃 موجودی: نامحدود"
-
+    # Player-facing Fan Art details intentionally show only name and price.
     caption = (
-        f"🎨 {fan_art.name}\n\n"
-        f"{fan_art.description}\n\n"
-        f"💎 رریتی: {rarity_name}\n"
-        f"💰 قیمت خرید: {int(fan_art.price):,}\n"
-        f"🏦 ارزش اقتصادی بازی: {int(getattr(fan_art, 'value_gold', 0) or 0):,} طلا\n"
-        f"{stock_text}"
+        f"🎨 {fan_art.name}\n"
+        f"💰 قیمت: {int(fan_art.price):,}"
     )
 
     await show_photo(
