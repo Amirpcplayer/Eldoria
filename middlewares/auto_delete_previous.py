@@ -11,8 +11,9 @@ from aiogram.types import Message
 
 logger = logging.getLogger(__name__)
 
-# Only ordinary private-chat replies/panels are managed here. Group gameplay
-# messages (bosses, combat, dungeon events, etc.) are intentionally untouched.
+# Track messages sent by the bot in both private chats and groups. Only IDs
+# returned by Telegram for this bot's own messages are stored; player messages
+# are never tracked or deleted.
 MESSAGE_METHODS = {
     "SendMessage",
     "SendPhoto",
@@ -33,10 +34,10 @@ MESSAGE_METHODS = {
 
 
 class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
-    """Keep only the latest bot message in each private chat.
+    """Keep only the latest bot message(s) in each chat, including groups.
 
-    This works at the Bot API request layer, so it covers handlers throughout
-    the bot without requiring each router to use a separate helper.
+    This works at the Bot API request layer. It only deletes message IDs
+    returned from the bot's own send requests, never messages written by users.
     """
 
     def __init__(self) -> None:
@@ -56,9 +57,9 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
             return await make_request(bot, method)
 
         raw_chat_id = getattr(method, "chat_id", None)
-        # Telegram user IDs are positive; group/supergroup/channel IDs are
-        # negative. Avoid applying private-chat cleanup to group gameplay.
-        if isinstance(raw_chat_id, bool) or not isinstance(raw_chat_id, int) or raw_chat_id <= 0:
+        # Private chat IDs are positive; group/supergroup/channel IDs are
+        # negative. Accept both so cleanup also works in group chats.
+        if isinstance(raw_chat_id, bool) or not isinstance(raw_chat_id, int) or raw_chat_id == 0:
             return await make_request(bot, method)
 
         chat_id = raw_chat_id
