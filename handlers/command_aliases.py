@@ -93,17 +93,17 @@ async def render_command_panel(message: Message, section: str) -> None:
             progress = min(100, int(guild["xp"] * 100 / max(1, guild["next_level_xp"])))
             bar = "🟩" * (progress // 10) + "⬜" * (10 - progress // 10)
             text = (
-                "🛡️ <b>تالار گیلد اِلدوریا</b>\\n\\n"
-                f"🏰 <b>{html.escape(guild['name'])}</b>  <code>[{html.escape(guild['tag'])}]</code>\\n"
-                f"🆔 شناسه: <code>{guild['id']}</code>\\n"
-                f"⭐ سطح گیلد: <b>{guild['level']}</b>\\n"
-                f"👥 اعضا: <b>{guild['member_count']}/{guild['max_members']}</b>\\n"
-                f"✨ تجربه: {guild['xp']:,}/{guild['next_level_xp']:,}\\n{bar}\\n\\n"
+                "🛡️ <b>تالار گیلد اِلدوریا</b>\n\n"
+                f"🏰 <b>{html.escape(guild['name'])}</b>  <code>[{html.escape(guild['tag'])}]</code>\n"
+                f"🆔 شناسه: <code>{guild['id']}</code>\n"
+                f"⭐ سطح گیلد: <b>{guild['level']}</b>\n"
+                f"👥 اعضا: <b>{guild['member_count']}/{guild['max_members']}</b>\n"
+                f"✨ تجربه: {guild['xp']:,}/{guild['next_level_xp']:,}\n{bar}\n\n"
                 f"{'👑 رهبر گیلد هستی.' if guild['role'] == 'owner' else '🤝 عضو گیلد هستی.'}"
             )
         else:
             text = (
-                "🛡️ <b>تالار گیلدهای اِلدوریا</b>\\n\\n"
+                "🛡️ <b>تالار گیلدهای اِلدوریا</b>\n\n"
                 "گیلد بساز، به گیلد بپیوند یا گیلدها را بررسی کن."
             )
         markup = protect_keyboard(
@@ -126,7 +126,6 @@ async def render_command_panel(message: Message, section: str) -> None:
         "pets": ("🐾 <b>همراهان اِلدوریا</b>\n\nپت‌هایت را مدیریت کن، پت تازه بگیر یا پت فعال را تمرین بده.", keyboard([button("🐾 حیوانات من", "pets:list")], [button("🛒 بازار پت‌ها", "pets:market")], [button("✨ تمرین / تکامل پت فعال", "pets:evolve")], [button("🔙 منوی اصلی", "menu:back")]), "pets"),
         "events": ("🎉 <b>رویدادهای اِلدوریا</b>\n\nوضعیت رویدادهای ویژه را بررسی کن.", keyboard([button("🎉 رویدادهای فعال", "events:list")], [button("🔙 منوی اصلی", "menu:back")]), "events"),
         "party": ("👥 <b>پارتی اِلدوریا</b>\n\nپارتی بساز، به پارتی بپیوند یا اعضا را مدیریت کن.", keyboard([button("➕ ساخت پارتی", "party:create")], [button("🔗 پیوستن به پارتی", "party:join")], [button("👥 اطلاعات و اعضای پارتی", "party:members")], [button("🔙 منوی اصلی", "menu:back")]), "party"),
-        "guild": ("🛡️ <b>تالار گیلدهای اِلدوریا</b>\n\nگیلد بساز، به گیلد بپیوند یا گیلدها را بررسی کن.", keyboard([button("🏰 ساخت گیلد", "guild:create")], [button("🔎 یافتن گیلدها", "guild:rankings")], [button("🔗 پیوستن با شناسه", "guild:join")], [button("🔙 منوی اصلی", "menu:back")]), "guild"),
         "marketplace": ("🏪 <b>بازار بازیکنان اِلدوریا</b>\n\nآگهی‌ها را بررسی کن یا آیتم‌هایت را برای فروش ثبت کن.", keyboard([button("🛒 آگهی‌های بازار", "market:browse")], [button("📦 آگهی‌های من", "market:mine")], [button("➕ ثبت آگهی از صندوقچه", "market:sell:home")], [button("❔ راهنمای بازار", "market:help")], [button("🔙 منوی اصلی", "menu:back")]), "marketplace"),
         "forge": ("⚒️ <b>آهنگری اِلدوریا</b>\n\nتجهیزاتت را انتخاب و با گلد و مواد اولیه ارتقا بده.", keyboard([button("⚒️ باز کردن آهنگری", "menu:forge")], [button("🛡️ تجهیزات", "menu:equipment")], [button("🔙 منوی اصلی", "menu:back")]), "forge"),
         "guide": ("📖 <b>کتاب راهنمای اِلدوریا</b>\n\nقهرمان، این دفترچه دو مسیر پیش روی تو می‌گذارد. اگر تازه وارد جهان اِلدوریا شده‌ای، از پیشرفت سریع آغاز کن؛ اگر می‌خواهی با سامانه‌های بازی آشنا شوی، راهنمای جامع را بخوان.\n\n✦ هر زمان خواستی می‌توانی به این صفحه بازگردی.", keyboard([button("⚡ راهنمای پیشرفت سریع", "guide:quick")], [button("📚 راهنمای جامع", "guide:full")], [button("🔙 منوی اصلی", "menu:back")]), "guide"),
