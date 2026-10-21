@@ -39,6 +39,36 @@ ALIASES = {
     "settings": "settings",
 }
 
+
+TEXT_ALIASES = {
+    "صندوقچه": "inventory",
+    "مهارت ها": "skills",
+    "مهارت‌ها": "skills",
+    "تجهیزات": "equipment",
+    "ماموریت ها": "quest",
+    "ماموریت‌ها": "quest",
+    "ماموریت": "quest",
+    "ماجراجویی": "adventure",
+    "کرفتینگ": "crafting",
+    "ساخت": "crafting",
+    "پت": "pets",
+    "حیوانات": "pets",
+    "ایونت": "events",
+    "رویداد": "events",
+    "پارتی": "party",
+    "گیلد": "guild",
+    "گیلـد": "guild",
+    "بازار بازیکنان": "marketplace",
+    "بازار": "marketplace",
+    "آهنگری": "forge",
+    "راهنما": "guide",
+    "تبدیل": "exchange",
+    "صرافی": "exchange",
+    "تنظیمات": "settings",
+    "فروشگاه": "shop",
+    "منو": "main_menu",
+}
+
 def button(text: str, callback_data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
@@ -49,6 +79,7 @@ async def render_command_panel(message: Message, section: str) -> None:
     user_id = message.from_user.id
     panel_name = "main_menu"
     texts = {
+        "main_menu": ("🎮 <b>منوی اصلی اِلدوریا</b>\n\n🌌 ماجراجویی تو در اِلدوریا ادامه دارد...", keyboard([button("🗺️ ماجراجویی", "menu:adventure")], [button("🏪 فروشگاه", "menu:shop")], [button("🔙 منوی اصلی", "menu:back")]), "main_menu"),
         "inventory": ("🗃 <b>صندوقچهٔ قهرمان</b>\n\nآیتم‌ها، مواد اولیه، اسکرول‌ها و فن‌آرت‌هایت را مدیریت کن.", inventory_keyboard(), "inventory"),
         "skills": ("⚔️ <b>مهارت‌های قهرمان</b>\n\nمهارت‌هایت را یاد بگیر، مشاهده و ارتقا بده.", skills_main_keyboard(), "skills"),
         "equipment": ("🛡️ <b>تجهیزات قهرمان</b>\n\nتجهیزاتت را مشاهده و مدیریت کن.", equipment_main_keyboard(), "equipment"),
@@ -78,3 +109,17 @@ async def command_alias(message: Message):
     section = ALIASES.get(command)
     if section:
         await render_command_panel(message, section)
+
+@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() in TEXT_ALIASES))
+async def text_alias(message: Message):
+    if not message.from_user:
+        return
+    phrase = (message.text or "").strip().casefold()
+    section = TEXT_ALIASES.get(phrase)
+    if section:
+        if section == "main_menu":
+            from handlers.main_menu import MAIN_MENU_TEXT
+            from keyboards.main_menu import main_menu_keyboard
+            await send_panel(message=message, panel_name="main_menu", text=MAIN_MENU_TEXT, reply_markup=main_menu_keyboard())
+        else:
+            await render_command_panel(message, section)
