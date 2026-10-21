@@ -5,15 +5,23 @@ from decimal import Decimal, InvalidOperation
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import settings
 from database.database import AsyncSessionLocal
 from models.fan_art import FanArt
 from services.fan_art_service import (
     APPROVED,
+    CANCELLED,
+    PENDING_PAYMENT,
+    WAITING_RECEIPT,
+    UNDER_REVIEW,
+    ACTIVE_ORDER_STATUSES,
+    admin_cancel_order,
     approve_order,
     cancel_all_active_orders,
+    get_order_for_admin,
+    get_orders,
     reject_order,
 )
 from states.fan_art import FanArtAdminStates, FanArtStates
@@ -47,6 +55,182 @@ RARITY_ALIASES = {
 
 def is_admin(telegram_id: int) -> bool:
     return telegram_id == settings.admin_id
+
+
+ORDER_PAGE_SIZE = 8
+
+ORDER_STATUS_NAMES = {
+    PENDING_PAYMENT: "⏳ منتظر پرداخت",
+    WAITING_RECEIPT: "📷 منتظر رسید",
+    UNDER_REVIEW: "🔎 در انتظار بررسی رسید",
+    APPROVED: "✅ تأیید شده",
+    "REJECTED": "❌ رد شده",
+    CANCELLED: "🗑 لغو شده",
+}
+
+
+def admin_orders_keyboard(orders, page: int = 0, has_next: bool = False):
+    rows = [
+        [InlineKeyboardButton(
+            text=f"#{order.id} · {order.order_code} · {ORDER_STATUS_NAMES.get(order.status, order.status)}"[:64],
+            callback_data=f"fanartadmin:order:view:{order.id}",
+        )]
+        for order in orders
+    ]
+    rows.append([InlineKeyboardButton(text="🔎 جست‌وجو با شناسه واریز", callback_data="fanartadmin:order:search")])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ قبلی", callback_data=f"fanartadmin:orders:{page - 1}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"fanartadmin:orders:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔙 پنل ادمین", callback_data="admin:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def order_actions_keyboard(order):
+    rows = []
+    if order.status == UNDER_REVIEW:
+        rows.append([InlineKeyboardButton(text="✅ تأیید و افزودن به صندوقچه", callback_data=f"fanartadmin:approve:{order.id}")])
+        rows.append([InlineKeyboardButton(text="❌ رد سفارش", callback_data=f"fanartadmin:reject:{order.id}")])
+    if order.status in ACTIVE_ORDER_STATUSES:
+        rows.append([InlineKeyboardButton(text="🗑 لغو سفارش ناقص/فعال", callback_data=f"fanartadmin:cancel:{order.id}")])
+    rows.append([InlineKeyboardButton(text="🔙 فهرست سفارش‌ها", callback_data="fanartadmin:orders:0")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def render_order_details(message_or_callback, order):
+    status = ORDER_STATUS_NAMES.get(order.status, order.status)
+    receipt_text = "📷 رسید: ثبت شده" if order.receipt_file_id else "📷 رسید: هنوز ارسال نشده"
+    art_name = order.fan_art.name if order.fan_art else "فن‌آرت ناموجود"
+    details = (
+        "🧾 <b>جزئیات سفارش فن‌آرت</b>\\n\\n"
+        f"🆔 شناسه داخلی: <code>{order.id}</code>\\n"
+        f"🏦 شناسه واریز/سفارش: <code>{order.order_code}</code>\\n"
+        f"👤 Telegram ID خریدار: <code>{order.telegram_id}</code>\\n"
+        f"🎨 فن‌آرت: {art_name}\\n"
+        f"💰 مبلغ ثبت‌شده: {order.price_snapshot}\\n"
+        f"📌 وضعیت: {status}\\n"
+        f"{receipt_text}\\n"
+        f"🕒 ثبت: {order.created_at:%Y-%m-%d %H:%M}\\n"
+        f"🔄 آخرین تغییر: {order.updated_at:%Y-%m-%d %H:%M}"
+    )
+    if order.rejection_reason:
+        details += f"\\n📝 دلیل رد: {order.rejection_reason}"
+    target = message_or_callback.message if isinstance(message_or_callback, CallbackQuery) else message_or_callback
+    if target is None:
+        return
+    keyboard = order_actions_keyboard(order)
+    if order.receipt_file_id:
+        await target.answer_photo(
+            photo=order.receipt_file_id,
+            caption=details,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    else:
+        await target.answer(details, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "admin:fanart:orders")
+@router.callback_query(F.data.startswith("fanartadmin:orders:"))
+async def fanart_admin_orders(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        page = int(callback.data.rsplit(":", 1)[1]) if callback.data.startswith("fanartadmin:orders:") else 0
+    except ValueError:
+        page = 0
+    all_orders = await get_orders(limit=ORDER_PAGE_SIZE + 1, offset=page * ORDER_PAGE_SIZE)
+    has_next = len(all_orders) > ORDER_PAGE_SIZE
+    orders = all_orders[:ORDER_PAGE_SIZE]
+    if callback.message:
+        await callback.message.answer(
+            f"🧾 <b>سفارش‌های فن‌آرت</b> · صفحه {page + 1}\\n"
+            "سفارش‌های ناقص، منتظر پرداخت، منتظر رسید و رسیدهای در حال بررسی هم نمایش داده می‌شوند.\\n"
+            f"📦 تعداد این صفحه: {len(orders)}",
+            reply_markup=admin_orders_keyboard(orders, page, has_next),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "fanartadmin:order:search")
+async def fanart_admin_order_search_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(FanArtAdminStates.search_order_code)
+    if callback.message:
+        await callback.message.answer(
+            "🔎 شناسه واریز/شماره سفارش را دقیق بفرست.\\n"
+            "مثال: ELD-20261021-52120\\n"
+            "شناسه داخلی عددی سفارش هم قابل جست‌وجو است.\\n"
+            "لغو جست‌وجو: /cancel"
+        )
+    await callback.answer()
+
+
+@router.message(FanArtAdminStates.search_order_code, F.text)
+async def fanart_admin_order_search_finish(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    query = message.text.strip()
+    if query.lower() == "/cancel":
+        await state.clear()
+        await message.answer("جست‌وجو لغو شد.")
+        return
+    order = await get_order_for_admin(query)
+    await state.clear()
+    if order is None:
+        await message.answer(
+            f"❌ سفارشی با شناسه «{query}» پیدا نشد.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔎 جست‌وجوی دوباره", callback_data="fanartadmin:order:search")],
+                [InlineKeyboardButton(text="🧾 همه سفارش‌ها", callback_data="fanartadmin:orders:0")],
+            ]),
+        )
+        return
+    await render_order_details(message, order)
+
+
+@router.callback_query(F.data.startswith("fanartadmin:order:view:"))
+async def fanart_admin_order_view(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        order_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("شناسه سفارش نامعتبر است.", show_alert=True)
+        return
+    order = await get_order_for_admin(str(order_id))
+    if order is None:
+        await callback.answer("سفارش پیدا نشد.", show_alert=True)
+        return
+    await render_order_details(callback, order)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("fanartadmin:cancel:"))
+async def fanart_admin_order_cancel(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        order_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("شناسه سفارش نامعتبر است.", show_alert=True)
+        return
+    order = await admin_cancel_order(order_id)
+    if order is None:
+        await callback.answer("این سفارش فعال نیست یا قبلاً تعیین تکلیف شده.", show_alert=True)
+        return
+    await callback.answer("سفارش لغو شد.")
+    await render_order_details(callback, order)
 
 
 @router.message(Command("fanart_clear_active_orders"))
