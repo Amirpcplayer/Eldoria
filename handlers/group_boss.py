@@ -1288,7 +1288,7 @@ async def _story_attack(message: Message) -> None:
 
 
 @router.message(Command("attack", ignore_case=True))
-@router.message(F.text.regexp(r"(?i)^\\s*حمله\\s*$"))
+@router.message(F.text.regexp(r"(?i)^\s*حمله\s*$"))
 async def group_boss_attack(message: Message):
     if message.reply_to_message is None:
         await _story_attack(message)
