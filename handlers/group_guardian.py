@@ -147,15 +147,18 @@ async def callback(callback: CallbackQuery, state: FSMContext):
         values = await settings(chat_id)
         values[key] = not values[key]
         await redis.hset(f"guardian:{chat_id}:settings", key, "1" if values[key] else "0")
-        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values))
+        await callback.message.edit_text(panel(values), reply_markup=keyboard(chat_id, values, owner_id))
     await callback.answer()
 
 @router.message(Command("warn", "mute", "unmute", "ban", "unban", "kick", "warnings", "clearwarn", "filteradd", "filterdel", "filters", "rules"))
 async def manage(message: Message):
+    if not message.text:
+        return
+    await manage_action(message, message.text.split()[0].split("@")[0][1:].lower(), message.text.partition(" ")[2].strip())
+
+async def manage_action(message: Message, command: str, arg: str):
     if not group(message.chat) or not message.from_user:
         return
-    command = message.text.split()[0].split("@")[0][1:].lower()
-    arg = message.text.partition(" ")[2].strip()
     chat_id = message.chat.id
     if command == "rules" and not arg:
         rules = await redis.get(f"guardian:{chat_id}:rules")
