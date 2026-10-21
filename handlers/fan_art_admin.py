@@ -13,6 +13,7 @@ from models.fan_art import FanArt
 from services.fan_art_service import (
     APPROVED,
     approve_order,
+    cancel_all_active_orders,
     reject_order,
 )
 from states.fan_art import FanArtAdminStates, FanArtStates
@@ -46,6 +47,20 @@ RARITY_ALIASES = {
 
 def is_admin(telegram_id: int) -> bool:
     return telegram_id == settings.admin_id
+
+
+@router.message(Command("fanart_clear_active_orders"))
+async def fanart_clear_active_orders(message: Message):
+    """Admin-only cleanup: cancel all pending Fan Art orders, keep history."""
+    if not is_admin(message.from_user.id):
+        return
+
+    count = await cancel_all_active_orders()
+    await message.answer(
+        "✅ پاک‌سازی سفارش‌های فعال فن‌آرت انجام شد.\n\n"
+        f"🧾 تعداد سفارش‌های لغوشده: {count}\n"
+        "سفارش‌ها از تاریخچه حذف نشده‌اند؛ فقط وضعیتشان لغو شده تا سابقه پرداخت حفظ شود."
+    )
 
 
 @router.message(Command("fanart_add"))
