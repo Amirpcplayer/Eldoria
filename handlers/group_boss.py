@@ -30,6 +30,7 @@ from config.settings import settings
 
 router = Router(name="group_boss")
 logger = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parent.parent
 
 
 # تومارهای ورود باس؛ پنج روایت برای هر باس عادی و پنجاه روایت برای نخستین اِلدوریا.
@@ -496,8 +497,6 @@ def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = No
             "🔷 برای استفاده از معجون مانا عبارت <code>&lt; ریکاوری مانا &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n\n"
             "🏆 پاداش بر اساس مشارکت محاسبه می‌شود و ضربهٔ آخر جایزهٔ ویژه دارد.\n"
             "╚══════════════════════════════════════╝")
-ROOT = Path(__file__).resolve().parent.parent
-
 
 def resolve_boss_image(cfg: dict) -> Path | None:
     """Resolve boss artwork from one shared path for automatic and admin spawns."""
