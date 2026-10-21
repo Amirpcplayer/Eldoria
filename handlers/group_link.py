@@ -9,7 +9,7 @@ from bot.bot import bot
 router = Router(name="group_link")
 logger = logging.getLogger(__name__)
 
-@router.message(F.chat.type.in_({"group", "supergroup"}), F.text.func(lambda text: text.strip().casefold() in {"لینک", "لینک گروه", "لینکگروه"}))
+@router.message(F.chat.type.in_({"group", "supergroup"}), F.text.func(lambda text: bool(text) and text.strip().casefold() in {"لینک", "لینک گروه", "لینکگروه"}))
 async def group_invite_link(message: Message) -> None:
     try:
         invite = await bot.export_chat_invite_link(message.chat.id)
