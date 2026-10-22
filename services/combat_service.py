@@ -614,51 +614,8 @@ async def get_character_skill(
 async def has_active_battle(
     telegram_id: int,
 ) -> bool:
-
-    async for key in redis.scan_iter(
-        match="eldoria:battle:*"
-    ):
-
-        if isinstance(key, bytes):
-            key = key.decode(
-                "utf-8"
-            )
-
-        if key.startswith(
-            "eldoria:battle_reward:"
-        ):
-            continue
-
-        data = await redis.hgetall(
-            key
-        )
-
-        if not data:
-            continue
-
-        stored_telegram_id = data.get(
-            "telegram_id",
-            0,
-        )
-
-        if isinstance(
-            stored_telegram_id,
-            bytes,
-        ):
-            stored_telegram_id = (
-                stored_telegram_id.decode(
-                    "utf-8"
-                )
-            )
-
-        if int(
-            stored_telegram_id
-        ) != telegram_id:
-            continue
-
-        return True
-
-    return False
+    """Check active battle in O(1); legacy-key scan is handled by the index helper."""
+    return await get_active_battle_for_player(telegram_id) is not None
 
 
 # ============================================================
