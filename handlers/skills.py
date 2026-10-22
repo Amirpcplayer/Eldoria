@@ -28,6 +28,7 @@ from services.skill_service import (
 )
 
 from services.panel_image_service import show_panel
+from services.language_service import get_language
 
 
 router = Router()
@@ -71,6 +72,19 @@ async def get_character(telegram_id: int):
         )
 
 
+_SKILL_TRANSLATIONS = {
+"en": {
+"مهارت‌های قهرمان":"Hero Skills","قدرت‌های جادویی خودت را مدیریت کن.":"Manage your magical abilities.","مهارت‌های من":"My Skills","هنوز هیچ مهارتی یاد نگرفته‌ای.":"You haven't learned any skills yet.","یادگیری مهارت":"Learn Skills","یک مهارت انتخاب کن.":"Choose a skill.","تعداد مهارت‌ها":"Number of skills","قهرمان پیدا نشد.":"Hero not found.","شناسه مهارت نامعتبر است.":"Invalid skill ID.","مهارت پیدا نشد.":"Skill not found.","این مهارت را یاد نگرفته‌ای.":"You haven't learned this skill.","یادگیری مهارت":"Learn Skills","Level قهرمان":"Hero level","اسلات‌های باز":"Unlocked slots","مهارتی که می‌خواهی یاد بگیری انتخاب کن:":"Choose a skill to learn:","قابل انتخاب":"Available","قبلاً یاد گرفته شده":"Already learned","قفل":"Locked","این مهارت هنوز برای قهرمانت باز نشده است.":"This skill is not unlocked for your hero yet.","ارتقای مهارت":"Upgrade Skill","ابتدا از بخش «✨ یادگیری مهارت»":"First learn a skill from “✨ Learn Skills”.","مهارتی که می‌خواهی ارتقا بدهی انتخاب کن:":"Choose a skill to upgrade:","سطح فعلی":"Current level","سطح بعدی":"Next level","قدرت فعلی":"Current power","قدرت بعدی":"Next power","هزینه ارتقا":"Upgrade cost","XP مورد نیاز":"Required XP","Gold مورد نیاز":"Required Gold","موجودی فعلی":"Current balance","آیا می‌خواهی این مهارت را ارتقا بدهی؟":"Do you want to upgrade this skill?","ارتقا با موفقیت انجام شد.":"Skill upgraded successfully.","عنصر":"Element","کمیابی":"Rarity","نوع":"Type","هدف":"Target","بدون توضیحات":"No description","سطح مهارت":"Skill level","قدرت":"Power","شناسه":"ID","معمولی":"Common","غیرمعمولی":"Uncommon","کمیاب":"Rare","حماسی":"Epic","افسانه‌ای":"Legendary","اسطوره‌ای":"Mythic","الهی":"Divine","آتش":"Fire","آب":"Water","باد":"Wind","خاک":"Earth","الکترو":"Electro","یخ":"Ice","نور":"Light","تاریکی":"Dark"},
+"ru": {
+"مهارت‌های قهرمان":"Навыки героя","قدرت‌های جادویی خودت را مدیریت کن.":"Управляйте магическими способностями.","مهارت‌های من":"Мои навыки","هنوز هیچ مهارتی یاد نگرفته‌ای.":"Вы ещё не изучили навыки.","یادگیری مهارت":"Изучить навык","یک مهارت انتخاب کن.":"Выберите навык.","تعداد مهارت‌ها":"Количество навыков","قهرمان پیدا نشد.":"Герой не найден.","شناسه مهارت نامعتبر است.":"Неверный ID навыка.","مهارت پیدا نشد.":"Навык не найден.","این مهارت را یاد نگرفته‌ای.":"Вы ещё не изучили этот навык.","Level قهرمان":"Уровень героя","اسلات‌های باز":"Открытые ячейки","مهارتی که می‌خواهی یاد بگیری انتخاب کن:":"Выберите навык для изучения:","قابل انتخاب":"Доступно","قبلاً یاد گرفته شده":"Уже изучено","قفل":"Заблокировано","این مهارت هنوز برای قهرمانت باز نشده است.":"Этот навык пока недоступен вашему герою.","ارتقای مهارت":"Улучшить навык","ابتدا از بخش «✨ یادگیری مهارت»":"Сначала изучите навык в разделе «✨ Изучить навык».","مهارتی که می‌خواهی ارتقا بدهی انتخاب کن:":"Выберите навык для улучшения:","سطح فعلی":"Текущий уровень","سطح بعدی":"Следующий уровень","قدرت فعلی":"Текущая сила","قدرت بعدی":"Следующая сила","هزینه ارتقا":"Стоимость улучшения","XP مورد نیاز":"Требуется XP","Gold مورد نیاز":"Требуется золото","موجودی فعلی":"Текущий баланс","آیا می‌خواهی این مهارت را ارتقا بدهی؟":"Хотите улучшить этот навык?","ارتقا با موفقیت انجام شد.":"Навык успешно улучшен.","عنصر":"Стихия","کمیابی":"Редкость","نوع":"Тип","هدف":"Цель","بدون توضیحات":"Без описания","سطح مهارت":"Уровень навыка","قدرت":"Сила","معمولی":"Обычный","غیرمعمولی":"Необычный","کمیاب":"Редкий","حماسی":"Эпический","افسانه‌ای":"Легендарный","اسطوره‌ای":"Мифический","الهی":"Божественный","آتش":"Огонь","آب":"Вода","باد":"Ветер","خاک":"Земля","الکترو":"Электро","یخ":"Лёд","نور":"Свет","تاریکی":"Тьма"}
+}
+
+def _translate_skill_text(text: str, language: str) -> str:
+    for source, target in _SKILL_TRANSLATIONS.get(language, {}).items():
+        text = text.replace(source, target)
+    return text
+
+
 async def render_skills_panel(
     callback: CallbackQuery,
     text: str,
@@ -79,6 +93,14 @@ async def render_skills_panel(
     """
     نمایش پنل مهارت‌ها با مدیریت پیام تصویری یا متنی.
     """
+    language = await get_language(callback.from_user.id)
+    if language in ("en", "ru"):
+        text = _translate_skill_text(text, language)
+        if reply_markup is not None and getattr(reply_markup, "inline_keyboard", None):
+            rows = []
+            for row in reply_markup.inline_keyboard:
+                rows.append([button.model_copy(update={"text": _translate_skill_text(button.text, language)}) for button in row])
+            reply_markup = reply_markup.model_copy(update={"inline_keyboard": rows})
     return await show_panel(
         callback=callback,
         panel_name=PANEL_NAME,
@@ -92,8 +114,9 @@ async def show_error(
     callback: CallbackQuery,
     text: str,
 ):
+    language = await get_language(callback.from_user.id)
     await callback.answer(
-        text,
+        _translate_skill_text(text, language),
         show_alert=True,
     )
 
