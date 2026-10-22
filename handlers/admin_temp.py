@@ -132,6 +132,25 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 
 
 
+
+def delegated_admin_keyboard() -> InlineKeyboardMarkup:
+    """Full admin panel except premium emoji and the three Fan Art-only sections."""
+    keyboard = admin_keyboard()
+    blocked = {
+        "admin:admins:add",
+        "admin:fanart_gifts",
+        "admin:fanart:add",
+        "admin:fanart:orders",
+        "admin:emoji:home",
+    }
+    rows = []
+    for row in keyboard.inline_keyboard:
+        visible = [button for button in row if button.callback_data not in blocked]
+        if visible:
+            rows.append(visible)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def fanart_admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎁 مدیریت گیفت فن‌آرت", callback_data="admin:fanart_gifts")],
@@ -442,7 +461,7 @@ async def admin_panel(
     await message.answer(
         "🛡 پنل مدیریت World Eldoria\n\n"
         "بخش موردنظرت را انتخاب کن:",
-        reply_markup=admin_keyboard() if owner_access else fanart_admin_keyboard(),
+        reply_markup=admin_keyboard() if owner_access else delegated_admin_keyboard(),
     )
 
 
@@ -515,7 +534,7 @@ async def admin_home_callback(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -536,7 +555,7 @@ async def admin_close_callback(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -553,7 +572,7 @@ async def delete_players_start(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -578,7 +597,7 @@ async def search_player_start(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -603,7 +622,7 @@ async def cancel_player_search(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         await state.clear()
         return
 
@@ -620,7 +639,7 @@ async def search_player_submit(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         await state.clear()
         return
 
@@ -703,7 +722,7 @@ async def search_player_submit(
 
 @router.callback_query(F.data.startswith("admin:delete:list:"))
 async def delete_players_page(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -762,7 +781,7 @@ async def delete_players_page(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:delete:select:"))
 async def delete_player_select(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -823,7 +842,7 @@ async def delete_player_select(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:delete:confirm:"))
 async def delete_player_confirm(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -985,7 +1004,7 @@ async def admin_gold_start(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1018,7 +1037,7 @@ async def admin_gold_cancel_message(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         await state.clear()
         return
 
@@ -1035,7 +1054,7 @@ async def admin_gold_search_submit(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         await state.clear()
         return
 
@@ -1173,7 +1192,7 @@ async def admin_gold_select_player(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1234,7 +1253,7 @@ async def admin_gold_cancel_callback(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1269,7 +1288,7 @@ async def admin_gold_amount_submit(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         await state.clear()
         return
 
@@ -1363,7 +1382,7 @@ async def admin_gold_change_amount(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1396,7 +1415,7 @@ async def admin_gold_confirm(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1548,7 +1567,7 @@ async def admin_gold_confirm(
 
 @router.callback_query(F.data == "admin:overview")
 async def admin_overview(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     try:
@@ -1590,7 +1609,7 @@ async def admin_overview(callback: CallbackQuery):
 # -------------------- اسپان دستی باس --------------------
 @router.callback_query(F.data == "admin:boss:spawn")
 async def admin_boss_spawn_start(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True); return
     from handlers.group_boss import BOSS_POOL
     rows = []
@@ -1603,7 +1622,7 @@ async def admin_boss_spawn_start(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:boss:page:"))
 async def admin_boss_page(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True); return
     from handlers.group_boss import BOSS_POOL
     try: page=int((cb.data or "").rsplit(":",1)[1])
@@ -1621,7 +1640,7 @@ async def admin_boss_page(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:boss:pick:"))
 async def admin_boss_pick(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True); return
     try: index=int((cb.data or "").split(":")[3])
     except (ValueError,IndexError): await cb.answer("انتخاب نامعتبر است.",show_alert=True); return
@@ -1635,7 +1654,7 @@ async def admin_boss_pick(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:boss:level:"))
 async def admin_boss_level(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True); return
     try: _,_,_,index,level=(cb.data or "").split(":",4); index=int(index); level=int(level)
     except ValueError: await cb.answer("انتخاب نامعتبر است.",show_alert=True); return
@@ -1669,7 +1688,7 @@ async def admin_boss_level(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:boss:target:"))
 async def admin_boss_target(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True); return
     try: _,_,_,index,level,chat_id=(cb.data or "").split(":",5); index=int(index); level=int(level); chat_id=int(chat_id)
     except ValueError: await cb.answer("انتخاب نامعتبر است.",show_alert=True); return
@@ -1719,7 +1738,7 @@ async def admin_boss_target(cb: CallbackQuery):
 # -------------------- اسپان دستی فن‌آرت --------------------
 @router.callback_query(F.data == "admin:fanart:spawn")
 async def admin_fanart_spawn_start(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     async with AsyncSessionLocal() as session:
@@ -1734,7 +1753,7 @@ async def admin_fanart_spawn_start(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:fanart:target:"))
 async def admin_fanart_spawn_target(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
         await cb.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     try:
