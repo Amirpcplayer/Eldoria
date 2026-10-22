@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import random
 import uuid
 import logging
@@ -249,12 +250,63 @@ def get_player_active_battle_key(telegram_id: int) -> str:
     return f"eldoria:active_battle:{int(telegram_id)}"
 
 
+ACTIVE_BATTLE_INDEX_MIGRATION_KEY = "eldoria:active_battle_index:migrated"
+ACTIVE_BATTLE_INDEX_MIGRATION_LOCK = "eldoria:active_battle_index:migration_lock"
+
+
+async def _migrate_legacy_active_battle_indexes() -> None:
+    """Backfill player indexes once for battles created before this optimization."""
+    if await redis.get(ACTIVE_BATTLE_INDEX_MIGRATION_KEY):
+        return
+
+    lock_acquired = await redis.set(
+        ACTIVE_BATTLE_INDEX_MIGRATION_LOCK, "1", nx=True, ex=120
+    )
+    if not lock_acquired:
+        # Another worker is doing the one-time migration. Avoid a per-request scan.
+        for _ in range(30):
+            await asyncio.sleep(0.1)
+            if await redis.get(ACTIVE_BATTLE_INDEX_MIGRATION_KEY):
+                return
+        return
+
+    try:
+        async for raw_key in redis.scan_iter(match="eldoria:battle:*", count=500):
+            key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else str(raw_key)
+            if ":battle_reward:" in key:
+                continue
+            raw = await redis.hgetall(key)
+            if not raw:
+                continue
+            try:
+                owner_id = int(raw.get("telegram_id", 0))
+                player_hp = int(raw.get("player_hp", 0))
+                enemy_hp = int(raw.get("enemy_hp", 0))
+            except (TypeError, ValueError):
+                continue
+            if owner_id <= 0 or player_hp <= 0 or enemy_hp <= 0:
+                continue
+            battle_id = key.rsplit(":", 1)[-1]
+            await redis.set(
+                get_player_active_battle_key(owner_id),
+                battle_id,
+                ex=BATTLE_TTL,
+                nx=True,
+            )
+        await redis.set(ACTIVE_BATTLE_INDEX_MIGRATION_KEY, "1")
+    finally:
+        await redis.delete(ACTIVE_BATTLE_INDEX_MIGRATION_LOCK)
+
+
 async def get_active_battle_for_player(telegram_id: int) -> dict[str, Any] | None:
-    """Read the per-player Redis index without scanning unrelated battles."""
+    """Read the per-player Redis index; migrate legacy keys at most once."""
     index_key = get_player_active_battle_key(telegram_id)
     battle_id = await redis.get(index_key)
     if not battle_id:
-        return None
+        await _migrate_legacy_active_battle_indexes()
+        battle_id = await redis.get(index_key)
+        if not battle_id:
+            return None
 
     battle = await get_battle(str(battle_id))
     if battle is not None and int(battle.get("telegram_id", 0)) == int(telegram_id):
