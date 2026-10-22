@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from bot.bot import bot
@@ -117,17 +117,26 @@ async def claim_group_fan_art(message: Message):
     await message.reply(f"🏆 <b>{name}</b> اولین شکارچی معتبر بود!\n🎨 فن‌آرت «{art_name}» به مجموعه شخصی او اضافه شد.\nبرای استفاده در پروفایل، از بخش فن‌آرت‌ها آن را فعال کن.", parse_mode="HTML")
 
 async def fan_art_scheduler() -> None:
-    """Check each group's own timer independently; safe to resume after restarts."""
+    """Find due group spawns in one query rather than one query per group."""
     while True:
         try:
+            now = datetime.utcnow()
+            cutoff = now - SPAWN_INTERVAL
             async with AsyncSessionLocal() as session:
-                groups = list((await session.scalars(select(GroupBoss.chat_id))).all())
-                due = []
-                now = datetime.utcnow()
-                for chat_id in groups:
-                    slot = await session.scalar(select(GroupFanArtSpawn).where(GroupFanArtSpawn.chat_id == chat_id))
-                    if slot is None or slot.spawned_at is None or now - slot.spawned_at >= SPAWN_INTERVAL:
-                        due.append(chat_id)
+                due = list((await session.scalars(
+                    select(GroupBoss.chat_id)
+                    .outerjoin(
+                        GroupFanArtSpawn,
+                        GroupFanArtSpawn.chat_id == GroupBoss.chat_id,
+                    )
+                    .where(
+                        or_(
+                            GroupFanArtSpawn.id.is_(None),
+                            GroupFanArtSpawn.spawned_at.is_(None),
+                            GroupFanArtSpawn.spawned_at <= cutoff,
+                        )
+                    )
+                )).all())
             for chat_id in due:
                 await spawn_fan_art(chat_id)
         except asyncio.CancelledError:
