@@ -25,12 +25,12 @@ MAIN_MENU_TEXT = (
 
 @router.callback_query(F.data == "menu:back")
 async def main_menu_back_handler(callback: CallbackQuery) -> None:
-    language = await get_language(callback.from_user.id)
+    # Keep the main menu layout and emoji labels stable across language changes.
     await show_panel(
         callback=callback,
         panel_name="main_menu",
-        text=tr(language, "main_title") + "\n\n" + tr(language, "main_sub"),
-        reply_markup=main_menu_keyboard(language),
+        text=MAIN_MENU_TEXT,
+        reply_markup=main_menu_keyboard("fa"),
     )
     await callback.answer()
 
