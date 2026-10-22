@@ -36,6 +36,7 @@ from services.fan_art_service import (
 )
 from states.fan_art import FanArtStates
 from database.redis import redis
+from services.panel_image_service import replace_panel_with_photo, replace_panel_with_text
 
 FAN_ART_PANEL_TTL = 60 * 60 * 24 * 30
 
@@ -121,14 +122,13 @@ async def show_text(
     text: str,
     reply_markup=None,
 ):
-    """Send a new Fan Art panel while preserving earlier chat messages."""
-    if callback.message is None:
-        return
-    await _replace_previous_fan_art_panel(callback)
-    if reply_markup is not None:
-        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-    sent = await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
-    await _save_fan_art_panel(callback, sent)
+    """Edit the current panel; replace it only if it is currently a media message."""
+    return await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode="HTML",
+    )
 
 
 async def show_photo(
@@ -137,33 +137,20 @@ async def show_photo(
     caption: str,
     reply_markup=None,
 ):
-    """Send a new Fan Art image panel; never replace the previous message."""
-    if callback.message is None:
-        return
-    await _replace_previous_fan_art_panel(callback)
-    if reply_markup is not None:
-        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-    sent = await callback.message.answer_photo(
+    """Fan Art images replace the current panel instead of stacking new messages."""
+    return await replace_panel_with_photo(
+        callback=callback,
         photo=photo,
         caption=caption,
         reply_markup=reply_markup,
         parse_mode="HTML",
     )
-    await _save_fan_art_panel(callback, sent)
-
 
 @router.callback_query(F.data == "menu:fanart")
 async def fan_art_main(
     callback: CallbackQuery,
 ):
     await callback.answer()
-    if callback.message is not None:
-        await _remove_active_shop_panel(
-            callback.message.chat.id,
-            callback.from_user.id,
-            callback.bot,
-        )
-
     await show_text(
         callback,
         "🎨 Fan Art اِلدوریا\n\n"
