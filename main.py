@@ -11,7 +11,9 @@ from aiogram import Dispatcher
 from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault, ErrorEvent
 
 from bot.bot import bot
-from database.database import engine
+from database.database import engine, AsyncSessionLocal
+from models.character import Character
+from sqlalchemy import select
 from database.redis import redis
 from middlewares.performance_monitor import UpdateTimingMiddleware
 
@@ -194,10 +196,44 @@ async def setup_bot_commands() -> None:
     await bot.set_my_commands(commands, scope=BotCommandScopeAllGroupChats())
 
 
+async def repair_command_like_character_names() -> int:
+    """Repair legacy character names that were accidentally saved as Telegram commands."""
+    repaired = 0
+    async with AsyncSessionLocal() as session:
+        rows = (await session.scalars(
+            select(Character).where(
+                (Character.name.like("/%")) | (Character.name.like("!%"))
+            )
+        )).all()
+        existing_names = set((await session.scalars(select(Character.name))).all())
+        for character in rows:
+            existing_names.discard(character.name)
+            username = (character.telegram_username or "").strip().lstrip("@")
+            candidate = username if username and not username.startswith(("/", "!")) else ""
+            if not candidate or candidate in existing_names:
+                candidate = f"قهرمان-{character.telegram_id}"
+            candidate = candidate[:32]
+            base = candidate
+            suffix = 2
+            while candidate in existing_names:
+                tail = f"-{suffix}"
+                candidate = f"{base[:32-len(tail)]}{tail}"
+                suffix += 1
+            character.name = candidate
+            existing_names.add(candidate)
+            repaired += 1
+        if repaired:
+            await session.commit()
+    if repaired:
+        logger.warning("Repaired %s legacy character names that looked like commands.", repaired)
+    return repaired
+
+
 async def main() -> None:
     logger.info("World Eldoria is starting...")
 
     try:
+        await repair_command_like_character_names()
         await setup_bot_commands()
         logger.info("Bot commands registered.")
 
