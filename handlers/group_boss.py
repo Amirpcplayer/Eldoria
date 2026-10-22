@@ -733,8 +733,8 @@ async def boss_scheduler() -> None:
                 image_path = resolve_boss_image(cfg)
                 try:
                     # Keep the artwork and the original boss template in separate messages.
-                    # The text message is a reply to the photo and is the canonical boss
-                    # message that /attack and the Persian "حمله" command must target.
+                    # The independent text message is the canonical boss message that
+                    # /attack and the Persian "حمله" command must target.
                     if image_path is not None:
                         prepared_photo = await prepare_photo(
                             bot,
@@ -747,7 +747,6 @@ async def boss_scheduler() -> None:
                                 chat_id,
                                 caption,
                                 parse_mode="HTML",
-                                reply_to_message_id=sent_photo.message_id,
                             )
                         except Exception:
                             # Avoid leaving an orphaned boss image if its text template failed.
