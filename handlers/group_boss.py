@@ -660,11 +660,11 @@ async def register_group(chat_id: int, title: str) -> None:
 
 
 async def boss_scheduler() -> None:
-    """Spawn at most one live boss per group; due groups get a new boss hourly."""
+    """Spawn at most one live boss per group on a 12-hour cycle."""
     while True:
         try:
-            # A group boss has exactly one hour to be defeated. Expired bosses
-            # escape without rewards and the next hourly spawn becomes due.
+            # A group boss has one hour to be defeated. The next spawn remains
+            # scheduled on the 12-hour cycle even when the boss escapes.
             now = datetime.utcnow()
             expired_notices = []
             async with AsyncSessionLocal() as session:
@@ -678,7 +678,7 @@ async def boss_scheduler() -> None:
                     await session.execute(delete(GroupBossContribution).where(GroupBossContribution.boss_id == row.id))
                     row.status = "waiting"
                     row.hp = 0
-                    row.next_spawn_at = now
+                    row.next_spawn_at = (row.spawned_at or now) + timedelta(hours=12)
                     row.message_id = None
                 if expired:
                     await session.commit()
@@ -724,7 +724,7 @@ async def boss_scheduler() -> None:
                     row.max_hp = row.hp = scaled["hp"]
                     row.status = "active"
                     row.spawned_at = datetime.utcnow()
-                    row.next_spawn_at = datetime.utcnow() + timedelta(hours=1)
+                    row.next_spawn_at = datetime.utcnow() + timedelta(hours=12)
                     row.message_id = None
                     await session.commit()
                 caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg))
@@ -802,11 +802,11 @@ async def group_boss_remove_command(message: Message):
             boss.hp = 0
             boss.message_id = None
             boss.spawned_at = None
-            boss.next_spawn_at = now + timedelta(hours=1)
+            boss.next_spawn_at = now + timedelta(hours=12)
         await session.commit()
     text = (f"🧹 باس <b>{html.escape(old_name)}</b> به‌دستور ادمین از این گروه حذف شد.\n"
             "مشارکت‌ها پاک شد و برای این باس غنیمتی پرداخت نمی‌شود.\n"
-            "⏳ باس بعدی طبق چرخهٔ یک‌ساعته ظاهر خواهد شد.")
+            "⏳ باس بعدی طبق چرخهٔ ۱۲ ساعته ظاهر خواهد شد.")
     for old_message_id in old_message_ids:
         try:
             await bot.edit_message_caption(chat_id=message.chat.id, message_id=int(old_message_id), caption=text, parse_mode="HTML")
