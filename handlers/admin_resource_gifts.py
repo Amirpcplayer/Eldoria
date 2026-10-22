@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import html
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -79,6 +80,7 @@ async def resource_gift_choose(cb: CallbackQuery, state: FSMContext):
 
 @router.message(Command("cancel"), ResourceGiftStates.waiting_player_id)
 @router.message(Command("cancel"), ResourceGiftStates.waiting_amount)
+@router.message(Command("cancel"), ResourceGiftStates.waiting_confirmation)
 async def resource_gift_cancel(message: Message, state: FSMContext):
     if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
@@ -263,7 +265,7 @@ async def resource_gift_confirm(cb: CallbackQuery, state: FSMContext):
             "╭─── ✦ 🎁 ✦ ───╮\n"
             f"   <b>هدیه‌ای از سوی مدیریت اِلدوریا</b>\n"
             "╰─── ✦ 🎁 ✦ ───╯\n\n"
-            f"قهرمان <b>{target_name}</b>، مدیریت World Eldoria برای قدردانی از حضورت این هدیه را به تو تقدیم کرد. ✨\n\n"
+            f"قهرمان <b>{html.escape(str(target_name))}</b>، مدیریت World Eldoria برای قدردانی از حضورت این هدیه را به تو تقدیم کرد. ✨\n\n"
             f"🎁 هدیه دریافتی: <b>+{amount:,} {title}</b>\n"
             f"📊 موجودی فعلی: <b>{new_value:,}</b>"
         )
