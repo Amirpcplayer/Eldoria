@@ -26,7 +26,7 @@ def get_panel_image(panel_name: str) -> Path | None:
 
 
 def _reference_key(chat_id: int, owner_id: int) -> str:
-    return f"eldoria:panel_reference:{chat_id}:{owner_id}"
+    return f"eldoria:panel_reference:v2:{chat_id}:{owner_id}"
 
 
 async def _save_reference(chat_id: int, owner_id: int, message_id: int) -> None:
@@ -153,14 +153,45 @@ async def send_panel(
     text: str,
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
-) -> Message:
-    """Send the first player panel and remember the newly sent bot message."""
+) -> Message | None:
+    """Edit this player's previous panel when available; otherwise send the first one."""
     if message.from_user is None:
         raise ValueError("Cannot determine panel owner.")
 
     owner_id = message.from_user.id
+    chat_id = message.chat.id
     keyboard = protect_keyboard(reply_markup, owner_id)
     image_path = get_panel_image(panel_name)
+
+    # v2 references are written only for bot-owned panel messages. This avoids
+    # legacy keys that previously pointed at the user's /menu command.
+    previous_id = await _get_reference(chat_id, owner_id)
+    if previous_id is not None:
+        if image_path is None:
+            try:
+                edited = await message.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=previous_id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode=parse_mode,
+                )
+                if isinstance(edited, Message):
+                    await _save_reference(chat_id, owner_id, edited.message_id)
+                return edited if isinstance(edited, Message) else None
+            except TelegramBadRequest as exc:
+                if "message is not modified" in str(exc).casefold():
+                    return None
+                logger.debug("Could not edit previous panel; replacing it: %s", exc)
+            except Exception:
+                logger.exception("Unexpected error editing previous panel")
+
+        # The known v2 reference is a bot-owned panel. A media panel must be
+        # replaced because Telegram cannot edit its message type into plain text.
+        try:
+            await message.bot.delete_message(chat_id=chat_id, message_id=previous_id)
+        except Exception:
+            logger.debug("Could not delete previous panel before command replacement", exc_info=True)
 
     if image_path is not None:
         from aiogram.types import FSInputFile
@@ -183,7 +214,6 @@ async def send_panel(
 
     await _save_reference(sent.chat.id, owner_id, sent.message_id)
     return sent
-
 
 async def show_panel(
     callback: CallbackQuery,
