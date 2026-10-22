@@ -231,7 +231,8 @@ async def settings_language_set(callback: CallbackQuery):
         else:
             setting.language = language
         await session.commit()
-    await settings_menu(callback)
+    await callback.answer(tr(language, "saved"))
+    await settings_language(callback)
 
 
 # ============================================================
