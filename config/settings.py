@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     redis_connect_timeout: float = Field(default=5.0, gt=0, le=60)
     redis_health_check_interval: int = Field(default=30, ge=0, le=3600)
 
+    # Emit logs only for slow operations; do not log message contents or SQL parameters.
+    slow_db_query_ms: int = Field(default=250, ge=1, le=60000)
+    slow_update_ms: int = Field(default=1500, ge=1, le=60000)
+
     fanart_payment_info: str = (
         "اطلاعات پرداخت توسط مدیریت اعلام می‌شود."
     )
