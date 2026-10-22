@@ -17,7 +17,7 @@ from keyboards.equipment import (
 )
 from keyboards.main_menu import main_menu_keyboard
 
-from services.panel_image_service import show_panel
+from services.panel_image_service import show_panel, replace_panel_with_text
 from middlewares.panel_owner import protect_keyboard
 
 from services.equipment_service import (
@@ -84,68 +84,13 @@ async def send_new_panel(
     text: str,
     reply_markup,
 ) -> None:
-    """
-    پیام قبلی را حذف و پنل جدید ارسال می‌کند.
-    برای ورود به پنل تجهیزات استفاده می‌شود.
-    """
-    message = callback.message
-
-    if message is None:
-        await callback.answer(
-            "❌ پیام قبلی در دسترس نیست.",
-            show_alert=True,
-        )
-        return
-
-    try:
-        await message.delete()
-
-    except (TelegramBadRequest, TelegramForbiddenError) as exc:
-        logger.warning(
-            "Could not delete previous panel. "
-            "user_id=%s, chat_id=%s, message_id=%s, error=%s",
-            callback.from_user.id,
-            message.chat.id,
-            message.message_id,
-            exc,
-        )
-
-        await callback.answer(
-            "❌ حذف پنل قبلی ناموفق بود. لطفاً دوباره تلاش کن.",
-            show_alert=True,
-        )
-        return
-
-    except Exception:
-        logger.exception(
-            "Unexpected error deleting previous panel."
-        )
-        await callback.answer(
-            "❌ خطا هنگام حذف پنل قبلی.",
-            show_alert=True,
-        )
-        return
-
-    try:
-        # پنل تجهیزات شخصی است؛ همهٔ دکمه‌های آن فقط برای سازنده معتبرند.
-        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-        await message.answer(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML,
-        )
-
-    except Exception:
-        logger.exception(
-            "Could not send equipment panel. user_id=%s",
-            callback.from_user.id,
-        )
-        await callback.answer(
-            "❌ ارسال پنل تجهیزات ناموفق بود. ترمینال را بررسی کن.",
-            show_alert=True,
-        )
-        return
-
+    """Equipment entry uses the same editable text panel as every other menu."""
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
     await callback.answer()
 
 
@@ -154,72 +99,13 @@ async def edit_panel(
     text: str,
     reply_markup,
 ) -> None:
-    """
-    صفحات داخلی تجهیزات را در همان پیام ویرایش می‌کند.
-    در صورت ناموفق بودن ویرایش، برای جلوگیری از پنل تکراری
-    ابتدا پیام قبلی حذف می‌شود و سپس پنل جایگزین ارسال می‌شود.
-    """
-    message = callback.message
-
-    if message is None:
-        await callback.answer(
-            "❌ پیام پنل در دسترس نیست.",
-            show_alert=True,
-        )
-        return
-
-    try:
-        # محافظت در سمت پنل، علاوه بر اعتبارسنجی عملیات تجهیزات در سرویس.
-        reply_markup = protect_keyboard(reply_markup, callback.from_user.id)
-        await message.edit_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML,
-        )
-
-    except TelegramBadRequest as exc:
-        if "message is not modified" in str(exc).lower():
-            await callback.answer()
-            return
-
-        logger.warning(
-            "Equipment panel edit failed. "
-            "user_id=%s, chat_id=%s, message_id=%s, error=%s",
-            callback.from_user.id,
-            message.chat.id,
-            message.message_id,
-            exc,
-        )
-
-        await send_new_panel(
-            callback,
-            text,
-            reply_markup,
-        )
-        return
-
-    except TelegramForbiddenError:
-        logger.exception(
-            "Telegram forbade editing equipment panel."
-        )
-        await callback.answer(
-            "❌ اجازه ویرایش این پیام وجود ندارد.",
-            show_alert=True,
-        )
-        return
-
-    except Exception:
-        logger.exception(
-            "Unexpected equipment panel edit error."
-        )
-        await callback.answer(
-            "❌ خطای غیرمنتظره هنگام ویرایش پنل.",
-            show_alert=True,
-        )
-        return
-
-    await callback.answer()
-
+    """Edit the existing equipment panel, replacing only if Telegram requires it."""
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
 
 async def show_equipment_details(
     callback: CallbackQuery,
