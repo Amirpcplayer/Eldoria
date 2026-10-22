@@ -13,7 +13,7 @@ from config.settings import settings
 from database.database import AsyncSessionLocal
 from models.character import Character
 from services.xp_service import add_character_xp
-from services.admin_permissions import is_fanart_admin
+from services.admin_permissions import is_delegated_admin
 
 router = Router(name="admin_resource_gifts")
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def home_keyboard() -> InlineKeyboardMarkup:
 
 @router.callback_query(F.data == "admin:resource_gifts")
 async def resource_gift_home(cb: CallbackQuery, state: FSMContext):
-    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_delegated_admin(cb.from_user.id):
         await cb.answer("دسترسی مجاز نیست.", show_alert=True)
         return
     await state.clear()
@@ -62,7 +62,7 @@ async def resource_gift_home(cb: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("admin:resource_gift:"))
 async def resource_gift_choose(cb: CallbackQuery, state: FSMContext):
-    if not is_admin(cb.from_user.id) and not await is_fanart_admin(cb.from_user.id):
+    if not is_admin(cb.from_user.id) and not await is_delegated_admin(cb.from_user.id):
         await cb.answer("دسترسی مجاز نیست.", show_alert=True)
         return
     resource = (cb.data or "").rsplit(":", 1)[-1]
@@ -79,7 +79,7 @@ async def resource_gift_choose(cb: CallbackQuery, state: FSMContext):
 @router.message(Command("cancel"), ResourceGiftStates.waiting_player_id)
 @router.message(Command("cancel"), ResourceGiftStates.waiting_amount)
 async def resource_gift_cancel(message: Message, state: FSMContext):
-    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     await state.clear()
     await message.answer("عملیات گیفت لغو شد.")
@@ -87,7 +87,7 @@ async def resource_gift_cancel(message: Message, state: FSMContext):
 
 @router.message(ResourceGiftStates.waiting_player_id)
 async def resource_gift_player(message: Message, state: FSMContext):
-    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     raw_query = (message.text or "").strip()
     username_query = raw_query.lstrip("@").strip().lower()
@@ -114,7 +114,7 @@ async def resource_gift_player(message: Message, state: FSMContext):
 
 @router.message(ResourceGiftStates.waiting_amount)
 async def resource_gift_amount(message: Message, state: FSMContext):
-    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     try:
         amount = int((message.text or "").strip().replace(",", ""))
