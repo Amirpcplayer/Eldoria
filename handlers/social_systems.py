@@ -25,7 +25,7 @@ from models.character import Character
 from models.fan_art import FanArt, FanArtOwnership
 from models.social_systems import PlayerSetting
 from services.social_service import *
-from services.panel_image_service import show_panel
+from services.panel_image_service import show_panel, replace_panel_with_text
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -42,18 +42,21 @@ async def menu(
     *,
     answer_callback: bool = True,
 ):
-    """Send a new text panel and preserve all earlier chat messages."""
+    """Edit the current player panel; media panels are replaced with text."""
     message = callback.message
-    if keyboard is not None and callback.from_user is not None:
-        is_shared_dungeon = bool(message and message.chat.type in {"group", "supergroup"}) and any(
+    is_shared_dungeon = bool(message and message.chat.type in {"group", "supergroup"}) and bool(
+        keyboard and any(
             (button.callback_data or "").startswith("dungeon:")
             for row in keyboard.inline_keyboard for button in row
         )
-        if not is_shared_dungeon:
-            keyboard = protect_keyboard(keyboard, callback.from_user.id)
-
-    if message is not None:
-        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    )
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+        protect_owner=not is_shared_dungeon,
+    )
 
     if answer_callback:
         try:
