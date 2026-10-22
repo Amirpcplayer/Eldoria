@@ -1,49 +1,35 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Any
 
 from aiogram.enums import ParseMode
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import CallbackQuery, Message
 
 from config.panel_images import PANEL_IMAGES
 from database.redis import redis
 from middlewares.panel_owner import protect_keyboard
 
-
+logger = logging.getLogger(__name__)
 PANEL_REFERENCE_TTL = 60 * 60 * 24 * 30
 
 
 def get_panel_image(panel_name: str) -> Path | None:
+    """Return a configured panel image, if one exists on disk."""
     image_path = PANEL_IMAGES.get(panel_name)
-
     if not image_path:
         return None
-
     path = Path(image_path)
-
-    if not path.is_file():
-        return None
-
-    return path
+    return path if path.is_file() else None
 
 
 def _reference_key(chat_id: int, owner_id: int) -> str:
     return f"eldoria:panel_reference:{chat_id}:{owner_id}"
 
 
-def _active_panel_key(chat_id: int, owner_id: int, panel_name: str) -> str:
-    # Separate per chat, player, and panel type: one player's shop navigation
-    # must never remove another player's panel or a combat/boss message.
-    return f"eldoria:active_panel:{chat_id}:{owner_id}:{panel_name}"
-
-
-async def _save_reference(
-    chat_id: int,
-    owner_id: int,
-    message_id: int,
-) -> None:
-    # Redis is only used to remember which message should be replaced.
-    # A Redis outage must not make every menu button fail.
+async def _save_reference(chat_id: int, owner_id: int, message_id: int) -> None:
     try:
         await redis.set(
             _reference_key(chat_id, owner_id),
@@ -51,32 +37,113 @@ async def _save_reference(
             ex=PANEL_REFERENCE_TTL,
         )
     except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "Could not save panel reference; continuing without Redis"
-        )
+        # Panel editing should still work if Redis is temporarily unavailable.
+        logger.exception("Could not save panel reference")
 
 
-async def _get_reference(
-    chat_id: int,
-    owner_id: int,
-) -> int | None:
+async def remember_panel_message(message: Message, owner_id: int | None = None) -> None:
+    """Remember the actual bot panel message, never the user's command message."""
+    resolved_owner = owner_id
+    if resolved_owner is None:
+        resolved_owner = message.from_user.id if message.from_user else None
+    if resolved_owner is not None:
+        await _save_reference(message.chat.id, resolved_owner, message.message_id)
+
+
+def _is_media_message(message: Message) -> bool:
+    return bool(
+        message.photo
+        or message.video
+        or message.animation
+        or message.document
+        or message.audio
+        or message.voice
+        or message.video_note
+        or message.sticker
+    )
+
+
+async def replace_panel_with_text(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup=None,
+    parse_mode: ParseMode | str | None = ParseMode.HTML,
+) -> Message | None:
+    """Keep a player menu in one bot message; replace media messages when text is needed."""
+    message = callback.message
+    if message is None:
+        return None
+
+    owner_id = callback.from_user.id
+    keyboard = protect_keyboard(reply_markup, owner_id)
+
+    if not _is_media_message(message):
+        try:
+            await message.edit_text(
+                text,
+                reply_markup=keyboard,
+                parse_mode=parse_mode,
+            )
+            await _save_reference(message.chat.id, owner_id, message.message_id)
+            return message
+        except TelegramBadRequest as exc:
+            if "message is not modified" in str(exc).casefold():
+                await _save_reference(message.chat.id, owner_id, message.message_id)
+                return message
+            logger.debug(
+                "Panel text edit failed; replacing the bot panel (chat=%s, message=%s): %s",
+                message.chat.id,
+                message.message_id,
+                exc,
+            )
+        except Exception:
+            logger.exception("Unexpected error editing player panel")
+
+    # Telegram cannot turn a photo/caption into a text message. Delete only this
+    # bot panel and send its text replacement; never target another user's message.
     try:
-        value = await redis.get(_reference_key(chat_id, owner_id))
+        await message.delete()
     except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "Could not read panel reference; using current message"
-        )
+        logger.debug("Could not delete old panel before replacement", exc_info=True)
+
+    sent = await message.answer(
+        text,
+        reply_markup=keyboard,
+        parse_mode=parse_mode,
+    )
+    await _save_reference(sent.chat.id, owner_id, sent.message_id)
+    return sent
+
+
+async def replace_panel_with_photo(
+    callback: CallbackQuery,
+    photo: Any,
+    caption: str,
+    reply_markup=None,
+    parse_mode: ParseMode | str | None = ParseMode.HTML,
+) -> Message | None:
+    """Replace the current player panel with an image panel (profile/Fan Art)."""
+    message = callback.message
+    if message is None:
         return None
 
-    if not value:
-        return None
+    owner_id = callback.from_user.id
+    keyboard = protect_keyboard(reply_markup, owner_id)
 
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+        await message.delete()
+    except Exception:
+        # The following send is still useful if Telegram no longer allows deletion.
+        logger.debug("Could not delete old panel before photo replacement", exc_info=True)
+
+    sent = await message.answer_photo(
+        photo=photo,
+        caption=caption,
+        reply_markup=keyboard,
+        parse_mode=parse_mode,
+    )
+    await _save_reference(sent.chat.id, owner_id, sent.message_id)
+    return sent
 
 
 async def send_panel(
@@ -85,44 +152,36 @@ async def send_panel(
     text: str,
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
-):
-    """ارسال پنل در پاسخ به پیام بازیکن و ذخیره مرجع آن."""
-
+) -> Message:
+    """Send the first player panel and remember the newly sent bot message."""
     if message.from_user is None:
         raise ValueError("Cannot determine panel owner.")
 
     owner_id = message.from_user.id
-    chat_id = message.chat.id
-
-    # در شروع بازی، خود پیام /start مرجع اصلی پنل است.
-    reference_message_id = message.message_id
-
-    await _save_reference(
-        chat_id,
-        owner_id,
-        reference_message_id,
-    )
-
     keyboard = protect_keyboard(reply_markup, owner_id)
     image_path = get_panel_image(panel_name)
 
     if image_path is not None:
-        return await message.answer_photo(
+        from aiogram.types import FSInputFile
+        sent = await message.answer_photo(
             photo=FSInputFile(image_path),
             caption=text,
             reply_markup=keyboard,
             parse_mode=parse_mode,
-            reply_to_message_id=reference_message_id,
+            reply_to_message_id=message.message_id,
+            allow_sending_without_reply=True,
+        )
+    else:
+        sent = await message.answer(
+            text=text,
+            reply_markup=keyboard,
+            parse_mode=parse_mode,
+            reply_to_message_id=message.message_id,
             allow_sending_without_reply=True,
         )
 
-    return await message.answer(
-        text=text,
-        reply_markup=keyboard,
-        parse_mode=parse_mode,
-        reply_to_message_id=reference_message_id,
-        allow_sending_without_reply=True,
-    )
+    await _save_reference(sent.chat.id, owner_id, sent.message_id)
+    return sent
 
 
 async def show_panel(
@@ -131,69 +190,13 @@ async def show_panel(
     text: str,
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
-):
-    """Send a panel; shop navigation replaces only that player's previous shop panel."""
-    message = callback.message
-    if message is None:
-        await callback.answer()
-        return None
-
-    owner_id = callback.from_user.id
-    chat_id = message.chat.id
-    reference_message_id = await _get_reference(chat_id, owner_id)
-    if reference_message_id is None:
-        reference_message_id = message.message_id
-        await _save_reference(chat_id, owner_id, reference_message_id)
-
-    # Only the shop is configured for replacement. The Redis key includes the
-    # owner ID, so a different player in the same group cannot delete this panel.
-    active_key = _active_panel_key(chat_id, owner_id, panel_name) if panel_name == "shop" else None
-    if active_key is not None:
-        try:
-            previous_value = await redis.get(active_key)
-            previous_id = int(previous_value) if previous_value else None
-        except (TypeError, ValueError):
-            previous_id = None
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Could not read active shop panel reference")
-            previous_id = None
-
-        if previous_id is not None:
-            try:
-                await message.bot.delete_message(chat_id=chat_id, message_id=previous_id)
-            except Exception:
-                # It may already be deleted or too old; don't block shop navigation.
-                pass
-
-    keyboard = protect_keyboard(reply_markup, owner_id)
-    image_path = get_panel_image(panel_name)
-    send_kwargs = {
-        "reply_to_message_id": reference_message_id,
-        "allow_sending_without_reply": True,
-    }
-
-    if image_path is not None:
-        sent_message = await message.answer_photo(
-            photo=FSInputFile(image_path),
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode=parse_mode,
-            **send_kwargs,
-        )
-    else:
-        sent_message = await message.answer(
-            text=text,
-            reply_markup=keyboard,
-            parse_mode=parse_mode,
-            **send_kwargs,
-        )
-
-    if active_key is not None:
-        try:
-            await redis.set(active_key, str(sent_message.message_id), ex=PANEL_REFERENCE_TTL)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Could not save active shop panel reference")
-
-    return sent_message
+) -> Message | None:
+    """Render every ordinary game panel by editing the current panel message."""
+    # Normal game panels are text-only. Image panels are handled explicitly by
+    # profile/Fan Art/boss handlers so they can be re-sent when the media changes.
+    return await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=parse_mode,
+    )
