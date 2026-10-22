@@ -308,7 +308,7 @@ async def fanart_cancel(
         return
 
     await state.clear()
-    is_fanart_flow = bool(current_state and current_state.startswith("FanArtStates."))
+    is_fanart_flow = bool(current_state and current_state.startswith("FanArtStates"))
 
     if is_fanart_flow:
         text = "❌ فرایند افزودن فن‌آرت لغو شد.\n\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی."
@@ -685,12 +685,22 @@ async def create_fan_art(
         stock_text = "نامحدود"
 
     await message.answer(
-        "✅ Fan Art با موفقیت اضافه شد.\n\n"
-        f"🆔 ID: {fan_art_id}\n"
-        f"🎨 نام: {data['name']}\n"
-        f"💎 رریتی: {data['rarity']}\n"
-        f"💰 قیمت: {data['price']}\n"
-        f"🗃 موجودی: {stock_text}"
+        "╭─── ✦ ✨ ✦ ───╮\n"
+        "   <b>فن‌آرت با موفقیت به شاپ اضافه شد!</b>\n"
+        "╰─── ✦ ✨ ✦ ───╯\n\n"
+        "اثر تازه آماده نمایش در فروشگاه اِلدوریاست. 🎨\n\n"
+        f"🆔 شناسه اثر: <code>{fan_art_id}</code>\n"
+        f"🎨 نام: <b>{data['name']}</b>\n"
+        f"💎 رریتی: <b>{data['rarity']}</b>\n"
+        f"💰 قیمت: <b>{int(data['price']):,} تومان</b>\n"
+        f"🪙 ارزش داخل بازی: <b>{int(data['value_gold']):,} گلد</b>\n"
+        f"📦 موجودی: <b>{stock_text}</b>\n\n"
+        "از اینکه به گسترش فروشگاه اِلدوریا کمک کردی، ممنونیم. 🌟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ افزودن فن‌آرت دیگر", callback_data="admin:fanart:add")],
+            [InlineKeyboardButton(text="🛡 بازگشت به پنل ادمین", callback_data="admin:home")],
+        ]),
     )
 
 
