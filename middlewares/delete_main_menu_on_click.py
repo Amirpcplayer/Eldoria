@@ -8,9 +8,11 @@ from aiogram.types import CallbackQuery
 
 logger = logging.getLogger(__name__)
 
+# Telegram exposes parsed HTML as rendered text on incoming callback messages,
+# so these markers must not contain HTML tags.
 _MAIN_MENU_MARKERS = (
-    "🎮 <b>منوی اصلی World Eldoria</b>",
-    "🎮 <b>منوی اصلی اِلدوریا</b>",
+    "🎮 منوی اصلی World Eldoria",
+    "🎮 منوی اصلی اِلدوریا",
 )
 
 
@@ -26,7 +28,7 @@ class DeleteMainMenuOnClickMiddleware(BaseMiddleware):
         message = event.message
         if message is not None:
             content = message.text or message.caption or ""
-            if any(content.startswith(marker) for marker in _MAIN_MENU_MARKERS):
+            if any(content.lstrip().startswith(marker) for marker in _MAIN_MENU_MARKERS):
                 try:
                     await message.delete()
                 except Exception:
