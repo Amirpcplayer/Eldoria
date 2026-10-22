@@ -27,6 +27,7 @@ from services.skill_service import get_skill_mana_cost, get_skill_power
 from services.xp_service import add_character_xp
 from services.story_encounters import STORY_ENCOUNTERS
 from config.settings import settings
+from services.image_aspect_service import prepare_photo
 
 router = Router(name="group_boss")
 logger = logging.getLogger(__name__)
@@ -708,8 +709,17 @@ async def boss_scheduler() -> None:
                 image_path = resolve_boss_image(cfg)
                 try:
                     if image_path is not None:
-                        from aiogram.types import FSInputFile
-                        sent = await bot.send_photo(chat_id, FSInputFile(str(image_path)), caption=caption, parse_mode="HTML")
+                        prepared_photo = await prepare_photo(
+                            bot,
+                            image_path,
+                            filename="eldoria-boss.jpg",
+                        )
+                        sent = await bot.send_photo(
+                            chat_id,
+                            prepared_photo,
+                            caption=caption,
+                            parse_mode="HTML",
+                        )
                     else:
                         sent = await bot.send_message(chat_id, caption, parse_mode="HTML")
                 except Exception:
