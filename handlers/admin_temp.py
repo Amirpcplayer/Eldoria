@@ -29,6 +29,7 @@ from models.equipment import Equipment
 from models.item import Item
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
+from services.admin_permissions import add_fanart_admin, is_fanart_admin, list_fanart_admins
 
 
 router = Router()
@@ -42,6 +43,7 @@ class AdminPlayerStates(StatesGroup):
     waiting_search = State()
     waiting_gold_search = State()
     waiting_gold_amount = State()
+    waiting_admin_username = State()
 
 
 # مالک ثابت ربات، مستقل از عضویت در گروه‌ها
@@ -55,6 +57,12 @@ def is_admin(telegram_id: int) -> bool:
 def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="➕ افزودن ادمین فن‌آرت با یوزرنیم",
+                    callback_data="admin:admins:add",
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="🎁 مدیریت گیفت فن‌آرت",
@@ -121,6 +129,16 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+
+def fanart_admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 مدیریت گیفت فن‌آرت", callback_data="admin:fanart_gifts")],
+        [InlineKeyboardButton(text="➕ افزودن فن‌آرت به شاپ", callback_data="admin:fanart:add")],
+        [InlineKeyboardButton(text="🧾 سفارش‌های فن‌آرت", callback_data="admin:fanart:orders")],
+        [InlineKeyboardButton(text="🔙 بستن پنل", callback_data="admin:close")],
+    ])
 
 
 def player_management_keyboard() -> InlineKeyboardMarkup:
@@ -391,7 +409,12 @@ async def admin_panel(
     message: Message,
     state: FSMContext,
 ):
-    if message.from_user is None or not is_admin(message.from_user.id):
+    if message.from_user is None:
+        return
+
+    owner_access = is_admin(message.from_user.id)
+    delegated_access = await is_fanart_admin(message.from_user.id)
+    if not owner_access and not delegated_access:
         await message.answer("⛔ شما دسترسی ادمین ندارید.")
         return
 
@@ -419,6 +442,59 @@ async def admin_panel(
     await message.answer(
         "🛡 پنل مدیریت World Eldoria\n\n"
         "بخش موردنظرت را انتخاب کن:",
+        reply_markup=admin_keyboard() if owner_access else fanart_admin_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "admin:admins:add")
+async def admin_add_fanart_admin_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات می‌تواند ادمین اضافه کند.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(AdminPlayerStates.waiting_admin_username)
+    if callback.message:
+        await callback.message.answer(
+            "➕ افزودن ادمین محدود فن‌آرت\n\n"
+            "یوزرنیم تلگرام بازیکن را بفرست؛ با یا بدون @.\n"
+            "این ادمین فقط به مدیریت گیفت فن‌آرت، افزودن فن‌آرت به شاپ و سفارش‌های فن‌آرت دسترسی خواهد داشت.\n"
+            "دسترسی ایموجی پرمیوم و سایر بخش‌های مدیریتی به او داده نمی‌شود.\n\n"
+            "لغو: /cancel"
+        )
+    await callback.answer()
+
+
+@router.message(AdminPlayerStates.waiting_admin_username)
+async def admin_add_fanart_admin_finish(message: Message, state: FSMContext):
+    if message.from_user is None or not is_admin(message.from_user.id):
+        await state.clear()
+        return
+    username = (message.text or "").strip().lstrip("@").lower()
+    if username in {"", "cancel", "/cancel"}:
+        await state.clear()
+        await message.answer("عملیات افزودن ادمین لغو شد.", reply_markup=admin_keyboard())
+        return
+    async with AsyncSessionLocal() as session:
+        target = await session.scalar(
+            select(Character).where(func.lower(Character.telegram_username) == username)
+        )
+    if target is None:
+        await message.answer(
+            "❌ این یوزرنیم در بازیکنان ثبت‌شده پیدا نشد.\n"
+            "بازیکن باید ابتدا ربات را باز کرده و /start زده باشد؛ سپس دوباره تلاش کن."
+        )
+        return
+    if is_admin(target.telegram_id):
+        await state.clear()
+        await message.answer("این حساب از قبل مالک اصلی ربات است.", reply_markup=admin_keyboard())
+        return
+    await add_fanart_admin(target.telegram_id)
+    await state.clear()
+    await message.answer(
+        "✅ ادمین محدود فن‌آرت اضافه شد.\n\n"
+        f"👤 @{target.telegram_username or username}\n"
+        f"🆔 {target.telegram_id}\n\n"
+        "دسترسی او فقط شامل گیفت فن‌آرت، افزودن فن‌آرت به شاپ و سفارش‌های فن‌آرت است.",
         reply_markup=admin_keyboard(),
     )
 
