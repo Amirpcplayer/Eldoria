@@ -481,6 +481,29 @@ async def leave_party(telegram_id: int, successor_telegram_id: int | None = None
         return True, "از پارتی خارج شدی."
 
 
+async def party_has_active_dungeon(telegram_id: int) -> bool:
+    """Return whether the player's active party is in a forming/running dungeon."""
+    async with AsyncSessionLocal() as session:
+        member = await _get_active_member(session, telegram_id)
+        if member is None:
+            return False
+        active_event = await session.scalar(
+            select(GroupDungeonEvent.id).where(
+                GroupDungeonEvent.party_id == member.party_id,
+                GroupDungeonEvent.status.in_(["forming", "running"]),
+            ).limit(1)
+        )
+        if active_event is not None:
+            return True
+        active_run = await session.scalar(
+            select(DungeonRun.id).where(
+                DungeonRun.party_id == member.party_id,
+                DungeonRun.status == "active",
+            ).limit(1)
+        )
+        return active_run is not None
+
+
 async def disband_party(telegram_id: int) -> tuple[bool, str]:
     async with AsyncSessionLocal() as session:
         party = await session.scalar(select(Party).where(
