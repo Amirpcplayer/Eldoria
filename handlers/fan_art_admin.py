@@ -6,7 +6,9 @@ import html
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy import select, func
 
 from config.settings import settings
 from database.database import AsyncSessionLocal
@@ -60,6 +62,50 @@ GLOBAL_BOT_OWNER_ID = 8537258392
 
 def is_admin(telegram_id: int) -> bool:
     return telegram_id in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
+
+
+class FanArtShopManageStates(StatesGroup):
+    waiting_price = State()
+    waiting_stock = State()
+
+
+FANART_SHOP_PAGE_SIZE = 8
+
+
+def fanart_shop_list_keyboard(items, page: int, has_next: bool):
+    rows = []
+    for art in items:
+        status = "🟢 فعال" if art.is_active else "⚫ غیرفعال"
+        stock = ("♾ نامحدود" if not art.is_limited else f"📦 {art.stock or 0} عدد")
+        rows.append([InlineKeyboardButton(
+            text=f"{status} · #{art.id} {art.name}"[:64],
+            callback_data=f"fanartshop:view:{art.id}:{page}",
+        )])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ قبلی", callback_data=f"fanartshop:list:{page-1}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"fanartshop:list:{page+1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔙 پنل ادمین", callback_data="admin:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def fanart_shop_item_keyboard(art: FanArt, page: int):
+    rows = [
+        [InlineKeyboardButton(text="💰 تغییر قیمت", callback_data=f"fanartshop:price:{art.id}:{page}")],
+        [InlineKeyboardButton(text="📦 تغییر موجودی", callback_data=f"fanartshop:stock:{art.id}:{page}")],
+    ]
+    if art.is_active:
+        rows.append([InlineKeyboardButton(text="🗑 حذف از شاپ", callback_data=f"fanartshop:delete:{art.id}:{page}")])
+    else:
+        rows.append([InlineKeyboardButton(text="♻️ بازگردانی به شاپ", callback_data=f"fanartshop:restore:{art.id}:{page}")])
+    rows.extend([
+        [InlineKeyboardButton(text="🔙 فهرست فن‌آرت‌ها", callback_data=f"fanartshop:list:{page}")],
+        [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 ORDER_PAGE_SIZE = 8
@@ -136,6 +182,306 @@ async def render_order_details(message_or_callback, order):
         )
     else:
         await target.answer(details, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "admin:fanart:manage")
+@router.callback_query(F.data.startswith("fanartshop:list:"))
+async def fanart_shop_manage_list(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به مدیریت شاپ دسترسی دارد.", show_alert=True)
+        return
+    try:
+        page = int(callback.data.rsplit(":", 1)[1]) if callback.data.startswith("fanartshop:list:") else 0
+        page = max(0, page)
+    except ValueError:
+        page = 0
+    async with AsyncSessionLocal() as session:
+        items = list((await session.scalars(
+            select(FanArt).order_by(FanArt.is_active.desc(), FanArt.display_order, FanArt.id)
+            .offset(page * FANART_SHOP_PAGE_SIZE).limit(FANART_SHOP_PAGE_SIZE + 1)
+        )).all())
+        has_next = len(items) > FANART_SHOP_PAGE_SIZE
+        items = items[:FANART_SHOP_PAGE_SIZE]
+        total = await session.scalar(select(__import__("sqlalchemy").func.count(FanArt.id))) or 0
+    if callback.message:
+        await callback.message.edit_text(
+            "🎨 <b>مدیریت فن‌آرت شاپ</b>\n\n"
+            f"📚 تعداد کل آثار ثبت‌شده: <b>{total}</b>\n"
+            "اثر موردنظر را انتخاب کن تا قیمت، موجودی یا وضعیت نمایش آن را تغییر بدهی.\n"
+            "اثرهای غیرفعال هم در فهرست هستند.",
+            reply_markup=fanart_shop_list_keyboard(items, page, has_next),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("fanartshop:view:"))
+async def fanart_shop_manage_view(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به مدیریت شاپ دسترسی دارد.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        details = (
+            "🎨 <b>مدیریت یک فن‌آرت</b>\n\n"
+            f"🆔 شناسه: <code>{art.id}</code>\n"
+            f"🖼 نام: <b>{html.escape(art.name)}</b>\n"
+            f"💎 رریتی: <code>{html.escape(art.rarity)}</code>\n"
+            f"💵 قیمت: <b>{art.price}</b> تومان\n"
+            f"🪙 ارزش گلد: <b>{art.value_gold:,}</b>\n"
+            f"📦 موجودی: <b>{art.stock if art.is_limited else 'نامحدود'}</b>\n"
+            f"📌 وضعیت شاپ: <b>{'فعال' if art.is_active else 'غیرفعال'}</b>\n\n"
+            "از دکمه‌های زیر برای ویرایش استفاده کن."
+        )
+    if callback.message:
+        await callback.message.edit_text(details, reply_markup=fanart_shop_item_keyboard(art, page), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("fanartshop:price:"))
+async def fanart_shop_price_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        name = art.name
+        current_price = art.price
+    await state.clear()
+    await state.set_state(FanArtShopManageStates.waiting_price)
+    await state.update_data(manage_fanart_id=art_id, manage_fanart_page=page)
+    if callback.message:
+        await callback.message.answer(
+            f"💰 تغییر قیمت «{name}»\nقیمت فعلی: {current_price} تومان\n\n"
+            "قیمت جدید را فقط با عدد و به تومان بفرست. برای لغو: /cancel"
+        )
+    await callback.answer()
+
+
+@router.message(FanArtShopManageStates.waiting_price, F.text)
+async def fanart_shop_price_finish(message: Message, state: FSMContext):
+    if message.from_user is None or not is_admin(message.from_user.id):
+        return
+    raw = (message.text or "").strip().replace(",", "").replace("٬", "")
+    if raw.lower() == "/cancel":
+        await state.clear()
+        await message.answer("ویرایش قیمت لغو شد.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎨 مدیریت فن‌آرت شاپ", callback_data="admin:fanart:manage")]
+        ]))
+        return
+    try:
+        price = Decimal(raw)
+        if not price.is_finite() or price <= 0 or price > Decimal("9999999999.99"):
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        await message.answer("❌ قیمت معتبر نیست. یک عدد مثبت به تومان بفرست یا /cancel.")
+        return
+    data = await state.get_data()
+    art_id, page = data.get("manage_fanart_id"), data.get("manage_fanart_page", 0)
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await state.clear()
+            await message.answer("فن‌آرت پیدا نشد.")
+            return
+        art.price = price
+        art.value_gold = int(price / Decimal("25"))
+        name = art.name
+        await session.commit()
+    await state.clear()
+    await message.answer(
+        f"✅ قیمت «{html.escape(name)}» به <b>{price}</b> تومان تغییر کرد.\n"
+        f"🪙 ارزش گلد جدید: <b>{int(price / Decimal('25')):,}</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 فهرست فن‌آرت‌ها", callback_data=f"fanartshop:list:{page}")],
+            [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+        ])
+    )
+
+
+@router.callback_query(F.data.startswith("fanartshop:stock:"))
+async def fanart_shop_stock_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        name = art.name
+        stock_text = str(art.stock or 0) if art.is_limited else "نامحدود"
+    await state.clear()
+    await state.set_state(FanArtShopManageStates.waiting_stock)
+    await state.update_data(manage_fanart_id=art_id, manage_fanart_page=page)
+    if callback.message:
+        await callback.message.answer(
+            f"📦 تغییر موجودی «{name}»\nموجودی فعلی: {stock_text}\n\n"
+            "تعداد جدید را با عدد صحیح صفر یا بیشتر بفرست. برای موجودی نامحدود بنویس: نامحدود\n"
+            "برای لغو: /cancel"
+        )
+    await callback.answer()
+
+
+@router.message(FanArtShopManageStates.waiting_stock, F.text)
+async def fanart_shop_stock_finish(message: Message, state: FSMContext):
+    if message.from_user is None or not is_admin(message.from_user.id):
+        return
+    raw = (message.text or "").strip().replace(",", "").replace("٬", "")
+    if raw.lower() == "/cancel":
+        await state.clear()
+        await message.answer("ویرایش موجودی لغو شد.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎨 مدیریت فن‌آرت شاپ", callback_data="admin:fanart:manage")]
+        ]))
+        return
+    unlimited = raw.lower() in {"نامحدود", "unlimited", "infinity"}
+    if not unlimited:
+        try:
+            stock = int(raw)
+            if stock < 0 or stock > 2_147_483_647:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ تعداد نامعتبر است. عدد صحیح صفر یا بیشتر، یا «نامحدود» بفرست.")
+            return
+    data = await state.get_data()
+    art_id, page = data.get("manage_fanart_id"), data.get("manage_fanart_page", 0)
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await state.clear()
+            await message.answer("فن‌آرت پیدا نشد.")
+            return
+        art.is_limited = not unlimited
+        art.stock = None if unlimited else stock
+        name = art.name
+        await session.commit()
+    await state.clear()
+    await message.answer(
+        f"✅ موجودی «{html.escape(name)}» به {'نامحدود' if unlimited else f'{stock:,} عدد'} تغییر کرد.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 فهرست فن‌آرت‌ها", callback_data=f"fanartshop:list:{page}")],
+            [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+        ])
+    )
+
+
+@router.callback_query(F.data.startswith("fanartshop:delete:"))
+async def fanart_shop_delete_confirm(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        name = html.escape(art.name)
+    if callback.message:
+        await callback.message.edit_text(
+            f"⚠️ <b>حذف «{name}» از شاپ؟</b>\n\n"
+            "این کار اثر را از فروشگاه پنهان می‌کند؛ سابقه سفارش‌ها و مالکیت بازیکنان حذف نمی‌شود. "
+            "می‌توانی بعداً آن را دوباره فعال کنی.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🗑 بله، حذف از شاپ", callback_data=f"fanartshop:deleteconfirm:{art_id}:{page}")],
+                [InlineKeyboardButton(text="↩️ انصراف", callback_data=f"fanartshop:view:{art_id}:{page}")],
+            ])
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("fanartshop:deleteconfirm:"))
+async def fanart_shop_delete_apply(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        art.is_active = False
+        name = art.name
+        await session.commit()
+    if callback.message:
+        await callback.message.edit_text(
+            f"✅ «{html.escape(name)}» از شاپ حذف شد. سابقه و مالکیت‌ها حفظ شدند.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 فهرست فن‌آرت‌ها", callback_data=f"fanartshop:list:{page}")],
+                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+            ])
+        )
+    await callback.answer("از شاپ حذف شد.")
+
+
+@router.callback_query(F.data.startswith("fanartshop:restore:"))
+async def fanart_shop_restore(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        _, _, art_id, page = (callback.data or "").split(":")
+        art_id, page = int(art_id), int(page)
+    except ValueError:
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    async with AsyncSessionLocal() as session:
+        art = await session.get(FanArt, art_id)
+        if art is None:
+            await callback.answer("فن‌آرت پیدا نشد.", show_alert=True)
+            return
+        art.is_active = True
+        name = art.name
+        await session.commit()
+    if callback.message:
+        await callback.message.edit_text(
+            f"♻️ «{html.escape(name)}» دوباره در شاپ فعال شد.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 فهرست فن‌آرت‌ها", callback_data=f"fanartshop:list:{page}")],
+                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+            ])
+        )
+    await callback.answer("فن‌آرت فعال شد.")
 
 
 @router.callback_query(F.data == "admin:fanart:orders")
