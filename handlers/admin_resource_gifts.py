@@ -191,11 +191,11 @@ async def resource_gift_cancel_button(cb: CallbackQuery, state: FSMContext):
         return
     await state.clear()
     if cb.message:
+        from handlers.admin_temp import admin_keyboard, delegated_admin_keyboard
         await cb.message.edit_text(
-            "❌ عملیات گیفت لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]
-            ]),
+            "🛡 <b>پنل مدیریت World Eldoria</b>\n\nعملیات گیفت لغو شد؛ به منوی اصلی برگشتی.",
+            parse_mode="HTML",
+            reply_markup=admin_keyboard() if is_admin(cb.from_user.id) else delegated_admin_keyboard(),
         )
     await cb.answer("عملیات لغو شد.")
 
@@ -282,7 +282,7 @@ async def resource_gift_confirm(cb: CallbackQuery, state: FSMContext):
         "╭─── ✦ 🧾 ✦ ───╮\n"
         f"   <b>فاکتور گیفت {title}</b>\n"
         "╰─── ✦ 🧾 ✦ ───╯\n\n"
-        f"👤 بازیکن: <b>{target_name}</b>\n"
+        f"👤 بازیکن: <b>{html.escape(str(target_name))}</b>\n"
         f"🆔 شناسه: <code>{target_id}</code>\n"
         f"🛡 انجام‌دهنده: <code>{cb.from_user.id}</code>\n"
         f"🎁 مقدار اهدایی: <b>+{amount:,} {title}</b>\n"
