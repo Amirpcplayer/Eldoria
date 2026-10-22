@@ -18,6 +18,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from models.fan_art import FanArt, FanArtOwnership
 from states.fan_art_gift import FanArtGiftStates
+from services.admin_permissions import is_fanart_admin
 
 
 router = Router()
@@ -285,7 +286,7 @@ async def open_gift_menu(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -333,7 +334,7 @@ async def start_gift_player_search(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -495,7 +496,7 @@ async def start_direct_gift(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -580,7 +581,7 @@ async def direct_gift_rarity(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -614,7 +615,7 @@ async def start_shop_gift(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -629,7 +630,7 @@ async def gift_players_page(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -668,7 +669,7 @@ async def choose_gift_player(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -805,7 +806,7 @@ async def choose_shop_rarity(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -882,7 +883,7 @@ async def choose_shop_art(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -961,7 +962,7 @@ async def confirm_gift(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -1205,7 +1206,7 @@ async def cancel_gift(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
