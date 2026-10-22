@@ -24,10 +24,40 @@ from services.adventure_service import (
     is_area_unlocked,
 )
 
-from services.panel_image_service import show_panel
+from services.panel_image_service import show_panel as _show_panel
+from services.language_service import get_language
 
 
 router = Router()
+
+_ADVENTURE_TEXT = {
+"en": [
+("ماجراجویی","Adventure"),("در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.","Explore the lands of Eldoria."),("سطح قهرمان:","Hero level:"),("یک بخش را انتخاب کن:","Choose a section:"),("مناطق ماجراجویی","Adventure Areas"),("در حال حاضر هیچ منطقه‌ای فعال نیست.","No adventure areas are currently active."),("سطح فعلی تو:","Your current level:"),("منطقه‌ای را برای مشاهده جزئیات انتخاب کن.","Select an area to view details."),("قابل ورود","Available"),("قفل","Locked"),("سطح پیشنهادی:","Recommended level:"),("محدوده سطح:","Level range:"),("پاداش پایه","Base rewards"),("آیتم‌های احتمالی مبارزه","Possible battle drops"),("غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود.","Each enemy's special loot and drop chance are shown on that enemy's page."),("برای ورود حداقل Level","Minimum level required to enter:"),("لازم است.","is required."),("وارد منطقه شدی.","You entered the area."),("در حال حاضر هیچ دشمن فعالی در این منطقه وجود ندارد.","There are currently no active enemies in this area."),("دشمنان این منطقه را مشاهده کن و حریف خود را انتخاب کن.","View the enemies in this area and choose your opponent."),("دشمنان","Enemies"),("در حال حاضر دشمنی در این منطقه ثبت نشده است.","No enemies are currently listed in this area."),("حریف موردنظر را انتخاب کن:","Choose your opponent:"),("دشمن پیدا نشد.","Enemy not found."),("منطقه دشمن پیدا نشد.","Enemy's area not found."),("پاداش پیروزی","Victory rewards"),("غنیمت‌های احتمالی این مبارزه","Possible loot from this battle"),("مواد جانبی","Additional materials"),("(در هر مبارزه یکی انتخاب می‌شود):","(one is selected per battle):"),("شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.","These are base chances; the Explorer Scroll and hero luck can increase drop chances."),("❌ قهرمان پیدا نشد.","❌ Hero not found."),("❌ منطقه نامعتبر است.","❌ Invalid area."),("❌ منطقه پیدا نشد.","❌ Area not found."),("❌ دشمن نامعتبر است.","❌ Invalid enemy."),("🔒 این منطقه برای تو قفل است.","🔒 This area is locked for you.")
+],
+"ru": [
+("ماجراجویی","Приключение"),("در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.","Исследуй земли Эльдории."),("سطح قهرمان:","Уровень героя:"),("یک بخش را انتخاب کن:","Выбери раздел:"),("مناطق ماجراجویی","Области приключений"),("در حال حاضر هیچ منطقه‌ای فعال نیست.","Сейчас нет активных областей приключений."),("سطح فعلی تو:","Твой текущий уровень:"),("منطقه‌ای را برای مشاهده جزئیات انتخاب کن.","Выбери область, чтобы увидеть подробности."),("قابل ورود","Доступно"),("قفل","Закрыто"),("سطح پیشنهادی:","Рекомендуемый уровень:"),("محدوده سطح:","Диапазон уровней:"),("پاداش پایه","Базовые награды"),("آیتم‌های احتمالی مبارزه","Возможная добыча в бою"),("غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود.","Особая добыча каждого врага и шанс её получения указаны на странице врага."),("برای ورود حداقل Level","Для входа требуется минимум уровень"),("لازم است.","."),("وارد منطقه شدی.","Ты вошёл в область."),("در حال حاضر هیچ دشمن فعالی در این منطقه وجود ندارد.","В этой области сейчас нет активных врагов."),("دشمنان این منطقه را مشاهده کن و حریف خود را انتخاب کن.","Посмотри врагов этой области и выбери противника."),("دشمنان","Враги"),("در حال حاضر دشمنی در این منطقه ثبت نشده است.","В этой области пока нет зарегистрированных врагов."),("حریف موردنظر را انتخاب کن:","Выбери противника:"),("دشمن پیدا نشد.","Враг не найден."),("منطقه دشمن پیدا نشد.","Область врага не найдена."),("پاداش پیروزی","Награда за победу"),("غنیمت‌های احتمالی این مبارزه","Возможная добыча в этом бою"),("مواد جانبی","Дополнительные материалы"),("(در هر مبارزه یکی انتخاب می‌شود):","(в каждом бою выбирается один предмет):"),("شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.","Это базовые шансы; свиток исследователя и удача героя могут повысить шанс добычи."),("❌ قهرمان پیدا نشد.","❌ Герой не найден."),("❌ منطقه نامعتبر است.","❌ Некорректная область."),("❌ منطقه پیدا نشد.","❌ Область не найдена."),("❌ دشمن نامعتبر است.","❌ Некорректный враг."),("🔒 این منطقه برای تو قفل است.","🔒 Эта область закрыта.")
+]
+}
+def _localize_adventure_text(text: str, language: str) -> str:
+    if language not in ("en", "ru"): return text
+    for source, translated in _ADVENTURE_TEXT[language]:
+        text = text.replace(source, translated)
+    return text
+
+async def show_panel(*, callback, panel_name, text, reply_markup):
+    language = await get_language(callback.from_user.id)
+    text = _localize_adventure_text(text, language)
+    if language in ("en", "ru") and reply_markup is not None:
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        rows = []
+        for row in reply_markup.inline_keyboard:
+            translated_row = []
+            for b in row:
+                translated_row.append(InlineKeyboardButton(text=_localize_adventure_text(b.text, language), callback_data=b.callback_data, url=b.url, web_app=b.web_app, login_url=b.login_url, switch_inline_query=b.switch_inline_query, switch_inline_query_current_chat=b.switch_inline_query_current_chat, callback_game=b.callback_game, pay=b.pay, icon_custom_emoji_id=b.icon_custom_emoji_id, style=b.style))
+            rows.append(translated_row)
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=rows)
+    return await _show_panel(callback=callback, panel_name=panel_name, text=text, reply_markup=reply_markup)
+
 
 
 async def _adventure_drop_preview(enemy, character) -> str:
