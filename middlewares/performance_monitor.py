@@ -57,6 +57,11 @@ def install_slow_query_logging(engine) -> None:
 
     @event.listens_for(sync_engine, "handle_error")
     def handle_error(exception_context):
+        connection = exception_context.connection
+        if connection is not None:
+            stack = connection.info.get("_eldoria_query_started_at")
+            if stack:
+                stack.pop()
         logger.error(
             "Database statement failed: connection_invalidated=%s exception_type=%s",
             bool(exception_context.is_disconnect),
