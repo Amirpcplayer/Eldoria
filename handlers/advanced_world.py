@@ -465,6 +465,58 @@ async def forge_upgrade(cb:CallbackQuery):
     if not ok: await cb.answer(msg,show_alert=True);return
     await cb.answer(msg[:180],show_alert=True);await forge_menu(cb)
 
+@router.message(Command("mypet", ignore_case=True))
+async def mypet_command(message: Message):
+    """Show the caller's owned pets through the documented /mypet command."""
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id is None:
+        return
+
+    owned = await active_pets(telegram_id)
+    lines = [
+        "🐾 <b>همراهان قهرمان</b>",
+        "اینجا وضعیت پت‌ها، سطح و امتیازهای آن‌ها را می‌بینی.",
+        "",
+    ]
+    rows = []
+
+    if not owned:
+        lines.append("هنوز پتی نداری. از بازار پت‌ها یکی تهیه کن.")
+    else:
+        for pet, cp in owned:
+            status = "🟢 فعال" if cp.active else "⚪ غیرفعال"
+            lines.append(
+                f"{status} · <b>{html.escape(pet.name)}</b>\n"
+                f"⭐ سطح: Lv.{cp.level} · تکامل: {cp.evolution_stage}\n"
+                f"⚔️ ATK +{pet.bonus_attack} · 🛡️ DEF +{pet.bonus_defense} · ❤️ HP +{pet.bonus_hp}"
+            )
+            if cp.last_training_at and cp.training_completed_at is None:
+                remaining = max(
+                    0, 3600 - int((datetime.utcnow() - cp.last_training_at).total_seconds())
+                )
+                lines.append(
+                    f"⏳ آموزش در جریان است؛ زمان باقی‌مانده: "
+                    f"{remaining // 60} دقیقه و {remaining % 60} ثانیه"
+                )
+            if not cp.active:
+                rows.append([
+                    InlineKeyboardButton(
+                        text=f"🐾 فعال‌کردن {pet.name}",
+                        callback_data=f"pets:activate:{pet.id}",
+                    )
+                ])
+
+    rows.append([InlineKeyboardButton(text="🛒 بازار پت‌ها", callback_data="pets:market")])
+    rows.append([InlineKeyboardButton(text="✨ تمرین / تکامل پت فعال", callback_data="pets:evolve")])
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت به منو", callback_data="menu:back")])
+
+    await message.answer(
+        "\\n\\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode="HTML",
+    )
+
+
 @router.callback_query(F.data=='pets:evolve')
 async def pet_evolve(cb:CallbackQuery):
     ok,msg=await evolve_active_pet(cb.from_user.id)
