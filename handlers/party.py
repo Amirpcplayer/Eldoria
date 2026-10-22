@@ -469,15 +469,15 @@ async def render_party(callback: CallbackQuery) -> None:
     if not details:
         await show_party_panel(
             callback,
-            "✦ <b>تالار پارتی اِلدوریا</b> ✦\\n\\n"
-            "هنوز عضو گروهی نیستی.\\n"
+            "✦ <b>تالار پارتی اِلدوریا</b> ✦\n\n"
+            "هنوز عضو گروهی نیستی.\n"
             "یک پارتی بساز یا به هم‌رزمانت بپیوند.",
             party_main_keyboard(False),
         )
         return
     is_leader = int(details["leader_telegram_id"]) == telegram_id
     keyboard = party_manage_keyboard(details) if is_leader else party_main_keyboard(True)
-    await show_party_panel(callback, "\\n".join(_party_summary_lines(details, is_leader)), keyboard)
+    await show_party_panel(callback, "\n".join(_party_summary_lines(details, is_leader)), keyboard)
 
 
 async def render_party_after_input(
@@ -490,14 +490,14 @@ async def render_party_after_input(
     if not details:
         await _edit_message_or_send(
             message, panel_message_id,
-            f"{notice}\\n\\nهنوز عضو پارتی نیستی.",
+            f"{notice}\n\nهنوز عضو پارتی نیستی.",
             party_main_keyboard(False),
         )
         return
     is_leader = int(details["leader_telegram_id"]) == telegram_id
     lines = ([notice, ""] if notice else []) + _party_summary_lines(details, is_leader)
     keyboard = party_manage_keyboard(details) if is_leader else party_main_keyboard(True)
-    await _edit_message_or_send(message, panel_message_id, "\\n".join(lines), keyboard)
+    await _edit_message_or_send(message, panel_message_id, "\n".join(lines), keyboard)
 
 
 @router.callback_query(F.data == "menu:party")
