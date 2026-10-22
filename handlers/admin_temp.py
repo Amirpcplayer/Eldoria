@@ -29,7 +29,7 @@ from models.equipment import Equipment
 from models.item import Item
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
-from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins
+from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins, remove_delegated_admin
 
 
 router = Router()
@@ -61,6 +61,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="➕ اضافه کردن ادمین",
                     callback_data="admin:admins:add",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="➖ برکناری ادمین",
+                    callback_data="admin:admins:remove",
                 )
             ],
             [
@@ -138,6 +144,7 @@ def delegated_admin_keyboard() -> InlineKeyboardMarkup:
     keyboard = admin_keyboard()
     blocked = {
         "admin:admins:add",
+        "admin:admins:remove",
         "admin:fanart_gifts",
         "admin:fanart:add",
         "admin:fanart:orders",
@@ -528,6 +535,66 @@ async def admin_add_delegated_admin_finish(message: Message, state: FSMContext):
         "دسترسی او فقط شامل گلد، XP، Skill XP، Gem، اسپان دستی باس/دانجن و مدیریت بازیکنان است.",
         reply_markup=admin_keyboard(),
     )
+
+
+@router.callback_query(F.data == "admin:admins:remove")
+async def admin_remove_delegated_admin_list(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات می‌تواند ادمین برکنار کند.", show_alert=True)
+        return
+
+    admin_ids = await list_delegated_admins()
+    buttons = []
+    async with AsyncSessionLocal() as session:
+        for telegram_id in admin_ids:
+            player = await session.scalar(
+                select(Character).where(Character.telegram_id == telegram_id)
+            )
+            username = (getattr(player, "telegram_username", None) or "").strip().lstrip("@")
+            label = f"@{username}" if username else f"شناسه {telegram_id}"
+            buttons.append([
+                InlineKeyboardButton(
+                    text=f"➖ {label}",
+                    callback_data=f"admin:admins:remove:{telegram_id}",
+                )
+            ])
+
+    buttons.append([InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin:home")])
+    text = "➖ برکناری ادمین\n\n"
+    if admin_ids:
+        text += "روی ادمینی که می‌خواهی دسترسی‌اش لغو شود بزن:"
+    else:
+        text += "در حال حاضر هیچ ادمین اضافه‌شده‌ای وجود ندارد."
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:admins:remove:"))
+async def admin_remove_delegated_admin_confirm(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات می‌تواند ادمین برکنار کند.", show_alert=True)
+        return
+
+    try:
+        target_id = int((callback.data or "").rsplit(":", 1)[1])
+    except (TypeError, ValueError):
+        await callback.answer("شناسه ادمین معتبر نیست.", show_alert=True)
+        return
+
+    if is_admin(target_id):
+        await callback.answer("مالک اصلی ربات قابل برکناری نیست.", show_alert=True)
+        return
+
+    if not await is_delegated_admin(target_id):
+        await callback.answer("این حساب دیگر ادمین نیست.", show_alert=True)
+        return
+
+    await remove_delegated_admin(target_id)
+    await admin_remove_delegated_admin_list(callback)
 
 
 @router.callback_query(F.data == "admin:home")
