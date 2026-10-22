@@ -26,9 +26,6 @@ class PlayerSetting(Base):
     telegram_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
     )
-    language: Mapped[str] = mapped_column(
-        String(8), default="fa", nullable=False
-    )
     notifications: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
