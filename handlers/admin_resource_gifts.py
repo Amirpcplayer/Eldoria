@@ -28,6 +28,7 @@ RESOURCES = {
 class ResourceGiftStates(StatesGroup):
     waiting_player_id = State()
     waiting_amount = State()
+    waiting_confirmation = State()
 
 
 # مالک ثابت ربات، مستقل از عضویت در گروه‌ها
@@ -82,7 +83,7 @@ async def resource_gift_cancel(message: Message, state: FSMContext):
     if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     await state.clear()
-    await message.answer("عملیات گیفت لغو شد.")
+    await message.answer("❌ عملیات گیفت لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]))
 
 
 @router.message(ResourceGiftStates.waiting_player_id)
@@ -117,69 +118,184 @@ async def resource_gift_amount(message: Message, state: FSMContext):
     if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     try:
-        amount = int((message.text or "").strip().replace(",", ""))
+        amount = int((message.text or "").strip().replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("مقدار باید عدد صحیح باشد.")
+        await message.answer("مقدار باید عدد صحیح باشد؛ برای لغو /cancel را بزن.")
         return
     data = await state.get_data()
     resource = data.get("resource")
     if resource not in RESOURCES or not 1 <= amount <= RESOURCES[resource][2]:
         await message.answer("مقدار باید بین ۱ و 2,000,000,000 باشد.")
         return
-    _, field, maximum = RESOURCES[resource]
+    target_id = data.get("target_id")
+    if not isinstance(target_id, int):
+        await state.clear()
+        await message.answer("اطلاعات بازیکن منقضی شده است؛ دوباره از پنل ادمین شروع کن.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]))
+        return
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(select(Character).where(Character.telegram_id == target_id))
+        if character is None:
+            await state.clear()
+            await message.answer("بازیکن پیدا نشد؛ عملیات لغو شد.")
+            return
+        old_value = int(getattr(character, RESOURCES[resource][1]) or 0)
+        name = character.name
+        username = character.telegram_username
+        current_level = int(character.level or 1)
+    await state.update_data(gift_amount=amount, gift_old_value=old_value, target_name=name, target_username=username, target_level=current_level)
+    await state.set_state(ResourceGiftStates.waiting_confirmation)
+    title, field, maximum = RESOURCES[resource]
+    await message.answer(
+        "╭─── ✦ 🎁 ✦ ───╮\n"
+        f"   <b>تأیید گیفت {title}</b>\n"
+        "╰─── ✦ 🎁 ✦ ───╯\n\n"
+        f"👤 دریافت‌کننده: <b>{name}</b>" + (f" (@{username})" if username else "") + "\n"
+        f"🎁 مقدار هدیه: <b>+{amount:,} {title}</b>\n"
+        f"📊 موجودی فعلی: <b>{old_value:,}</b>\n"
+        f"📈 موجودی تقریبی پس از هدیه: <b>{min(maximum, old_value + amount):,}</b>\n\n"
+        "اگر اطلاعات درست است، تأیید کن.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ تأیید و ارسال گیفت", callback_data="admin:resourcegift:confirm")],
+            [InlineKeyboardButton(text="✏️ تغییر مقدار", callback_data="admin:resourcegift:change")],
+            [InlineKeyboardButton(text="❌ لغو عملیات", callback_data="admin:resourcegift:cancel")],
+        ]),
+    )
+
+
+@router.callback_query(F.data == "admin:resourcegift:change")
+async def resource_gift_change(cb: CallbackQuery, state: FSMContext):
+    if not is_admin(cb.from_user.id) and not await is_delegated_admin(cb.from_user.id):
+        await cb.answer("⛔ دسترسی مجاز نیست.", show_alert=True)
+        return
+    data = await state.get_data()
+    if data.get("resource") not in RESOURCES or not isinstance(data.get("target_id"), int):
+        await state.clear()
+        await cb.answer("اطلاعات عملیات منقضی شده است.", show_alert=True)
+        return
+    await state.set_state(ResourceGiftStates.waiting_amount)
+    if cb.message:
+        await cb.message.edit_text(
+            "✏️ مقدار جدید هدیه را به‌صورت عدد صحیح مثبت بفرست.\nبرای لغو /cancel را بزن.",
+        )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "admin:resourcegift:cancel")
+async def resource_gift_cancel_button(cb: CallbackQuery, state: FSMContext):
+    if not is_admin(cb.from_user.id) and not await is_delegated_admin(cb.from_user.id):
+        await cb.answer("⛔ دسترسی مجاز نیست.", show_alert=True)
+        return
+    await state.clear()
+    if cb.message:
+        await cb.message.edit_text(
+            "❌ عملیات گیفت لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]
+            ]),
+        )
+    await cb.answer("عملیات لغو شد.")
+
+
+@router.callback_query(F.data == "admin:resourcegift:confirm")
+async def resource_gift_confirm(cb: CallbackQuery, state: FSMContext):
+    if not is_admin(cb.from_user.id) and not await is_delegated_admin(cb.from_user.id):
+        await cb.answer("⛔ دسترسی مجاز نیست.", show_alert=True)
+        return
+    data = await state.get_data()
+    resource = data.get("resource")
+    target_id = data.get("target_id")
+    amount = data.get("gift_amount")
+    if resource not in RESOURCES or not isinstance(target_id, int) or not isinstance(amount, int) or amount <= 0:
+        await state.clear()
+        await cb.answer("اطلاعات عملیات معتبر نیست؛ دوباره شروع کن.", show_alert=True)
+        return
+
+    title, field, maximum = RESOURCES[resource]
+    old_value = int(data.get("gift_old_value") or 0)
+    new_value = old_value
+    new_level = int(data.get("target_level") or 1)
     levels_gained = 0
+    target_name = data.get("target_name") or "قهرمان"
     try:
         if resource == "xp":
-            # XP must go through the XP service so all level-up thresholds, stats,
-            # titles and level-up notifications are applied consistently.
-            success, new_value, new_level, levels_gained = await add_character_xp(int(data["target_id"]), amount)
+            success, _service_value, new_level, levels_gained = await add_character_xp(target_id, amount)
             if not success:
                 await state.clear()
-                await message.answer("پلیر پیدا نشد یا XP قابل اعمال نبود؛ گیفت انجام نشد.")
+                await cb.answer("XP به بازیکن اضافه نشد؛ عملیات ناموفق بود.", show_alert=True)
                 return
             async with AsyncSessionLocal() as session:
-                character = await session.scalar(select(Character).where(Character.telegram_id == int(data["target_id"])))
+                character = await session.scalar(select(Character).where(Character.telegram_id == target_id))
                 if character is None:
                     await state.clear()
-                    await message.answer("پلیر پس از ثبت XP پیدا نشد؛ وضعیت دیتابیس را بررسی کن.")
+                    await cb.answer("بازیکن پس از ثبت XP پیدا نشد.", show_alert=True)
                     return
                 new_value = int(character.xp or 0)
+                target_name = character.name
                 new_level = int(character.level or 1)
-                name = character.name
         else:
             async with AsyncSessionLocal() as session:
-                character = await session.scalar(select(Character).where(Character.telegram_id == int(data["target_id"])).with_for_update())
+                character = await session.scalar(select(Character).where(Character.telegram_id == target_id).with_for_update())
                 if character is None:
                     await state.clear()
-                    await message.answer("پلیر دیگر پیدا نشد؛ عملیات لغو شد.")
+                    await cb.answer("بازیکن پیدا نشد؛ گیفت انجام نشد.", show_alert=True)
                     return
                 old_value = int(getattr(character, field) or 0)
                 new_value = min(maximum, old_value + amount)
-                actual = new_value - old_value
+                amount = new_value - old_value
+                if amount <= 0:
+                    await state.clear()
+                    await cb.answer("موجودی به سقف مجاز رسیده است؛ چیزی اضافه نشد.", show_alert=True)
+                    return
                 setattr(character, field, new_value)
-                name = character.name
+                target_name = character.name
                 await session.commit()
-                amount = actual
     except Exception:
-        logger.exception("Admin resource gift failed; admin_id=%s target_id=%s resource=%s", message.from_user.id, data.get("target_id"), resource)
-        await message.answer("❌ ذخیرهٔ گیفت انجام نشد؛ خطا در گزارش ربات ثبت شد.")
+        logger.exception("Admin resource gift failed; admin_id=%s target_id=%s resource=%s", cb.from_user.id, target_id, resource)
         await state.clear()
+        await cb.answer("❌ ذخیره گیفت انجام نشد؛ خطا در گزارش ربات ثبت شد.", show_alert=True)
         return
+
     await state.clear()
-    if resource == "xp":
-        level_text = f"\nلول فعلی: {new_level}" + (f"\n🎉 تعداد لول‌های گرفته‌شده: +{levels_gained}" if levels_gained else "\nاین مقدار XP برای لول بعدی کافی نبود.")
-        await message.answer(f"✅ گیفت XP انجام شد.\nپلیر: {name}\nمقدار افزوده‌شده: +{amount:,} XP\nXP باقی‌مانده: {new_value:,}{level_text}")
-    else:
-        await message.answer(f"✅ گیفت انجام شد.\nپلیر: {name}\nمنبع: {RESOURCES[resource][0]}\nمقدار افزوده‌شده: +{amount:,}\nموجودی جدید: {new_value:,}")
     try:
+        recipient_text = (
+            "╭─── ✦ 🎁 ✦ ───╮\n"
+            f"   <b>هدیه‌ای از سوی مدیریت اِلدوریا</b>\n"
+            "╰─── ✦ 🎁 ✦ ───╯\n\n"
+            f"قهرمان <b>{target_name}</b>، مدیریت World Eldoria برای قدردانی از حضورت این هدیه را به تو تقدیم کرد. ✨\n\n"
+            f"🎁 هدیه دریافتی: <b>+{amount:,} {title}</b>\n"
+            f"📊 موجودی فعلی: <b>{new_value:,}</b>"
+        )
         if resource == "xp":
-            recipient_text = f"🎁 مدیریت اِلدوریا به تو {amount:,} XP هدیه داد!\nلول فعلی: {new_level}"
+            recipient_text += f"\n⭐ سطح فعلی: <b>{new_level}</b>"
             if levels_gained:
-                recipient_text += f"\n🎉 تبریک! با این گیفت {levels_gained} لول بالا رفتی!"
-            elif new_level >= 100:
-                recipient_text += "\nبه حداکثر لول رسیده‌ای."
-        else:
-            recipient_text = f"🎁 مدیریت اِلدوریا به تو {amount:,} {RESOURCES[resource][0]} هدیه داد!"
-        await message.bot.send_message(int(data["target_id"]), recipient_text)
+                recipient_text += f"\n🎉 با این هدیه {levels_gained} سطح پیشرفت کردی!"
+        recipient_text += "\n\n<i>با آرزوی ماجراجویی‌هایی درخشان، تیم World Eldoria</i>"
+        await cb.bot.send_message(target_id, recipient_text, parse_mode="HTML")
     except Exception:
-        logger.debug("Could not notify gift recipient telegram_id=%s", data.get("target_id"), exc_info=True)
+        logger.info("Could not DM resource gift recipient telegram_id=%s", target_id, exc_info=True)
+
+    receipt = (
+        "╭─── ✦ 🧾 ✦ ───╮\n"
+        f"   <b>فاکتور گیفت {title}</b>\n"
+        "╰─── ✦ 🧾 ✦ ───╯\n\n"
+        f"👤 بازیکن: <b>{target_name}</b>\n"
+        f"🆔 شناسه: <code>{target_id}</code>\n"
+        f"🛡 انجام‌دهنده: <code>{cb.from_user.id}</code>\n"
+        f"🎁 مقدار اهدایی: <b>+{amount:,} {title}</b>\n"
+        f"📊 موجودی قبلی: <b>{old_value:,}</b>\n"
+        f"📈 موجودی جدید: <b>{new_value:,}</b>\n"
+        + (f"⭐ سطح جدید: <b>{new_level}</b>\n🎉 سطح‌های افزایش‌یافته: <b>{levels_gained}</b>\n" if resource == "xp" else "")
+        + "\n📌 وضعیت: <b>موفق</b>"
+    )
+    if cb.message:
+        await cb.message.edit_text(
+            receipt,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=f"🎁 گیفت {title} دیگر", callback_data=f"admin:resource_gift:{resource}")],
+                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+            ]),
+        )
+    await cb.answer("گیفت با موفقیت ثبت شد.")
