@@ -44,12 +44,13 @@ def boosted_stats(race_id):
     return {key: (value * 130 + 99) // 100 for key, value in get_base_stats(race_id).items()}
 
 async def replace_panel(callback, text, markup=None):
-    # Send first, then remove the old panel to avoid losing the UI on send failure.
-    await callback.message.answer(text, reply_markup=markup, parse_mode=ParseMode.HTML)
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
+    """Edit the current character-creation panel instead of stacking messages."""
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=markup,
+        parse_mode=ParseMode.HTML,
+    )
 
 @router.callback_query(lambda c: c.data == "race:back")
 async def race_back(callback: CallbackQuery, state: FSMContext):
