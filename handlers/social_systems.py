@@ -26,6 +26,7 @@ from models.fan_art import FanArt, FanArtOwnership
 from models.social_systems import PlayerSetting
 from services.social_service import *
 from services.panel_image_service import show_panel
+from services.language_service import get_language, tr
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -139,29 +140,13 @@ async def get_profile_fan_art(
 
 @router.callback_query(F.data == "menu:settings")
 async def settings_menu(callback: CallbackQuery):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold",
-                    callback_data="settings:rename",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔙 بازگشت",
-                    callback_data="menu:back",
-                ),
-            ],
-        ]
-    )
-
-    await settings_panel(
-        callback,
-        "⚙️ تنظیمات اِلدوریا\n\n"
-        "تنظیمات بازیکن خود را مدیریت کن.",
-        keyboard,
-    )
+    language = await get_language(callback.from_user.id)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=tr(language, "rename"), callback_data="settings:rename")],
+        [InlineKeyboardButton(text=tr(language, "language"), callback_data="settings:language")],
+        [InlineKeyboardButton(text=tr(language, "back"), callback_data="menu:back")],
+    ])
+    await settings_panel(callback, tr(language, "settings"), keyboard)
 
 
 @router.callback_query(F.data == "settings:notifications")
@@ -221,69 +206,31 @@ async def settings_notifications_toggle(callback: CallbackQuery):
 
 @router.callback_query(F.data == "settings:language")
 async def settings_language(callback: CallbackQuery):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🇮🇷 فارسی",
-                    callback_data="settings:language:fa",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🇬🇧 English",
-                    callback_data="settings:language:en",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔙 بازگشت",
-                    callback_data="menu:settings",
-                ),
-            ],
-        ]
-    )
-
-    await settings_panel(
-        callback,
-        "🌐 زبان بازی\n\n"
-        "زبان موردنظر خود را انتخاب کن.",
-        keyboard,
-    )
+    language = await get_language(callback.from_user.id)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=("✅ " if language == "fa" else "") + "🇮🇷 فارسی", callback_data="settings:language:fa")],
+        [InlineKeyboardButton(text=("✅ " if language == "en" else "") + "🇬🇧 English", callback_data="settings:language:en")],
+        [InlineKeyboardButton(text=("✅ " if language == "ru" else "") + "🇷🇺 Русский", callback_data="settings:language:ru")],
+        [InlineKeyboardButton(text=tr(language, "back"), callback_data="menu:settings")],
+    ])
+    await settings_panel(callback, tr(language, "choose"), keyboard)
 
 
 @router.callback_query(F.data.startswith("settings:language:"))
 async def settings_language_set(callback: CallbackQuery):
     language = callback.data.rsplit(":", 1)[-1]
-
-    if language not in {"fa", "en"}:
-        await callback.answer(
-            "زبان انتخاب‌شده معتبر نیست.",
-            show_alert=True,
-        )
+    if language not in {"fa", "en", "ru"}:
+        await callback.answer("Invalid language / زبان نامعتبر", show_alert=True)
         return
-
     telegram_id = callback.from_user.id
-
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(PlayerSetting).where(
-                PlayerSetting.telegram_id == telegram_id
-            )
-        )
-        setting = result.scalar_one_or_none()
-
+        setting = await session.scalar(select(PlayerSetting).where(PlayerSetting.telegram_id == telegram_id).with_for_update())
         if setting is None:
-            setting = PlayerSetting(
-                telegram_id=telegram_id,
-                language=language,
-            )
+            setting = PlayerSetting(telegram_id=telegram_id, language=language)
             session.add(setting)
         else:
             setting.language = language
-
         await session.commit()
-
     await settings_menu(callback)
 
 
