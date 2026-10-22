@@ -144,7 +144,7 @@ def _button(text: str, callback_data: str) -> InlineKeyboardButton:
 def party_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [_button("✖️ لغو عملیات", "party:cancel")]
+            [_button("✖️ لغو", "party:cancel")]
         ]
     )
 
@@ -152,18 +152,18 @@ def party_cancel_keyboard() -> InlineKeyboardMarkup:
 def party_main_keyboard(has_party: bool) -> InlineKeyboardMarkup:
     if has_party:
         rows = [
-            [_button("👥 اعضای پارتی", "party:members")],
-            [_button("⚙️ مدیریت پارتی", "party:manage")],
-            [_button("🚪 خروج از پارتی", "party:leave")],
+            [_button("👥 اعضا", "party:members")],
+            [_button("⚙️ مدیریت", "party:manage")],
+            [_button("🚪 خروج", "party:leave")],
         ]
     else:
         rows = [
             [_button("➕ ساخت پارتی", "party:create")],
-            [_button("🔎 پیوستن به پارتی", "party:join")],
+            [_button("🔎 پیوستن", "party:join")],
         ]
 
-    rows.append([_button("🔄 به‌روزرسانی پارتی", "menu:party")])
-    rows.append([_button("🏠 بازگشت به منوی اصلی", "menu:back")])
+    rows.append([_button("🔄 تازه‌سازی", "menu:party")])
+    rows.append([_button("🏠 منوی اصلی", "menu:back")])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -188,20 +188,20 @@ def party_manage_keyboard(
     details: dict[str, Any],
 ) -> InlineKeyboardMarkup:
     rows = [
-        [_button("✏️ تغییر نام پارتی", "party:rename")],
-        [_button("📨 دعوت بازیکن", "party:invite")],
-        [_button("👥 مدیریت اعضا", "party:kick:list")],
+        [_button("✏️ تغییر نام", "party:rename")],
+        [_button("📨 دعوت عضو", "party:invite")],
+        [_button("🚫 اخراج عضو", "party:kick:list")],
     ]
 
     if int(details.get("max_members") or 4) < 10:
         rows.append(
-            [_button("⬆️ ارتقای ظرفیت (+۲) — 💰 2,000", "party:upgrade")]
+            [_button("⬆️ ظرفیت +۲ · ۲٬۰۰۰ طلا", "party:upgrade")]
         )
 
     rows.extend(
         [
             [_button("👥 نمایش اعضا", "party:members")],
-            [_button("🗑️ حذف کامل پارتی", "party:disband")],
+            [_button("🗑️ حذف پارتی", "party:disband")],
             [_button("🔙 بازگشت", "menu:party")],
         ]
     )
@@ -223,7 +223,7 @@ def party_kick_confirm_keyboard(
 def party_leave_confirm_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [_button("✅ بله، خارج می‌شوم", "party:leave:yes")],
+            [_button("✅ تأیید خروج", "party:leave:yes")],
             [_button("❌ انصراف", "menu:party")],
         ]
     )
@@ -427,7 +427,7 @@ async def render_party(callback: CallbackQuery) -> None:
     is_leader = leader_id == telegram_id
 
     lines = [
-        "🎉 <b>پارتی اِلدوریا</b>",
+        "⚔️ <b>پارتی اِلدوریا</b>",
         "",
         f"🆔 شناسه: <code>{details['id']}</code>",
         f"🏷️ نام: <b>{_safe(details.get('name'))}</b>",
@@ -491,13 +491,13 @@ async def render_party_after_input(
     lines = [
         f"{notice}",
         "",
-        "🎉 <b>پارتی اِلدوریا</b>",
+        "⚔️ <b>پارتی اِلدوریا</b>",
         "",
         f"🆔 شناسه: <code>{details['id']}</code>",
         f"🏷️ نام: <b>{_safe(details.get('name'))}</b>",
         f"✨ عنوان: {_safe(details.get('title'))}",
         f"📝 توضیحات: {_safe(details.get('description') or 'بدون توضیحات')}",
-        f"👥 ظرفیت: {details['member_count']}/{details['max_members']}",
+        f"👥 اعضا: {details['member_count']}/{details['max_members']}",
         "",
         "<b>اعضای پارتی:</b>",
     ]
@@ -514,8 +514,7 @@ async def render_party_after_input(
         username_text = f"@{html.escape(username)}" if username else "ندارد"
         lines.append(
             f"{index}. {member_name} — Lv.{member.get('level', 1)}{role}\n"
-            f"   👤 تلگرام: <code>{username_text}</code> · "
-            f"🆔 شناسه عددی: <code>{member_id}</code>"
+            f"   👤 <code>{username_text}</code> · 🆔 <code>{member_id}</code>"
         )
 
     keyboard = (
@@ -661,8 +660,7 @@ async def send_party_invitation(
     if target is None:
         return (
             False,
-            "بازیکنی با این نام کاربری در شخصیت‌های ثبت‌شده پیدا نشد. "
-            "بازیکن باید شخصیت ساخته باشد و نام کاربری‌اش ثبت شده باشد.",
+            "بازیکن پیدا نشد؛ باید شخصیت ساخته و نام کاربری ثبت کرده باشد.",
         )
 
     target_id = int(target["telegram_id"])
@@ -721,8 +719,7 @@ async def send_party_invitation(
 
         return (
             False,
-            "ارسال پیام خصوصی ممکن نشد. بازیکن باید ربات را "
-            "شروع کرده باشد و دریافت پیام از ربات برایش مسدود نباشد.",
+            "پیام خصوصی ارسال نشد؛ بازیکن باید ربات را شروع کرده باشد.",
         )
 
     return True, f"دعوت برای @{username} ارسال شد."
@@ -735,7 +732,7 @@ async def party_invite_accept(callback: CallbackQuery) -> None:
 
     if not invitation:
         await callback.answer(
-            "این دعوت منقضی شده یا دیگر معتبر نیست.",
+            "این دعوت منقضی شده یا نامعتبر است.",
             show_alert=True,
         )
         return
@@ -846,7 +843,7 @@ async def party_text_input(message: Message) -> None:
         if not text or len(text) > MAX_NAME_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                f"⚠️ نام باید بین ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
+                ff"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
                 "create_name",
             )
             return
@@ -866,7 +863,7 @@ async def party_text_input(message: Message) -> None:
         if not text or len(text) > MAX_TITLE_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                f"⚠️ عنوان باید بین ۱ تا {MAX_TITLE_LENGTH} نویسه باشد.",
+                f"⚠️ عنوان باید ۱ تا {MAX_TITLE_LENGTH} نویسه باشد.",
                 "create_title",
                 party_name=state.get("party_name"),
             )
@@ -891,7 +888,7 @@ async def party_text_input(message: Message) -> None:
         if len(description) > MAX_DESCRIPTION_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                f"⚠️ توضیحات نمی‌تواند بیشتر از {MAX_DESCRIPTION_LENGTH} نویسه باشد.",
+                f"⚠️ توضیحات حداکثر {MAX_DESCRIPTION_LENGTH} نویسه است.",
                 "create_description",
                 party_name=state.get("party_name"),
                 party_title=state.get("party_title"),
@@ -936,7 +933,7 @@ async def party_text_input(message: Message) -> None:
         except ValueError:
             await show_input_prompt_from_message(
                 message,
-                "⚠️ شناسهٔ پارتی باید عدد باشد.",
+                "⚠️ شناسه باید عددی باشد.",
                 "join_party_id",
             )
             return
@@ -944,7 +941,7 @@ async def party_text_input(message: Message) -> None:
         if party_id <= 0:
             await show_input_prompt_from_message(
                 message,
-                "⚠️ شناسهٔ پارتی معتبر نیست.",
+                "⚠️ شناسهٔ پارتی نامعتبر است.",
                 "join_party_id",
             )
             return
@@ -963,7 +960,7 @@ async def party_text_input(message: Message) -> None:
         if not text or len(text) > MAX_NAME_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                f"⚠️ نام باید بین ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
+                ff"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
                 "rename_party",
             )
             return
@@ -1009,7 +1006,7 @@ async def party_text_input(message: Message) -> None:
         if not reason:
             await show_input_prompt_from_message(
                 message,
-                "⚠️ دلیل اخراج نمی‌تواند خالی باشد.",
+                "⚠️ دلیل اخراج را وارد کن.",
                 "kick_reason",
                 target_id=target_id,
             )
@@ -1019,7 +1016,7 @@ async def party_text_input(message: Message) -> None:
             await clear_party_flow(telegram_id)
             await show_party_message(
                 message,
-                "⚠️ اطلاعات اخراج معتبر نیست.",
+                "⚠️ اطلاعات اخراج نامعتبر است.",
             )
             return
 
@@ -1032,7 +1029,7 @@ async def party_text_input(message: Message) -> None:
             await clear_party_flow(telegram_id)
             await show_party_message(
                 message,
-                "⛔ فقط رهبر پارتی می‌تواند اعضا را اخراج کند.",
+                "⛔ فقط رهبر می‌تواند عضو اخراج کند.",
             )
             return
 
@@ -1084,7 +1081,7 @@ async def party_create_capacity(callback: CallbackQuery) -> None:
 
     if not state or state.get("stage") != "create_capacity":
         await callback.answer(
-            "این مرحله منقضی شده است؛ دوباره ساخت پارتی را شروع کن.",
+            "این مرحله منقضی شد؛ ساخت پارتی را دوباره شروع کن.",
             show_alert=True,
         )
         return
@@ -1123,7 +1120,7 @@ async def party_create_capacity(callback: CallbackQuery) -> None:
     await show_party_panel(
         callback,
         (
-            "🎉 <b>پارتی با موفقیت ساخته شد!</b>\n\n"
+            "✅ <b>پارتی ساخته شد</b>\n\n"
             f"🆔 شناسهٔ پارتی: <code>{party_id}</code>\n"
             f"🏷️ نام: <b>{_safe(state.get('party_name'))}</b>\n"
             f"✨ عنوان: {_safe(state.get('party_title'))}\n"
@@ -1268,7 +1265,7 @@ async def party_kick_list(callback: CallbackQuery) -> None:
     ):
         await show_party_panel(
             callback,
-            "⛔ فقط رهبر پارتی می‌تواند اعضا را اخراج کند.",
+            "⛔ فقط رهبر می‌تواند عضو اخراج کند.",
             party_main_keyboard(bool(details)),
         )
         return
@@ -1317,7 +1314,7 @@ async def party_kick_confirm(callback: CallbackQuery) -> None:
         or int(details["leader_telegram_id"]) != telegram_id
     ):
         await callback.answer(
-            "فقط رهبر پارتی می‌تواند اعضا را اخراج کند.",
+            "فقط رهبر می‌تواند عضو اخراج کند.",
             show_alert=True,
         )
         return
@@ -1371,7 +1368,7 @@ async def party_kick_reason_start(callback: CallbackQuery) -> None:
         or int(details["leader_telegram_id"]) != telegram_id
     ):
         await callback.answer(
-            "فقط رهبر پارتی می‌تواند اعضا را اخراج کند.",
+            "فقط رهبر می‌تواند عضو اخراج کند.",
             show_alert=True,
         )
         return
@@ -1478,21 +1475,19 @@ async def party_disband_start(callback: CallbackQuery) -> None:
         await show_party_panel(
             callback,
             (
-                "⚔️ <b>پارتی در حال اجرای دانجن است</b>\\n\\n"
-                "پارتی شما در یک دانجن قرار دارد.\\n"
-                "بعد از پایان دانجن دوباره تلاش کنید."
+                "⚔️ <b>دانجن در حال اجراست</b>\n\nتا پایان دانجن نمی‌توانی پارتی را حذف کنی."
             ),
             InlineKeyboardMarkup(inline_keyboard=[
-                [_button("🔙 بازگشت به پنل پارتی", "menu:party")],
+                [_button("🔙 بازگشت به پارتی", "menu:party")],
             ]),
         )
         return
 
     await show_party_panel(
         callback,
-        "🗑️ <b>حذف کامل پارتی</b>\\n\\nاین کار پارتی را می‌بندد و همهٔ اعضا را از آن خارج می‌کند. مطمئنی؟",
+        "🗑️ <b>حذف پارتی</b>\n\nپارتی بسته می‌شود و همهٔ اعضا خارج می‌شوند. ادامه می‌دهی؟",
         InlineKeyboardMarkup(inline_keyboard=[
-            [_button("🗑️ بله، حذف شود", "party:disband:yes")],
+            [_button("🗑️ بله، حذف کن", "party:disband:yes")],
             [_button("❌ انصراف", "menu:party")],
         ]),
     )
