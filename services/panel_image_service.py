@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, Message
 from config.panel_images import PANEL_IMAGES
 from database.redis import redis
 from middlewares.panel_owner import protect_keyboard
+from services.image_aspect_service import prepare_photo
 
 logger = logging.getLogger(__name__)
 PANEL_REFERENCE_TTL = 60 * 60 * 24 * 30
@@ -154,8 +155,18 @@ async def replace_panel_with_photo(
         # The following send is still useful if Telegram no longer allows deletion.
         logger.debug("Could not delete old panel before photo replacement", exc_info=True)
 
+    try:
+        prepared_photo = await prepare_photo(
+            message.bot,
+            photo,
+            filename="eldoria-panel.jpg",
+        )
+    except Exception:
+        logger.exception("Could not normalize panel image; sending original image as fallback")
+        prepared_photo = photo
+
     sent = await message.answer_photo(
-        photo=photo,
+        photo=prepared_photo,
         caption=caption,
         reply_markup=keyboard,
         parse_mode=parse_mode,
