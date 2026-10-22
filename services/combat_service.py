@@ -736,6 +736,36 @@ def roll_critical(
 async def create_battle(
     telegram_id: int,
     enemy_id: int,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """Serialize battle creation per player to prevent concurrent duplicate fights."""
+    lock_key = f"eldoria:battle_create_lock:{int(telegram_id)}"
+    lock_token = str(uuid.uuid4())
+    acquired = await redis.set(lock_key, lock_token, nx=True, ex=60)
+    if not acquired:
+        return False, "⚔️ درخواست مبارزهٔ دیگری در حال پردازش است؛ چند لحظه دیگر دوباره تلاش کن.", None
+
+    try:
+        return await _create_battle_unlocked(telegram_id, enemy_id)
+    finally:
+        try:
+            await redis.eval(
+                """
+                if redis.call('get', KEYS[1]) == ARGV[1] then
+                    return redis.call('del', KEYS[1])
+                end
+                return 0
+                """,
+                1,
+                lock_key,
+                lock_token,
+            )
+        except Exception:
+            logger.exception("Could not release battle creation lock for player %s", telegram_id)
+
+
+async def _create_battle_unlocked(
+    telegram_id: int,
+    enemy_id: int,
 ) -> tuple[
     bool,
     str,
