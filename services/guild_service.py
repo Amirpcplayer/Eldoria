@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from database.database import AsyncSessionLocal
@@ -207,7 +207,7 @@ async def donate_guild_gold(telegram_id: int, amount: int) -> tuple[bool, str]:
         return True, f"{amount:,} طلا به خزانهٔ گیلد کمک شد و {amount:,} تجربهٔ گیلد دریافت شد.{level_text}\n💰 موجودی تو: {character.gold:,} طلا"
 
 
-async def leave_guild(telegram_id: int) -> tuple[bool, str]:
+async def leave_guild(telegram_id: int, successor_telegram_id: int | None = None) -> tuple[bool, str]:
     async with AsyncSessionLocal() as session:
         membership = await session.scalar(select(GuildMember).where(GuildMember.telegram_id == telegram_id).with_for_update())
         if membership is None:
@@ -218,14 +218,25 @@ async def leave_guild(telegram_id: int) -> tuple[bool, str]:
             await session.commit()
             return True, "عضویت قدیمی پاک‌سازی شد."
         if guild.owner_telegram_id == telegram_id:
-            others = (await session.execute(select(GuildMember).where(GuildMember.guild_id == guild.id, GuildMember.telegram_id != telegram_id).order_by(GuildMember.joined_at.asc(), GuildMember.id.asc()).with_for_update())).scalars().all()
-            if others:
-                successor = others[0]
+            if successor_telegram_id is not None:
+                successor = await session.scalar(select(GuildMember).where(
+                    GuildMember.guild_id == guild.id,
+                    GuildMember.telegram_id == successor_telegram_id,
+                    GuildMember.telegram_id != telegram_id,
+                ).with_for_update())
+                if successor is None:
+                    return False, "عضو انتخاب‌شده دیگر عضو این گیلد نیست."
                 successor.role = "owner"
-                guild.owner_telegram_id = successor.telegram_id
+                guild.owner_telegram_id = int(successor.telegram_id)
                 await session.delete(membership)
                 await session.commit()
-                return True, "از گیلد خارج شدی؛ رهبری به قدیمی‌ترین عضو باقی‌مانده واگذار شد."
+                return True, f"از گیلد خارج شدی؛ رهبری به شناسهٔ {successor.telegram_id} منتقل شد."
+            other_id = await session.scalar(select(GuildMember.id).where(
+                GuildMember.guild_id == guild.id,
+                GuildMember.telegram_id != telegram_id,
+            ).limit(1))
+            if other_id is not None:
+                return False, "برای خروج رهبر، ابتدا یکی از اعضا را به‌عنوان رهبر جدید انتخاب کن."
             await session.delete(membership)
             await session.delete(guild)
             await session.commit()
@@ -233,6 +244,19 @@ async def leave_guild(telegram_id: int) -> tuple[bool, str]:
         await session.delete(membership)
         await session.commit()
         return True, "با موفقیت از گیلد خارج شدی."
+
+
+async def disband_guild(telegram_id: int) -> tuple[bool, str]:
+    async with AsyncSessionLocal() as session:
+        guild = await session.scalar(select(Guild).where(
+            Guild.owner_telegram_id == telegram_id
+        ).with_for_update())
+        if guild is None:
+            return False, "فقط رهبر گیلد می‌تواند آن را حذف کند."
+        await session.execute(delete(GuildMember).where(GuildMember.guild_id == guild.id))
+        await session.delete(guild)
+        await session.commit()
+        return True, f"گیلد «{guild.name}» به‌طور کامل حذف شد."
 
 
 async def claim_guild_leader_reward(telegram_id: int) -> tuple[bool, str]:
