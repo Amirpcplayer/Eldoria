@@ -23,6 +23,8 @@ def test_pool_settings_have_safe_defaults():
     assert settings.redis_max_connections == 50
     assert settings.redis_socket_timeout == 5.0
     assert settings.redis_connect_timeout == 5.0
+    assert settings.slow_db_query_ms == 250
+    assert settings.slow_update_ms == 1500
 
 
 @pytest.mark.parametrize(
@@ -37,6 +39,8 @@ def test_pool_settings_have_safe_defaults():
         ("redis_max_connections", 501),
         ("redis_socket_timeout", 0),
         ("redis_connect_timeout", 61),
+        ("slow_db_query_ms", 0),
+        ("slow_update_ms", 60001),
     ],
 )
 def test_pool_settings_reject_unsafe_values(field, value):
