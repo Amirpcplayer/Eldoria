@@ -420,7 +420,7 @@ async def join_party_from_invitation(
             raise
 
 
-async def leave_party(telegram_id: int) -> tuple[bool, str]:
+async def leave_party(telegram_id: int, successor_telegram_id: int | None = None) -> tuple[bool, str]:
     async with AsyncSessionLocal() as session:
         member = await _get_active_member(session, telegram_id)
 
@@ -449,28 +449,54 @@ async def leave_party(telegram_id: int) -> tuple[bool, str]:
 
         was_leader = int(party.leader_telegram_id) == telegram_id
         party_id = int(party.id)
-        await session.delete(member)
-        await session.flush()
-
         if was_leader:
-            successor = await session.scalar(
-                select(PartyMember)
-                .where(PartyMember.party_id == party_id)
-                .order_by(PartyMember.joined_at.asc(), PartyMember.id.asc())
-                .limit(1)
-                .with_for_update()
-            )
-            if successor is None:
+            successor = None
+            if successor_telegram_id is not None:
+                successor = await session.scalar(
+                    select(PartyMember).where(
+                        PartyMember.party_id == party_id,
+                        PartyMember.telegram_id == successor_telegram_id,
+                        PartyMember.telegram_id != telegram_id,
+                    ).with_for_update()
+                )
+                if successor is None:
+                    return False, "عضو انتخاب‌شده دیگر عضو این پارتی نیست."
+                party.leader_telegram_id = int(successor.telegram_id)
+            else:
+                remaining = await session.scalar(
+                    select(PartyMember.id).where(
+                        PartyMember.party_id == party_id,
+                        PartyMember.telegram_id != telegram_id,
+                    ).limit(1)
+                )
+                if remaining is not None:
+                    return False, "برای خروج رهبر، ابتدا یکی از اعضا را به‌عنوان رهبر جدید انتخاب کن."
                 party.status = "closed"
-                await session.commit()
-                return True, "از پارتی خارج شدی؛ چون عضو دیگری باقی نمانده بود، پارتی بسته شد."
-            party.leader_telegram_id = int(successor.telegram_id)
-            await session.commit()
-            return True, f"از پارتی خارج شدی؛ رهبری به عضو قدیمی‌تر (شناسهٔ {successor.telegram_id}) منتقل شد."
-
+        await session.delete(member)
         await session.commit()
+        if was_leader and successor_telegram_id is not None:
+            return True, f"از پارتی خارج شدی؛ رهبری به شناسهٔ {successor_telegram_id} منتقل شد."
+        if was_leader:
+            return True, "از پارتی خارج شدی؛ چون تنها عضو بودی، پارتی بسته شد."
         return True, "از پارتی خارج شدی."
 
+
+async def disband_party(telegram_id: int) -> tuple[bool, str]:
+    async with AsyncSessionLocal() as session:
+        party = await session.scalar(select(Party).where(
+            Party.leader_telegram_id == telegram_id, Party.status == "open"
+        ).with_for_update())
+        if party is None:
+            return False, "فقط رهبر یک پارتی فعال می‌تواند آن را حذف کند."
+        dungeon_locked = await session.scalar(select(GroupDungeonEvent.id).where(
+            GroupDungeonEvent.party_id == party.id,
+            GroupDungeonEvent.status.in_(["forming", "running"]),
+        ).limit(1))
+        if dungeon_locked is not None:
+            return False, "تا پایان دانجن نمی‌توانی پارتی را حذف کنی."
+        party.status = "closed"
+        await session.commit()
+        return True, f"پارتی «{party.name}» حذف شد."
 
 async def rename_party(
     telegram_id: int,
