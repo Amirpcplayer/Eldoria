@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 from aiogram import Bot
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from database.database import AsyncSessionLocal
+from database.redis import redis
 from models.character import Character
 from models.social_systems import CharacterPet, Pet
 from models.world_systems import CharacterActivity
@@ -91,59 +93,110 @@ async def process_completed_pet_training(bot: Bot) -> None:
         )
 
     for pet_row_id in pending_ids:
-        async with AsyncSessionLocal() as session:
-            # Keep the row lock until delivery is recorded. Other workers skip
-            # this row; if sending fails, the transaction rolls back for retry.
-            row = await session.scalar(
-                select(CharacterPet)
-                .where(CharacterPet.id == pet_row_id)
-                .with_for_update(skip_locked=True, of=CharacterPet)
+        lock_key = f"eldoria:pet_training_notify:{int(pet_row_id)}"
+        lock_token = str(uuid.uuid4())
+        try:
+            acquired = await redis.set(lock_key, lock_token, nx=True, ex=120)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Could not acquire pet-training notification lock for row %s",
+                pet_row_id,
             )
-            if (
-                row is None
-                or row.training_completed_at is None
-                or row.training_notified_at is not None
-            ):
-                continue
+            continue
 
-            character = await session.scalar(
-                select(Character).where(Character.id == row.character_id)
-            )
-            pet = await session.scalar(select(Pet).where(Pet.id == row.pet_id))
-            if character is None or pet is None:
-                logger.error(
-                    "Cannot notify completed pet training: pet_row_id=%s has missing character/pet",
-                    pet_row_id,
+        if not acquired:
+            continue
+
+        try:
+            # Copy only the fields needed for the Telegram message, then close
+            # the DB session before network I/O so a slow Telegram response
+            # cannot hold a connection or row lock.
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(CharacterPet, Character.telegram_id, Pet.name)
+                    .join(Character, Character.id == CharacterPet.character_id)
+                    .join(Pet, Pet.id == CharacterPet.pet_id)
+                    .where(
+                        CharacterPet.id == pet_row_id,
+                        CharacterPet.training_completed_at.is_not(None),
+                        CharacterPet.training_notified_at.is_(None),
+                    )
                 )
-                continue
+                row_data = result.first()
+                if row_data is None:
+                    continue
 
-            level = max(1, int(row.level or 1))
-            start_level = max(1, int(row.training_start_level or level))
+                row, telegram_id, pet_name = row_data
+                level = max(1, int(row.level or 1))
+                start_level = max(1, int(row.training_start_level or level))
+
             level_note = (
-                f"\n🎉 پت لول‌آپ کرد: Lv.{start_level} → Lv.{level}"
+                f"\\n🎉 پت لول‌آپ کرد: Lv.{start_level} → Lv.{level}"
                 if level > start_level
                 else ""
             )
             message = (
-                f"🐾 آموزش پت «{pet.name}» به پایان رسید!\n"
-                f"✨ XP دریافت‌شده: +{TRAINING_XP}\n"
+                f"🐾 آموزش پت «{pet_name}» به پایان رسید!\\n"
+                f"✨ XP دریافت‌شده: +{TRAINING_XP}\\n"
                 f"⭐ سطح فعلی پت: Lv.{level}{level_note}"
             )
 
             try:
-                await bot.send_message(character.telegram_id, message)
+                await bot.send_message(int(telegram_id), message)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception(
                     "Could not send pet training result to telegram_id=%s",
-                    character.telegram_id,
+                    telegram_id,
                 )
-                await session.rollback()
                 continue
 
-            row.training_notified_at = datetime.utcnow()
-            await session.commit()
+            # Record delivery in a fresh short transaction after Telegram I/O.
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    update(CharacterPet)
+                    .where(
+                        CharacterPet.id == pet_row_id,
+                        CharacterPet.training_completed_at.is_not(None),
+                        CharacterPet.training_notified_at.is_(None),
+                    )
+                    .values(training_notified_at=datetime.utcnow())
+                )
+                await session.commit()
+                if result.rowcount == 0:
+                    logger.warning(
+                        "Pet-training notification was sent but its delivery marker was not updated; row=%s",
+                        pet_row_id,
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Pet-training notification processing failed for row %s",
+                pet_row_id,
+            )
+        finally:
+            # Compare-and-delete avoids deleting a lock acquired by a later worker.
+            try:
+                await redis.eval(
+                    """
+                    if redis.call('get', KEYS[1]) == ARGV[1] then
+                        return redis.call('del', KEYS[1])
+                    end
+                    return 0
+                    """,
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                logger.exception(
+                    "Could not release pet-training notification lock for row %s",
+                    pet_row_id,
+                )
 
 
 async def pet_training_scheduler(bot: Bot) -> None:
