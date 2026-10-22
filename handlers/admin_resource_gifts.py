@@ -85,7 +85,11 @@ async def resource_gift_cancel(message: Message, state: FSMContext):
     if not message.from_user or (not is_admin(message.from_user.id) and not await is_delegated_admin(message.from_user.id)):
         return
     await state.clear()
-    await message.answer("❌ عملیات گیفت لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]))
+    from handlers.admin_temp import admin_keyboard, delegated_admin_keyboard
+    await message.answer(
+        "🛡 پنل مدیریت World Eldoria\\n\\nعملیات گیفت لغو شد؛ به منوی اصلی برگشتی.",
+        reply_markup=admin_keyboard() if is_admin(message.from_user.id) else delegated_admin_keyboard(),
+    )
 
 
 @router.message(ResourceGiftStates.waiting_player_id)
