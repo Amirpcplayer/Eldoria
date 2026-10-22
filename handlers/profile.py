@@ -334,37 +334,29 @@ def build_profile_text(
     active_fan_art: FanArt | None,
     stats: dict[str, int],
 ) -> str:
-    """Render the classic full hero profile."""
+    """Render the original compact profile template without menu controls."""
     final_hp = max(1, int(stats.get("hp", 1)))
     final_mana = max(1, int(stats.get("mana", 1)))
     current_hp = max(0, min(int(character.hp or 0), final_hp))
     current_mana = max(0, min(int(character.mana or 0), final_mana))
     level = max(1, int(character.level or 1))
+    combat_power = (
+        int(stats.get("attack", 0))
+        + int(stats.get("magic_power", 0))
+        + int(stats.get("defense", 0)) // 2
+        + int(stats.get("magic_defense", 0)) // 2
+        + int(stats.get("critical", 0)) * 100
+    )
     name = html.escape(str(character.name or "قهرمان بی‌نام"))
     race = html.escape(str(character.race or "نامشخص"))
     title = html.escape(str(character.active_title or title_for_level(level)))
-    xp = max(0, int(getattr(character, "xp", 0) or 0))
-
     return (
-        "👤 <b>پروفایل قهرمان</b>\n\n"
-        f"🧙 نام: <b>{name}</b>\n"
-        f"🧬 نژاد: <b>{race}</b>\n"
-        f"⭐ سطح: <b>{level}</b>\n"
-        f"🎖️ لقب: <b>{title}</b>\n"
-        f"✨ XP: <b>{xp:,}</b>\n"
-        f"{build_xp_progress_bar(level, xp)}\n\n"
-        f"❤️ HP: <b>{current_hp:,} / {final_hp:,}</b>\n"
-        f"💧 Mana: <b>{current_mana:,} / {final_mana:,}</b>\n\n"
-        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>\n"
-        f"🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>\n"
-        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>\n"
-        f"🔰 دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>\n"
-        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>\n"
-        f"🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>\n"
-        f"🍀 شانس: <b>{int(stats.get('luck', 0)):,}</b>\n"
-        f"💥 کریتیک: <b>{int(stats.get('critical', 0)):,}</b>\n\n"
-        f"💰 طلا: <b>{int(character.gold or 0):,}</b>\n"
-        f"💎 جم: <b>{int(character.gems or 0):,}</b>"
+        f"🛡️ <b>قهرمان اِلدوریا</b> · سطح {level}\n"
+        f"👤 <b>{name}</b> · {race}\n"
+        f"🎖️ {title}\n"
+        f"❤️ سلامتی <b>{current_hp:,}</b> · 💧 مانا <b>{current_mana:,}</b>\n"
+        f"⚔️ قدرت رزمی <b>{combat_power:,}</b>\n"
+        f"💰 {int(character.gold or 0):,} گلد · 💎 {int(character.gems or 0):,} جم"
     )
 
 
