@@ -45,6 +45,18 @@ def _quest_translate(text: str, language: str) -> str:
         "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.": ("You must be in a guild to access quests.", "Чтобы получить доступ к заданиям, нужно вступить в гильдию."),
         "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن.": ("Join a guild from the Guilds section, then try again.", "Вступите в гильдию в разделе гильдий и попробуйте снова."),
         "ابتدا باید عضو گیلد شوی.": ("Join a guild first.", "Сначала вступите в гильдию."),
+        "❌ شخصیت بازی پیدا نشد.": ("❌ Game character not found.", "❌ Игровой персонаж не найден."),
+        "لطفاً ابتدا شخصیت خود را بساز.": ("Please create your character first.", "Сначала создайте персонажа."),
+        "📜 <b>مأموریت‌های اِلدوریا</b>": ("📜 <b>Eldoria Quests</b>", "📜 <b>Задания Эльдории</b>"),
+        "در این بخش می‌توانی مأموریت‌های خود را مشاهده و پاداش مأموریت‌های تکمیل‌شده را دریافت کنی.": ("Here you can view your quests and claim rewards for completed ones.", "Здесь можно просматривать задания и получать награды за выполненные."),
+        "📖 داستانی": ("📖 Story", "📖 Сюжетные"),
+        "مأموریت‌های اصلی و داستانی جهان اِلدوریا": ("Main story quests of Eldoria", "Основные сюжетные задания Эльдории"),
+        "📅 روزانه": ("📅 Daily", "📅 Ежедневные"),
+        "مأموریت‌هایی که هر روز قابل انجام هستند": ("Quests that can be completed every day", "Задания, которые можно выполнять ежедневно"),
+        "🏆 دستاوردها": ("🏆 Achievements", "🏆 Достижения"),
+        "اهداف مهم و بلندمدت قهرمان": ("Important long-term goals for your hero", "Важные долгосрочные цели героя"),
+        "📜 <b>مأموریت‌ها</b>": ("📜 <b>Quests</b>", "📜 <b>Задания</b>"),
+        "دسته‌بندی موردنظر خود را انتخاب کن:": ("Choose a category:", "Выберите категорию:"),
     }
     index = 0 if language == "en" else 1
     for source, options in translations.items():
@@ -138,9 +150,10 @@ async def show_no_character(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=(
+        text=_quest_translate(
             "❌ شخصیت بازی پیدا نشد.\n\n"
-            "لطفاً ابتدا شخصیت خود را بساز."
+            "لطفاً ابتدا شخصیت خود را بساز.",
+            await _quest_language(callback.from_user.id),
         ),
         reply_markup=quest_main_keyboard(),
     )
@@ -171,7 +184,7 @@ async def open_quest_menu(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=text,
+        text=_quest_translate(text, await _quest_language(callback.from_user.id)),
         reply_markup=quest_main_keyboard(),
     )
 
