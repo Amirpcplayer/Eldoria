@@ -119,7 +119,7 @@ async def create_guild(telegram_id: int, name: str, tag: str) -> tuple[bool, str
         except IntegrityError:
             await session.rollback()
             return False, "نام یا تگ گیلد هم‌زمان توسط بازیکن دیگری ثبت شده است؛ دوباره تلاش کن."
-        return True, f"گیلد «{name}» با تگ [{tag}] ساخته شد. هزینه: {GUILD_CREATION_GOLD_COST:,} طلا و {GUILD_CREATION_GEM_COST} جم. شناسهٔ گیلد: {guild.id}"
+        return True, f"گیلد «{name}» با تگ [{tag}] ساخته شد. هزینه: {GUILD_CREATION_GOLD_COST:,} طلا و {GUILD_CREATION_GEM_COST} جم. شناسهٔ گیلد: GLD-{guild.id:04d}"
 
 
 async def join_guild(telegram_id: int, guild_id: int) -> tuple[bool, str]:
