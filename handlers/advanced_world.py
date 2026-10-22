@@ -23,6 +23,9 @@ class MarketSellStates(StatesGroup):
     waiting_quantity_price = State()
     waiting_edit_price = State()
 
+class PetAttackPhraseStates(StatesGroup):
+    waiting_for_phrase = State()
+
 async def panel(cb:CallbackQuery,text:str,kb:InlineKeyboardMarkup,panel_name:str='main_menu'):
     await show_panel(callback=cb,panel_name=panel_name,text=text,reply_markup=kb,parse_mode='HTML')
     try: await cb.answer()
@@ -506,6 +509,7 @@ async def mypet_command(message: Message):
                     )
                 ])
 
+    rows.append([InlineKeyboardButton(text="✏️ تنظیم عبارت حملهٔ پت", callback_data="pets:phrase:set")])
     rows.append([InlineKeyboardButton(text="🛒 بازار پت‌ها", callback_data="pets:market")])
     rows.append([InlineKeyboardButton(text="✨ تمرین / تکامل پت فعال", callback_data="pets:evolve")])
     rows.append([InlineKeyboardButton(text="🔙 بازگشت به منو", callback_data="menu:back")])
@@ -516,6 +520,122 @@ async def mypet_command(message: Message):
         parse_mode="HTML",
     )
 
+
+
+@router.callback_query(F.data == "pets:phrase:set")
+async def pet_attack_phrase_start(cb: CallbackQuery, state: FSMContext):
+    owned = await active_pets(cb.from_user.id)
+    if not owned:
+        await cb.answer("ابتدا از بازار پت‌ها یک پت تهیه کن.", show_alert=True)
+        return
+
+    active = next(((pet, cp) for pet, cp in owned if cp.active), None)
+    if active is None:
+        await cb.answer("ابتدا یکی از پت‌هایت را فعال کن.", show_alert=True)
+        return
+
+    pet, character_pet = active
+    current_phrase = (character_pet.pet_attack_phrase or "").strip()
+    await state.set_state(PetAttackPhraseStates.waiting_for_phrase)
+    await state.update_data(pet_phrase_owner=cb.from_user.id)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بازگشت به عبارت پیش‌فرض", callback_data="pets:phrase:reset")],
+        [InlineKeyboardButton(text="❌ لغو", callback_data="pets:phrase:cancel")],
+    ])
+    await panel(
+        cb,
+        "✏️ <b>عبارت اختصاصی حملهٔ پت</b>\n\n"
+        f"🐾 پت فعال: <b>{html.escape(pet.name)}</b>\n"
+        f"عبارت فعلی: <code>{html.escape(current_phrase or 'هنوز تنظیم نشده')}</code>\n\n"
+        "پیام بعدی را با عبارت دلخواهت بفرست. طول آن باید ۳ تا ۳۲ نویسه باشد. "
+        "مثلاً: «اژدها حمله کن» یا «گرگ بجنب».",
+        keyboard,
+        panel_name="pets",
+    )
+
+
+@router.callback_query(F.data == "pets:phrase:cancel")
+async def pet_attack_phrase_cancel(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await cb.answer("تنظیم عبارت لغو شد.")
+    await pets_menu_for_user(cb)
+
+
+@router.callback_query(F.data == "pets:phrase:reset")
+async def pet_attack_phrase_reset(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == cb.from_user.id)
+        )
+        if character is None:
+            await cb.answer("قهرمان پیدا نشد.", show_alert=True)
+            return
+        character_pet = await session.scalar(
+            select(CharacterPet).where(
+                CharacterPet.character_id == character.id,
+                CharacterPet.active.is_(True),
+            ).with_for_update()
+        )
+        if character_pet is None:
+            await cb.answer("پت فعالی نداری.", show_alert=True)
+            return
+        character_pet.pet_attack_phrase = None
+        await session.commit()
+    await cb.answer("عبارت اختصاصی پاک شد؛ عبارت پیش‌فرض فعال شد.")
+    await pets_menu_for_user(cb)
+
+
+@router.message(PetAttackPhraseStates.waiting_for_phrase)
+async def pet_attack_phrase_receive(message: Message, state: FSMContext):
+    if message.from_user is None or not message.text:
+        await message.answer("لطفاً عبارت حمله را به‌صورت متن بفرست.")
+        return
+
+    data = await state.get_data()
+    if data.get("pet_phrase_owner") != message.from_user.id:
+        return
+
+    phrase = " ".join(message.text.strip().split())
+    if phrase.startswith("/") or not 3 <= len(phrase) <= 32:
+        await message.answer(
+            "عبارت باید بین ۳ تا ۳۲ نویسه باشد و با / شروع نشود. دوباره بفرست."
+        )
+        return
+
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(
+                Character.telegram_id == message.from_user.id
+            )
+        )
+        if character is None:
+            await state.clear()
+            await message.answer("قهرمان پیدا نشد.")
+            return
+        character_pet = await session.scalar(
+            select(CharacterPet).where(
+                CharacterPet.character_id == character.id,
+                CharacterPet.active.is_(True),
+            ).with_for_update()
+        )
+        if character_pet is None:
+            await state.clear()
+            await message.answer("پت فعالی نداری. ابتدا از بخش /mypet یک پت را فعال کن.")
+            return
+        character_pet.pet_attack_phrase = phrase
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        "✅ <b>عبارت حملهٔ پت ذخیره شد!</b>\n\n"
+        f"🐾 عبارت جدید: <code>{html.escape(phrase)}</code>\n"
+        "عبارت برای پت فعال تو ذخیره شد.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🐾 باز کردن پت‌ها", callback_data="pets:list")]
+        ]),
+    )
 
 @router.callback_query(F.data=='pets:evolve')
 async def pet_evolve(cb:CallbackQuery):
@@ -533,7 +653,7 @@ async def pets_menu_for_user(cb:CallbackQuery):
             remaining=max(0,3600-int((datetime.utcnow()-cp.last_training_at).total_seconds()))
             lines.append(f"⏳ وضعیت: در حال آموزش · زمان باقی‌مانده: {remaining//60} دقیقه و {remaining%60} ثانیه")
         if not cp.active: rows.append([InlineKeyboardButton(text=f'🐾 فعال‌کردن {pet.name}',callback_data=f'pets:activate:{pet.id}')])
-    rows.append([InlineKeyboardButton(text='✨ تمرین/تکامل پت فعال',callback_data='pets:evolve')]);rows.append([InlineKeyboardButton(text='🛒 بازار پت‌ها',callback_data='pets:market')]);rows.append(back_row())
+    rows.append([InlineKeyboardButton(text='✏️ تنظیم عبارت حملهٔ پت',callback_data='pets:phrase:set')]);rows.append([InlineKeyboardButton(text='✨ تمرین/تکامل پت فعال',callback_data='pets:evolve')]);rows.append([InlineKeyboardButton(text='🛒 بازار پت‌ها',callback_data='pets:market')]);rows.append(back_row())
     await panel(cb,'\n\n'.join(lines),InlineKeyboardMarkup(inline_keyboard=rows))
 
 @router.callback_query(F.data=='pets:market')
