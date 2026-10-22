@@ -22,6 +22,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💱 تبدیل گلد به جم", callback_data="menu:exchange"),
              InlineKeyboardButton(text="📖 راهنما", callback_data="menu:guide")],
             [InlineKeyboardButton(text="🛒 فروشگاه", callback_data="menu:shop")],
+            [InlineKeyboardButton(text="⚙️ تنظیمات", callback_data="menu:settings")],
         ]
     )
 
