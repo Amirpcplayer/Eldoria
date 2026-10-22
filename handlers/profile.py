@@ -42,6 +42,7 @@ from services.vitals_recovery_service import recover_character_vitals
 from models.social_systems import Guild, GuildMember, Party, PartyMember
 from services.scroll_service import active_buffs, SCROLLS
 from services.premium_emoji_service import emoji
+from services.language_service import get_language, tr
 
 
 router = Router()
@@ -115,48 +116,48 @@ def build_xp_progress_bar(
 # KEYBOARDS
 # ============================================================
 
-def profile_keyboard() -> InlineKeyboardMarkup:
+def profile_keyboard(language: str = "fa") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🗃 صندوقچه",
+                    text=tr(language, "inventory"),
                     callback_data="menu:inventory",
                 ),
                 InlineKeyboardButton(
-                    text="🛡️ تجهیزات",
+                    text=tr(language, "equipment"),
                     callback_data="menu:equipment",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="⚔️ مهارت‌ها",
+                    text=tr(language, "skills"),
                     callback_data="menu:skills",
                 ),
                 InlineKeyboardButton(
-                    text="📊 آمار کامل",
+                    text=tr(language, "profile_stats"),
                     callback_data="profile:stats",
                 ),
             ],
             [
-                InlineKeyboardButton(text="🧪 ریکاوری HP", callback_data="potion:choose:hp"),
-                InlineKeyboardButton(text="🔷 ریکاوری Mana", callback_data="potion:choose:mana"),
+                InlineKeyboardButton(text=tr(language, "hp_recovery"), callback_data="potion:choose:hp"),
+                InlineKeyboardButton(text=tr(language, "mana_recovery"), callback_data="potion:choose:mana"),
             ],
             [
                 InlineKeyboardButton(
-                    text="🎖️ لقب‌های قهرمان",
+                    text=tr(language, "titles"),
                     callback_data="profile:titles",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🎨 انتخاب Fan Art پروفایل",
+                    text=tr(language, "choose_fanart"),
                     callback_data="profile:fanart",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 بازگشت",
+                    text=tr(language, "back"),
                     callback_data="menu:back",
                 ),
             ],
@@ -518,16 +519,23 @@ async def show_profile(
         telegram_id,
     )
 
+    language = await get_language(telegram_id)
     text = build_profile_text(
         character,
         active_fan_art,
         stats,
     )
+    profile_translations = {
+        "en": {"قهرمان اِلدوریا":"Eldoria Hero","نام قهرمان":"Hero name","قدرت رزمی":"Combat power","نژاد":"Race","جنسیت":"Gender","هویت قهرمان":"Hero identity","طلا":"Gold","جم":"Gems","وضعیت حیاتی":"Vitals","سلامت":"Health","مانا":"Mana","ویژگی‌های رزمی":"Combat stats","حمله":"Attack","قدرت جادو":"Magic power","دفاع جادویی":"Magic defense","دفاع":"Defense","سرعت":"Speed","دقت":"Accuracy","شانس":"Luck","ضربه بحرانی":"Critical hit","مسیر قهرمانی":"Hero journey","گیلد":"Guild","بدون گیلد":"No guild","پارتی":"Party","بدون پارتی":"No party","پیوندهای قهرمان":"Hero connections","اسکرول‌های فعال":"Active scrolls","هیچ اسکرولی فعال نیست.":"No active scrolls.","باقی‌مانده":"Remaining"},
+        "ru": {"قهرمان اِلدوریا":"Герой Элдории","نام قهرمان":"Имя героя","قدرت رزمی":"Боевая сила","نژاد":"Раса","جنسیت":"Пол","هویت قهرمان":"Данные героя","طلا":"Золото","جم":"Самоцветы","وضعیت حیاتی":"Состояние","سلامت":"Здоровье","مانا":"Мана","ویژگی‌های رزمی":"Боевые характеристики","حمله":"Атака","قدرت جادو":"Сила магии","دفاع جادویی":"Магическая защита","دفاع":"Защита","سرعت":"Скорость","دقت":"Точность","شانس":"Удача","ضربه بحرانی":"Критический удар","مسیر قهرمانی":"Путь героя","گیلد":"Гильдия","بدون گیلد":"Нет гильдии","پارتی":"Отряд","بدون پارتی":"Нет отряда","پیوندهای قهرمان":"Связи героя","اسکرول‌های فعال":"Активные свитки","هیچ اسکرولی فعال نیست.":"Нет активных свитков.","باقی‌مانده":"Осталось"}
+    }
+    for source, target in profile_translations.get(language, {}).items():
+        text = text.replace(source, target)
 
     text = await append_profile_social_and_scrolls(text, telegram_id)
 
     keyboard = owned_keyboard(
-        profile_keyboard(),
+        profile_keyboard(language),
         telegram_id,
     )
 
@@ -566,7 +574,7 @@ async def show_profile(
     await replace_with_text_panel(
         callback,
         text,
-        profile_keyboard(),
+        profile_keyboard(language),
     )
 
 
