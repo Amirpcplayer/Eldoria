@@ -130,6 +130,11 @@ async def direct_attack(attacker_id: int, target_id: int) -> dict[str, Any]:
             if attacker is None or target is None:
                 await redis.delete(key)
                 return {"ok": False, "message": "❌ هر دو بازیکن باید شخصیت ساخته باشند."}
+            # Legacy data may contain a command as a character name. Never let it
+            # appear as a combat target or participate in direct PvP until renamed.
+            if str(attacker.name or "").strip().startswith("/") or str(target.name or "").strip().startswith("/"):
+                await redis.delete(key)
+                return {"ok": False, "message": "🚫 نام یکی از قهرمانان نامعتبر است (شبیه دستور ربات). لطفاً نام قهرمان را اصلاح کن؛ هیچ جان یا طلایی تغییر نکرد."}
             now = datetime.utcnow()
             if attacker.dead_until and attacker.dead_until > now:
                 await redis.delete(key)
