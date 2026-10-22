@@ -925,7 +925,7 @@ async def party_text_input(message: Message) -> None:
             return
         await clear_party_flow(telegram_id)
         success, result_message = await request_membership("party", telegram_id, party_id)
-        await render_party_after_input(message, panel_message_id, ("✅ " if success else "⚠️ ") + _safe(result_message))
+        await render_party_after_input(message, state.get("panel_message_id"), ("✅ " if success else "⚠️ ") + _safe(result_message))
         return
 
     if stage == "rename_party":
