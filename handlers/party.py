@@ -284,6 +284,11 @@ async def show_party_panel(
 ) -> None:
     try:
         text = await _party_localize(callback.from_user.id, text)
+        if keyboard is not None:
+            for row in keyboard.inline_keyboard:
+                for button in row:
+                    if button.text:
+                        button.text = await _party_localize(callback.from_user.id, button.text)
         await show_panel(
             callback=callback,
             panel_name="party",
@@ -322,6 +327,11 @@ async def show_party_message(
 
     if owner_id is not None:
         text = await _party_localize(owner_id, text)
+        if protected_keyboard is not None:
+            for row in protected_keyboard.inline_keyboard:
+                for button in row:
+                    if button.text:
+                        button.text = await _party_localize(owner_id, button.text)
 
     return await message.answer(
         text,
