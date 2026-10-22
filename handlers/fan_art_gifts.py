@@ -379,7 +379,7 @@ async def search_gift_player_submit(
     message: Message,
     state: FSMContext,
 ):
-    if not message.from_user or not is_admin(message.from_user.id):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         return
 
     current_state = await state.get_state()
@@ -518,7 +518,7 @@ async def direct_gift_image(
     message: Message,
     state: FSMContext,
 ):
-    if not message.from_user or not is_admin(message.from_user.id):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         return
 
     await state.update_data(image_file_id=message.photo[-1].file_id)
@@ -529,7 +529,7 @@ async def direct_gift_image(
 
 @router.message(FanArtGiftStates.create_image)
 async def direct_gift_image_invalid(message: Message):
-    if message.from_user and is_admin(message.from_user.id):
+    if message.from_user and (is_admin(message.from_user.id) or await is_fanart_admin(message.from_user.id)):
         await message.answer("❌ لطفاً عکس فن‌آرت را به‌صورت Photo ارسال کن.")
 
 
@@ -538,7 +538,7 @@ async def direct_gift_name(
     message: Message,
     state: FSMContext,
 ):
-    if not message.from_user or not is_admin(message.from_user.id):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         return
 
     name = message.text.strip()
@@ -558,7 +558,7 @@ async def direct_gift_description(
     message: Message,
     state: FSMContext,
 ):
-    if not message.from_user or not is_admin(message.from_user.id):
+    if not message.from_user or (not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id)):
         return
 
     description = message.text.strip()
