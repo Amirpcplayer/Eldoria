@@ -10,6 +10,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from states.character import CharacterCreation
 from keyboards.character import gender_keyboard, race_keyboard
+from services.panel_image_service import replace_panel_with_text
 
 
 router = Router()
@@ -93,19 +94,18 @@ async def character_gender_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(gender=gender_id)
-    new_panel = await callback.message.answer(
-        "༺ 🧬 میراث نیاکان 🧬 ༻\n\n"
-        f"✅ جنسیت قهرمان: <b>{gender_name}</b>\n\n"
-        "در اعماق اِلدوریا، خون نیاکان هنوز قدرتی فراموش‌نشده در خود دارد. هر نژاد، ریشه‌ای متفاوت و داستانی ویژه دارد.\n\n"
-        "🌑 انتخاب تو، نخستین گام در شکل‌گیری هویت قهرمانت خواهد بود.\n\n"
-        "🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "✦ میراثت را برگزین، قهرمان ✦",
+    await replace_panel_with_text(
+        callback=callback,
+        text=(
+            "༺ 🧬 میراث نیاکان 🧬 ༻\n\n"
+            f"✅ جنسیت قهرمان: <b>{gender_name}</b>\n\n"
+            "در اعماق اِلدوریا، خون نیاکان هنوز قدرتی فراموش‌نشده در خود دارد. هر نژاد، ریشه‌ای متفاوت و داستانی ویژه دارد.\n\n"
+            "🌑 انتخاب تو، نخستین گام در شکل‌گیری هویت قهرمانت خواهد بود.\n\n"
+            "🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "✦ میراثت را برگزین، قهرمان ✦"
+        ),
         reply_markup=race_keyboard(),
         parse_mode=ParseMode.HTML,
     )
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
     await callback.answer()
