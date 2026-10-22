@@ -85,7 +85,7 @@ async def render_command_panel(message: Message, section: str) -> None:
         await send_panel(
             message=message,
             panel_name="settings",
-            text="⚙️ <b>تنظیمات اِلدوریا</b>\\n\\nبرای مدیریت تنظیمات قهرمان، از دکمهٔ زیر وارد پی‌وی ربات شو.",
+            text="⚙️ <b>تنظیمات اِلدوریا</b>\n\nبرای مدیریت تنظیمات قهرمان، از دکمهٔ زیر وارد پی‌وی ربات شو.",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")]
@@ -222,7 +222,7 @@ async def settings_menu_callback(callback: CallbackQuery) -> None:
         await show_panel(
             callback=callback,
             panel_name="settings",
-            text="⚙️ <b>تنظیمات اِلدوریا</b>\\n\\nتنظیمات فقط در پی‌وی قابل استفاده است. برای ادامه، روی دکمهٔ زیر بزن.",
+            text="⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات فقط در پی‌وی قابل استفاده است. برای ادامه، روی دکمهٔ زیر بزن.",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")]
