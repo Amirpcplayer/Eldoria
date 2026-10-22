@@ -12,6 +12,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from keyboards.main_menu import enter_game_keyboard
 from game.stats import get_base_stats
+from services.panel_image_service import replace_panel_with_text
 
 
 router = Router()
