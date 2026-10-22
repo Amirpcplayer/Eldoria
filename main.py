@@ -11,6 +11,8 @@ from aiogram import Dispatcher
 from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault, ErrorEvent
 
 from bot.bot import bot
+from database.database import engine
+from database.redis import redis
 
 from middlewares.username_sync import UsernameSyncMiddleware
 from middlewares.panel_owner import PanelOwnerMiddleware
@@ -225,6 +227,16 @@ async def main() -> None:
 
         if not bot.session.closed:
             await bot.session.close()
+
+        try:
+            await redis.aclose()
+        except Exception:
+            logger.exception("Failed to close Redis connection pool cleanly.")
+
+        try:
+            await engine.dispose()
+        except Exception:
+            logger.exception("Failed to dispose SQLAlchemy connection pool cleanly.")
 
         logger.info("World Eldoria stopped.")
 
