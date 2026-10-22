@@ -259,8 +259,9 @@ async def _migrate_legacy_active_battle_indexes() -> None:
     if await redis.get(ACTIVE_BATTLE_INDEX_MIGRATION_KEY):
         return
 
+    lock_token = str(uuid.uuid4())
     lock_acquired = await redis.set(
-        ACTIVE_BATTLE_INDEX_MIGRATION_LOCK, "1", nx=True, ex=120
+        ACTIVE_BATTLE_INDEX_MIGRATION_LOCK, lock_token, nx=True, ex=600
     )
     if not lock_acquired:
         # Another worker is doing the one-time migration. Avoid a per-request scan.
@@ -295,7 +296,18 @@ async def _migrate_legacy_active_battle_indexes() -> None:
             )
         await redis.set(ACTIVE_BATTLE_INDEX_MIGRATION_KEY, "1")
     finally:
-        await redis.delete(ACTIVE_BATTLE_INDEX_MIGRATION_LOCK)
+        # Do not release a lock that expired and was acquired by another worker.
+        await redis.eval(
+            """
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('del', KEYS[1])
+            end
+            return 0
+            """,
+            1,
+            ACTIVE_BATTLE_INDEX_MIGRATION_LOCK,
+            lock_token,
+        )
 
 
 async def get_active_battle_for_player(telegram_id: int) -> dict[str, Any] | None:
