@@ -1590,12 +1590,11 @@ async def admin_boss_target(cb: CallbackQuery):
             # Send the artwork by itself, without a caption, so Telegram shows it fully.
             sent_photo = await bot.send_photo(chat_id, FSInputFile(str(image_path)))
             try:
-                # The story template is a separate message replying to the boss image.
+                # Send the story template as a clean, independent message (no reply).
                 sent_text = await bot.send_message(
                     chat_id,
                     caption,
                     parse_mode="HTML",
-                    reply_to_message_id=sent_photo.message_id,
                 )
             except Exception:
                 try:
