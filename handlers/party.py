@@ -26,6 +26,7 @@ from services.party_service import (
     get_character_gold,
     get_party_details,
     get_party_members,
+    party_has_active_dungeon,
     join_party,
     join_party_from_invitation,
     kick_party_member,
@@ -1463,14 +1464,38 @@ async def party_leave_with_transfer(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "party:disband")
 async def party_disband_start(callback: CallbackQuery) -> None:
-    details = await get_party_details(callback.from_user.id)
-    if not details or int(details["leader_telegram_id"]) != callback.from_user.id:
-        await show_party_panel(callback, "⛔ فقط رهبر پارتی می‌تواند آن را حذف کند.", party_main_keyboard(bool(details)))
+    telegram_id = callback.from_user.id
+    details = await get_party_details(telegram_id)
+    if not details or int(details["leader_telegram_id"]) != telegram_id:
+        await show_party_panel(
+            callback,
+            "⛔ فقط رهبر پارتی می‌تواند آن را حذف کند.",
+            party_main_keyboard(bool(details)),
+        )
         return
-    await show_party_panel(callback, "🗑️ <b>حذف کامل پارتی</b>\n\nاین کار پارتی را می‌بندد و همهٔ اعضا را از آن خارج می‌کند. مطمئنی؟", InlineKeyboardMarkup(inline_keyboard=[
-        [_button("🗑️ بله، حذف شود", "party:disband:yes")],
-        [_button("❌ انصراف", "menu:party")],
-    ]))
+
+    if await party_has_active_dungeon(telegram_id):
+        await show_party_panel(
+            callback,
+            (
+                "⚔️ <b>پارتی در حال اجرای دانجن است</b>\\n\\n"
+                "پارتی شما در یک دانجن قرار دارد.\\n"
+                "بعد از پایان دانجن دوباره تلاش کنید."
+            ),
+            InlineKeyboardMarkup(inline_keyboard=[
+                [_button("🔙 بازگشت به پنل پارتی", "menu:party")],
+            ]),
+        )
+        return
+
+    await show_party_panel(
+        callback,
+        "🗑️ <b>حذف کامل پارتی</b>\\n\\nاین کار پارتی را می‌بندد و همهٔ اعضا را از آن خارج می‌کند. مطمئنی؟",
+        InlineKeyboardMarkup(inline_keyboard=[
+            [_button("🗑️ بله، حذف شود", "party:disband:yes")],
+            [_button("❌ انصراف", "menu:party")],
+        ]),
+    )
 
 
 @router.callback_query(F.data == "party:disband:yes")
