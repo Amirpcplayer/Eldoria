@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import html
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -690,7 +691,7 @@ async def create_fan_art(
         "╰─── ✦ ✨ ✦ ───╯\n\n"
         "اثر تازه آماده نمایش در فروشگاه اِلدوریاست. 🎨\n\n"
         f"🆔 شناسه اثر: <code>{fan_art_id}</code>\n"
-        f"🎨 نام: <b>{data['name']}</b>\n"
+        f"🎨 نام: <b>{html.escape(str(data['name']))}</b>\n"
         f"💎 رریتی: <b>{data['rarity']}</b>\n"
         f"💰 قیمت: <b>{int(data['price']):,} تومان</b>\n"
         f"🪙 ارزش داخل بازی: <b>{int(data['value_gold']):,} گلد</b>\n"
