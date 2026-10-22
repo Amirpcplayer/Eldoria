@@ -137,7 +137,7 @@ def fanart_admin_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🎁 مدیریت گیفت فن‌آرت", callback_data="admin:fanart_gifts")],
         [InlineKeyboardButton(text="➕ افزودن فن‌آرت به شاپ", callback_data="admin:fanart:add")],
         [InlineKeyboardButton(text="🧾 سفارش‌های فن‌آرت", callback_data="admin:fanart:orders")],
-        [InlineKeyboardButton(text="🔙 بستن پنل", callback_data="admin:close")],
+        [InlineKeyboardButton(text="🔙 بستن پنل", callback_data="admin:fanart:close")],
     ])
 
 
