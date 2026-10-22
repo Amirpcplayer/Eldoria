@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from database.redis import redis
 
-FANART_ADMIN_SET = "world_eldoria:fanart_admins"
+DELEGATED_ADMIN_SET = "world_eldoria:delegated_admins"
 
 
-async def is_fanart_admin(telegram_id: int) -> bool:
+async def is_delegated_admin(telegram_id: int) -> bool:
     try:
-        return bool(await redis.sismember(FANART_ADMIN_SET, str(telegram_id)))
+        return bool(await redis.sismember(DELEGATED_ADMIN_SET, str(telegram_id)))
     except Exception:
         return False
 
 
-async def add_fanart_admin(telegram_id: int) -> None:
-    await redis.sadd(FANART_ADMIN_SET, str(telegram_id))
+async def add_delegated_admin(telegram_id: int) -> None:
+    await redis.sadd(DELEGATED_ADMIN_SET, str(telegram_id))
 
 
-async def list_fanart_admins() -> list[int]:
-    values = await redis.smembers(FANART_ADMIN_SET)
+async def list_delegated_admins() -> list[int]:
+    values = await redis.smembers(DELEGATED_ADMIN_SET)
     result = []
     for value in values:
         try:
