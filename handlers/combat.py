@@ -11,6 +11,7 @@ from keyboards.combat import (
 )
 from middlewares.panel_owner import protect_keyboard
 from database.redis import redis
+from services.language_service import get_language
 from services.combat_service import (
     create_battle,
     delete_battle,
@@ -28,6 +29,31 @@ from services.combat_service import (
 )
 
 router = Router()
+
+_COMBAT_TEXT = {
+"en": [
+("مبارزه","Battle"),("تو","You"),("آسیب تو:","Your damage:"),("آسیب دشمن:","Enemy damage:"),("نوبت:","Turn:"),("حالت دفاع فعال است.","Defensive stance is active."),("شکست خوردی!","You were defeated!"),("دشمن:","Enemy:"),("آسیب نهایی دشمن:","Enemy's final damage:"),("HP تو به صفر رسید.","Your HP reached zero."),("هیچ پاداشی دریافت نکردی.","You received no rewards."),("دریافت پاداش ناموفق بود.","Reward claim failed."),("ثبت پاداش موفق نبود. لطفاً وضعیت بتل را بررسی کن.","Rewards could not be recorded. Please check the battle status."),("پیروزی!","Victory!"),("شکست خورد!","was defeated!"),("آسیب نهایی تو:","Your final damage:"),("آیتم‌های به‌دست‌آمده","Items obtained"),("این بار متریالی پیدا نشد.","No materials found this time."),("این مبارزه دیگر فعال نیست.","This battle is no longer active."),("اطلاعات مالک مبارزه نامعتبر است.","Invalid battle owner information."),("این مبارزه برای شما نیست!","This battle does not belong to you!"),("قهرمان شما شکست خورده است.","Your hero has been defeated."),("این دشمن قبلاً شکست خورده است.","This enemy has already been defeated."),("اجرای نوبت دشمن با مشکل مواجه شد.","The enemy's turn failed to execute."),("نمایش پنل ناموفق بود. دوباره تلاش کن.","Could not display the panel. Please try again."),("استفاده از معجون","Use potion"),("جادو","Magic"),("حمله","Attack"),("فرار","Flee"),("سلامتی","Health"),("مانا","Mana")
+],
+"ru": [
+("مبارزه","Бой"),("تو","Ты"),("آسیب تو:","Твой урон:"),("آسیب دشمن:","Урон врага:"),("نوبت:","Ход:"),("حالت دفاع فعال است.","Защитная стойка активна."),("شکست خوردی!","Ты проиграл!"),("دشمن:","Враг:"),("آسیب نهایی دشمن:","Последний урон врага:"),("HP تو به صفر رسید.","Твоё HP достигло нуля."),("هیچ پاداشی دریافت نکردی.","Ты не получил наград."),("دریافت پاداش ناموفق بود.","Не удалось получить награду."),("ثبت پاداش موفق نبود. لطفاً وضعیت بتل را بررسی کن.","Не удалось сохранить награды. Проверь состояние боя."),("پیروزی!","Победа!"),("شکست خورد!","побеждён!"),("آسیب نهایی تو:","Твой итоговый урон:"),("آیتم‌های به‌دست‌آمده","Полученные предметы"),("این بار متریالی پیدا نشد.","В этот раз материалы не найдены."),("این مبارزه دیگر فعال نیست.","Этот бой больше не активен."),("اطلاعات مالک مبارزه نامعتبر است.","Некорректные данные владельца боя."),("این مبارزه برای شما نیست!","Этот бой принадлежит не тебе!"),("قهرمان شما شکست خورده است.","Твой герой потерпел поражение."),("این دشمن قبلاً شکست خورده است.","Этот враг уже побеждён."),("اجرای نوبت دشمن با مشکل مواجه شد.","Не удалось выполнить ход врага."),("نمایش پنل ناموفق بود. دوباره تلاش کن.","Не удалось показать панель. Попробуй ещё раз."),("استفاده از معجون","Использовать зелье"),("جادو","Магия"),("حمله","Атака"),("فرار","Бегство"),("سلامتی","Здоровье"),("مانا","Мана")
+]
+}
+def _localize_combat_text(text: str, language: str) -> str:
+    if language not in ("en", "ru"): return text
+    for source, translated in _COMBAT_TEXT[language]: text = text.replace(source, translated)
+    return text
+
+def _localize_combat_markup(markup, language: str):
+    if language not in ("en", "ru") or markup is None: return markup
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    rows = []
+    for row in markup.inline_keyboard:
+        translated_row = []
+        for b in row:
+            translated_row.append(InlineKeyboardButton(text=_localize_combat_text(b.text, language), callback_data=b.callback_data, url=b.url, web_app=b.web_app, login_url=b.login_url, switch_inline_query=b.switch_inline_query, switch_inline_query_current_chat=b.switch_inline_query_current_chat, callback_game=b.callback_game, pay=b.pay, icon_custom_emoji_id=b.icon_custom_emoji_id, style=b.style))
+        rows.append(translated_row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
 
 
 # ============================================================
@@ -55,6 +81,10 @@ async def render_battle_panel(
     """نمایش پنل؛ اگر افزودن پیشوند مالک باعث طولانی‌شدن callback شود،
     کیبورد اصلی استفاده می‌شود. هندلرهای مبارزه مالکیت بتل را بررسی می‌کنند.
     """
+
+    language = await get_language(callback.from_user.id)
+    text = _localize_combat_text(text, language)
+    reply_markup = _localize_combat_markup(reply_markup, language)
 
     message = callback.message
 
