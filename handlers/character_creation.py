@@ -24,6 +24,12 @@ async def character_name_handler(message: Message, state: FSMContext):
         return
 
     name = message.text.strip()
+    # Prevent Telegram commands from being registered as hero names.
+    if name.startswith("/") or name.startswith("!"):
+        await message.answer(
+            "❌ نام قهرمان نمی‌تواند شبیه دستور ربات باشد. فقط یک نام معمولی وارد کن."
+        )
+        return
     if len(name) < 3:
         await message.answer(
             "༺ 📜 نامی برای افسانه‌ات برگزین 📜 ༻\n\n"
