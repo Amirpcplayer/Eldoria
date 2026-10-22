@@ -18,6 +18,7 @@ from services.combat_service import (
     finish_victory,
     flee_battle,
     get_battle,
+    get_active_battle_for_player,
     get_character,
     get_character_skills,
     get_healing_potions,
@@ -122,42 +123,8 @@ async def answer_display_error(
 async def find_active_battle(
     telegram_id: int,
 ) -> dict | None:
-    """پیدا کردن بتل فعال متعلق به همین بازیکن."""
-
-    from database.redis import redis
-
-    async for key in redis.scan_iter(
-        match="eldoria:battle:*"
-    ):
-        if isinstance(key, bytes):
-            key = key.decode("utf-8")
-
-        if ":battle_reward:" in key:
-            continue
-
-        data = await redis.hgetall(key)
-
-        if not data:
-            continue
-
-        stored_owner = data.get("telegram_id", 0)
-
-        if isinstance(stored_owner, bytes):
-            stored_owner = stored_owner.decode("utf-8")
-
-        try:
-            if int(stored_owner) != telegram_id:
-                continue
-        except (TypeError, ValueError):
-            continue
-
-        battle_id = key.rsplit(":", 1)[-1]
-        battle = await get_battle(battle_id)
-
-        if battle is not None:
-            return battle
-
-    return None
+    """Find the player's active battle using the Redis O(1) index."""
+    return await get_active_battle_for_player(telegram_id)
 
 
 def build_battle_text(
