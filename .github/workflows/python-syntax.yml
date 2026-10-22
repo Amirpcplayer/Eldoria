@@ -9,6 +9,11 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      BOT_TOKEN: "123456:TEST_TOKEN"
+      DATABASE_URL: "postgresql+asyncpg://test:test@127.0.0.1:5432/test"
+      REDIS_URL: "redis://127.0.0.1:6379/0"
+      ADMIN_ID: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
