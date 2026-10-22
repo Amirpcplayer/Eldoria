@@ -26,4 +26,4 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Run isolated unit tests
-        run: python -m pytest -q tests/test_active_battle_index.py tests/test_active_battle_index_edges.py tests/test_premium_emoji_catalog_unique.py tests/test_settings_validation.py tests/test_battle_creation_lock.py tests/test_pet_training_notifications.py
+        run: python -m pytest -q tests/test_active_battle_index.py tests/test_active_battle_index_edges.py tests/test_premium_emoji_catalog_unique.py tests/test_settings_validation.py tests/test_battle_creation_lock.py tests/test_pet_training_notifications.py tests/test_scheduler_leader.py
