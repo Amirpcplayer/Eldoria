@@ -853,10 +853,11 @@ async def admin_players_list_alias(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("admin:profile:view:"))
-async def admin_player_profile_view(callback: CallbackQuery):
+async def admin_player_profile_view(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id) and not await is_delegated_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
+    await state.clear()
     try:
         telegram_id = int((callback.data or "").rsplit(":", 1)[1])
     except (TypeError, ValueError):
