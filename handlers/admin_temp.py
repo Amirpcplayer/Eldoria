@@ -1582,10 +1582,29 @@ async def admin_boss_target(cb: CallbackQuery):
         await session.commit(); group_id=group.id; title=group.chat_title
     caption=boss_spawn_caption(cfg, level, scaled_hp, boss_weakness(cfg))
     image_path=resolve_boss_image(cfg)
+    sent_photo = None
+    sent_text = None
     try:
         from aiogram.types import FSInputFile
-        if image_path is not None: sent=await bot.send_photo(chat_id,FSInputFile(str(image_path)),caption=caption,parse_mode="HTML")
-        else: sent=await bot.send_message(chat_id,caption,parse_mode="HTML")
+        if image_path is not None:
+            # Send the artwork by itself, without a caption, so Telegram shows it fully.
+            sent_photo = await bot.send_photo(chat_id, FSInputFile(str(image_path)))
+            try:
+                # The story template is a separate message replying to the boss image.
+                sent_text = await bot.send_message(
+                    chat_id,
+                    caption,
+                    parse_mode="HTML",
+                    reply_to_message_id=sent_photo.message_id,
+                )
+            except Exception:
+                try:
+                    await bot.delete_message(chat_id, sent_photo.message_id)
+                except Exception:
+                    logger.debug("Could not remove orphaned manual boss photo", exc_info=True)
+                raise
+        else:
+            sent_text = await bot.send_message(chat_id, caption, parse_mode="HTML")
     except Exception:
         async with AsyncSessionLocal() as session:
             group=await session.scalar(select(GroupBoss).where(GroupBoss.id==group_id))
@@ -1594,7 +1613,7 @@ async def admin_boss_target(cb: CallbackQuery):
         await cb.answer("ارسال باس ناموفق بود؛ دسترسی ربات به گروه را بررسی کن.",show_alert=True); return
     async with AsyncSessionLocal() as session:
         group=await session.scalar(select(GroupBoss).where(GroupBoss.id==group_id))
-        if group: group.message_id=sent.message_id; await session.commit()
+        if group: group.message_id=sent_text.message_id; await session.commit()
     if cb.message: await cb.message.edit_text(f"✅ باس {cfg['name']} سطح {level} در گروه «{title}» ظاهر شد.")
     await cb.answer("باس با موفقیت اسپان شد.")
 
