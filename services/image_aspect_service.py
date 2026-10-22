@@ -6,20 +6,20 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
-from PIL import Image, ImageOps
-
-# Maximum output dimensions. Preserve each image's own aspect ratio and size
-# when already within these limits; never add a canvas or padding.
-MAX_IMAGE_SIZE = (1080, 1920)
+from PIL import Image
 
 
 async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg", portrait: bool = False) -> BufferedInputFile:
-    """Keep native aspect ratio; downscale only if wider than 1080 or taller than 1920."""
+    """Return original image bytes without resizing, padding, cropping or re-encoding.
+
+    The portrait argument remains for compatibility with existing callers.
+    Telegram controls the in-chat photo preview and may compress sent photos.
+    """
     raw = BytesIO()
 
     if isinstance(source, (str, Path)) and Path(str(source)).is_file():
-        with Path(str(source)).open("rb") as file:
-            raw.write(file.read())
+        path = Path(str(source))
+        raw.write(path.read_bytes())
     elif isinstance(source, (str, Path)):
         telegram_file = await bot.get_file(str(source))
         if not telegram_file.file_path:
@@ -28,11 +28,11 @@ async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jp
     else:
         raise TypeError(f"Unsupported image source: {type(source).__name__}")
 
-    raw.seek(0)
-    with Image.open(raw) as opened:
-        image = ImageOps.exif_transpose(opened).convert("RGB")
-        image.thumbnail(MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
-
-        output = BytesIO()
-        image.save(output, format="JPEG", quality=94, optimize=True)
-        return BufferedInputFile(output.getvalue(), filename=filename)
+    original = raw.getvalue()
+    # Match the upload filename extension to the actual file format; never
+    # change the image data just to fit a requested filename.
+    with Image.open(BytesIO(original)) as image:
+        extension = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}.get(image.format)
+    if extension:
+        filename = str(Path(filename).with_suffix(extension))
+    return BufferedInputFile(original, filename=filename)
