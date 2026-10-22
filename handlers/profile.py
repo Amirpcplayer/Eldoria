@@ -513,6 +513,7 @@ async def show_profile(
             caption=text,
             reply_markup=profile_keyboard(),
             parse_mode=ParseMode.HTML,
+            portrait=True,
         )
         return
 
@@ -877,6 +878,7 @@ async def profile_command(message: Message):
                     message.bot,
                     photo,
                     filename="eldoria-profile.jpg",
+                    portrait=True,
                 )
             except Exception:
                 logger.exception("Could not normalize profile photo; sending original as fallback")
@@ -892,6 +894,7 @@ async def profile_command(message: Message):
                     message.bot,
                     photo,
                     filename="eldoria-profile.jpg",
+                    portrait=True,
                 )
             except Exception:
                 logger.exception("Could not normalize profile photo; sending original as fallback")
