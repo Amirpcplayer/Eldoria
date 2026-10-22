@@ -406,66 +406,78 @@ async def _edit_message_or_send(
 # Party panel rendering
 # ============================================================
 
-async def render_party(callback: CallbackQuery) -> None:
-    telegram_id = callback.from_user.id
-    details = await get_party_details(telegram_id)
-
-    if not details:
-        await show_party_panel(
-            callback,
-            (
-                "🎉 <b>پارتی اِلدوریا</b>\n\n"
-                "هنوز عضو هیچ پارتی نیستی.\n"
-                "می‌توانی یک پارتی بسازی یا به پارتی دیگری بپیوندی."
-            ),
-            party_main_keyboard(False),
-        )
-        return
-
-    members = await get_party_members(details["id"])
-    leader_id = int(details["leader_telegram_id"])
-    is_leader = leader_id == telegram_id
-
-    lines = [
+def _party_summary_lines(details: dict[str, Any], is_leader: bool) -> list[str]:
+    return [
         "⚔️ <b>پارتی اِلدوریا</b>",
         "",
-        f"🆔 شناسه: <code>{details['id']}</code>",
         f"🏷️ نام: <b>{_safe(details.get('name'))}</b>",
         f"✨ عنوان: {_safe(details.get('title'))}",
         f"📝 توضیحات: {_safe(details.get('description') or 'بدون توضیحات')}",
-        f"👥 ظرفیت: {details.get('member_count', len(members))}"
-        f"/{details.get('max_members', 4)}",
-        f"👑 رهبر: {'شما' if is_leader else 'بازیکن دیگر'}",
+        f"👥 ظرفیت: {details['member_count']}/{details['max_members']}",
+        f"🆔 شناسه: <code>{details['id']}</code>",
+        f"👑 نقش شما: {'رهبر' if is_leader else 'عضو'}",
         "",
-        "<b>اعضای پارتی:</b>",
+        "برای دیدن فهرست بازیکنان، «👥 نمایش اعضا» را بزن.",
     ]
 
+
+async def _party_members_lines(details: dict[str, Any], viewer_id: int) -> list[str]:
+    members = await get_party_members(details["id"])
+    leader_id = int(details["leader_telegram_id"])
+    lines = [
+        "✦ <b>هم‌رزمان اِلدوریا</b> ✦",
+        f"🏷️ {_safe(details.get('name'))}",
+        f"👥 اعضا: {len(members)}/{details['max_members']}",
+        "━━━━━━━━━━━━━━━━",
+    ]
     if not members:
-        lines.append("هنوز عضوی ثبت نشده است.")
-    else:
-        for index, member in enumerate(members, start=1):
-            member_id = int(member["telegram_id"])
-            member_name = _safe(member.get("name") or "بازیکن")
-            role = " 👑" if member_id == leader_id else ""
+        return lines + ["هنوز عضوی ثبت نشده است."]
 
-            if member_id == telegram_id:
-                member_name = f"<u>{member_name} (شما)</u>"
+    for index, member in enumerate(members, start=1):
+        member_id = int(member["telegram_id"])
+        username = str(member.get("username") or "").strip().lstrip("@")
+        account_name = ""
+        if not username:
+            try:
+                chat = await bot.get_chat(member_id)
+                account_name = " ".join(
+                    part for part in (chat.first_name, chat.last_name) if part
+                ).strip()
+                username = str(chat.username or "").strip().lstrip("@")
+            except Exception:
+                logger.debug("Telegram profile unavailable for party member %s", member_id)
+        display_name = account_name or str(member.get("name") or "بازیکن")
+        profile_link = f'<a href="tg://user?id={member_id}">{_safe(display_name)}</a>'
+        role = " 👑" if member_id == leader_id else ""
+        you = " (شما)" if member_id == viewer_id else ""
+        telegram_label = (
+            f"@{_safe(username)}"
+            if username
+            else profile_link
+        )
+        lines.extend([
+            f"{index}. {profile_link}{you}{role} · Lv.{member.get('level', 1)}",
+            f"   👤 {telegram_label} · 🆔 <code>{member_id}</code>",
+            "",
+        ])
+    return lines
 
-            username = str(member.get("username") or "").strip().lstrip("@")
-            username_text = f"@{html.escape(username)}" if username else "ندارد"
-            lines.append(
-                f"{index}. {member_name} — Lv.{member.get('level', 1)}{role}\n"
-                f"   👤 تلگرام: <code>{username_text}</code> · "
-                f"🆔 شناسه عددی: <code>{member_id}</code>"
-            )
 
-    keyboard = (
-        party_manage_keyboard(details)
-        if is_leader
-        else party_main_keyboard(True)
-    )
-
-    await show_party_panel(callback, "\n".join(lines), keyboard)
+async def render_party(callback: CallbackQuery) -> None:
+    telegram_id = callback.from_user.id
+    details = await get_party_details(telegram_id)
+    if not details:
+        await show_party_panel(
+            callback,
+            "✦ <b>تالار پارتی اِلدوریا</b> ✦\\n\\n"
+            "هنوز عضو گروهی نیستی.\\n"
+            "یک پارتی بساز یا به هم‌رزمانت بپیوند.",
+            party_main_keyboard(False),
+        )
+        return
+    is_leader = int(details["leader_telegram_id"]) == telegram_id
+    keyboard = party_manage_keyboard(details) if is_leader else party_main_keyboard(True)
+    await show_party_panel(callback, "\\n".join(_party_summary_lines(details, is_leader)), keyboard)
 
 
 async def render_party_after_input(
@@ -475,60 +487,17 @@ async def render_party_after_input(
 ) -> None:
     telegram_id = message.from_user.id
     details = await get_party_details(telegram_id)
-
     if not details:
         await _edit_message_or_send(
-            message,
-            panel_message_id,
-            f"{notice}\n\nعضو هیچ پارتی نیستی.",
+            message, panel_message_id,
+            f"{notice}\\n\\nهنوز عضو پارتی نیستی.",
             party_main_keyboard(False),
         )
         return
-
-    members = await get_party_members(details["id"])
-    leader_id = int(details["leader_telegram_id"])
-
-    lines = [
-        f"{notice}",
-        "",
-        "⚔️ <b>پارتی اِلدوریا</b>",
-        "",
-        f"🆔 شناسه: <code>{details['id']}</code>",
-        f"🏷️ نام: <b>{_safe(details.get('name'))}</b>",
-        f"✨ عنوان: {_safe(details.get('title'))}",
-        f"📝 توضیحات: {_safe(details.get('description') or 'بدون توضیحات')}",
-        f"👥 اعضا: {details['member_count']}/{details['max_members']}",
-        "",
-        "<b>اعضای پارتی:</b>",
-    ]
-
-    for index, member in enumerate(members, start=1):
-        member_id = int(member["telegram_id"])
-        role = " 👑" if member_id == leader_id else ""
-        member_name = _safe(member.get("name") or "بازیکن")
-
-        if member_id == telegram_id:
-            member_name = f"<u>{member_name} (شما)</u>"
-
-        username = str(member.get("username") or "").strip().lstrip("@")
-        username_text = f"@{html.escape(username)}" if username else "ندارد"
-        lines.append(
-            f"{index}. {member_name} — Lv.{member.get('level', 1)}{role}\n"
-            f"   👤 <code>{username_text}</code> · 🆔 <code>{member_id}</code>"
-        )
-
-    keyboard = (
-        party_manage_keyboard(details)
-        if leader_id == telegram_id
-        else party_main_keyboard(True)
-    )
-
-    await _edit_message_or_send(
-        message,
-        panel_message_id,
-        "\n".join(lines),
-        keyboard,
-    )
+    is_leader = int(details["leader_telegram_id"]) == telegram_id
+    lines = ([notice, ""] if notice else []) + _party_summary_lines(details, is_leader)
+    keyboard = party_manage_keyboard(details) if is_leader else party_main_keyboard(True)
+    await _edit_message_or_send(message, panel_message_id, "\\n".join(lines), keyboard)
 
 
 @router.callback_query(F.data == "menu:party")
@@ -1146,7 +1115,15 @@ async def party_create_capacity(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "party:members")
 async def party_members_panel(callback: CallbackQuery) -> None:
-    await render_party(callback)
+    details = await get_party_details(callback.from_user.id)
+    if not details:
+        await render_party(callback)
+        return
+    lines = await _party_members_lines(details, callback.from_user.id)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [_button("🔙 بازگشت به پارتی", "menu:party")],
+    ])
+    await show_party_panel(callback, "\\n".join(lines), keyboard)
 
 
 @router.callback_query(F.data == "party:manage")
