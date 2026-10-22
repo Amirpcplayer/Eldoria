@@ -418,7 +418,7 @@ async def direct_attack_reply_handler(message: Message) -> None:
     # A Telegram command is not a PvP target, even when a real user sent it.
     # This prevents replies to /menu, /profile, etc. from triggering combat.
     replied_text = (replied.text or replied.caption or "").strip()
-    if re.match(r"^/[A-Za-z0-9_]+(?:@[A-Za-z0-9_]+)?(?:\\s|$)", replied_text):
+    if re.match(r"^/[A-Za-z0-9_]+(?:@[A-Za-z0-9_]+)?(?:\s|$)", replied_text):
         await message.reply("🚫 پیام دستوری هدف PvP نیست. روی پیام عادیِ بازیکن ریپلای کن.")
         return
     target = replied.from_user
@@ -469,7 +469,7 @@ async def direct_attack_reply_handler(message: Message) -> None:
         f"تیغهٔ «{weapon_name}» فرود آمد؛ سرنوشت این رویارویی رقم خورد!{critical_line}\n"
         "━━━━━ ✧ ✦ ✧ ━━━━━\n\n"
         f"💥 قدرت ضربه: <b>{int(result['damage']):,}</b>\n"
-        f"⚔️ توان مهاجم: ATK {int(result.get('attacker_stats', {}).get('attack', 0))} · CRIT {int(result.get('attacker_stats', {}).get('critical', 0))}%\n"
+        f"⚔️ توان مهاجم: ATK {int(result.get('attacker_stats', {}).get('attack', 0))} · CRIT {max(0, min(50, int(result.get('attacker_stats', {}).get('critical', 0))))}%\n"
         f"🛡️ دفاع حریف: DEF {int(result.get('target_stats', {}).get('defense', 0))} · MDEF {int(result.get('target_stats', {}).get('magic_defense', 0))}\n"
         f"❤️ جان باقی‌ماندهٔ {target_name}: <b>{int(result['target_hp']):,} / {int(result['target_max_hp']):,}</b>\n"
         f"🪙 جایزهٔ حمله: <b>+{int(result.get('attack_reward', 0)):,} طلا</b>"
