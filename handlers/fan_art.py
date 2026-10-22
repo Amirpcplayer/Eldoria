@@ -247,8 +247,7 @@ async def fan_art_view(
     game_price_gold = (real_price_toman * 2000) // 50000
     caption = (
         f"🎨 <b>{fan_art.name}</b> · {RARITY_NAMES.get(fan_art.rarity, fan_art.rarity)}\n"
-        f"💰 {real_price_toman:,} تومان\n"
-        f"🏦 ارزش بازی: {game_price_gold:,} گلد"
+        f"💰 {real_price_toman:,} تومان · 🪙 {game_price_gold:,} گلد"
     )
 
     await show_photo(
