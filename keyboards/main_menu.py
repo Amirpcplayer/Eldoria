@@ -86,7 +86,7 @@ def main_menu_keyboard(language: str = "fa") -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text=tr(language, "settings"),
+                    text=tr(language, "settings_button"),
                     callback_data="menu:settings",
                 ),
             ],
