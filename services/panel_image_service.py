@@ -222,9 +222,18 @@ async def send_panel(
             logger.debug("Could not delete previous panel before command replacement", exc_info=True)
 
     if image_path is not None:
-        from aiogram.types import FSInputFile
+        try:
+            prepared_photo = await prepare_photo(
+                message.bot,
+                image_path,
+                filename=f"{panel_name}.jpg",
+            )
+        except Exception:
+            logger.exception("Could not normalize local panel image; sending original as fallback")
+            from aiogram.types import FSInputFile
+            prepared_photo = FSInputFile(image_path)
         sent = await message.answer_photo(
-            photo=FSInputFile(image_path),
+            photo=prepared_photo,
             caption=text,
             reply_markup=keyboard,
             parse_mode=parse_mode,
