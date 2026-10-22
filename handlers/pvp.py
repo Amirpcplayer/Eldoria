@@ -415,6 +415,12 @@ async def direct_attack_reply_handler(message: Message) -> None:
     if replied is None or replied.from_user is None:
         await message.reply("🎯 برای حمله باید روی پیام بازیکن موردنظر ریپلای کنی و بنویسی «حمله».")
         return
+    # A Telegram command is not a PvP target, even when a real user sent it.
+    # This prevents replies to /menu, /profile, etc. from triggering combat.
+    replied_text = (replied.text or replied.caption or "").strip()
+    if re.match(r"^/[A-Za-z0-9_]+(?:@[A-Za-z0-9_]+)?(?:\\s|$)", replied_text):
+        await message.reply("🚫 پیام دستوری هدف PvP نیست. روی پیام عادیِ بازیکن ریپلای کن.")
+        return
     target = replied.from_user
     if target.is_bot:
         # پیام باس نیز از طرف حساب ربات ارسال می‌شود؛ ابتدا بررسی کن
