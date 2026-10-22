@@ -475,6 +475,15 @@ def boss_death_dialogue(cfg: dict) -> str:
     ]
     return random.choice(variants)
 
+def boss_hp_bar(hp: int, max_hp: int, width: int = 12) -> str:
+    """Render a compact cube-style health bar, safely handling invalid values."""
+    maximum = max(1, int(max_hp or 1))
+    current = max(0, min(maximum, int(hp or 0)))
+    width = max(1, int(width or 12))
+    filled = min(width, max(0, round((current / maximum) * width)))
+    return ("🟩" * filled) + ("⬛" * (width - filled))
+
+
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None, max_hp: int | None = None) -> str:
     """Original story-style boss template, sent as a text reply to the separate artwork."""
     story = html.escape(boss_entrance_story(cfg))
