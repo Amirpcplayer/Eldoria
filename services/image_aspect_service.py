@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+from typing import Any
+
+from aiogram import Bot
+from aiogram.types import BufferedInputFile
+from PIL import Image, ImageOps
+
+# A single landscape frame for bot artwork. Images are contained, never stretched
+# or cropped; portrait/square artwork receives padding instead of being distorted.
+FRAME_SIZE = (1280, 720)
+FRAME_COLOR = (18, 20, 30)
+
+
+async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg") -> BufferedInputFile:
+    """Normalize any local image or Telegram file_id to a 16:9 canvas safely."""
+    raw = BytesIO()
+
+    if isinstance(source, (str, Path)) and Path(str(source)).is_file():
+        with Path(str(source)).open("rb") as file:
+            raw.write(file.read())
+    elif isinstance(source, (str, Path)):
+        telegram_file = await bot.get_file(str(source))
+        if not telegram_file.file_path:
+            raise ValueError("Telegram did not return a downloadable image path.")
+        await bot.download_file(telegram_file.file_path, destination=raw)
+    else:
+        raise TypeError(f"Unsupported image source: {type(source).__name__}")
+
+    raw.seek(0)
+    with Image.open(raw) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        image.thumbnail(FRAME_SIZE, Image.Resampling.LANCZOS)
+
+        frame = Image.new("RGB", FRAME_SIZE, FRAME_COLOR)
+        x = (FRAME_SIZE[0] - image.width) // 2
+        y = (FRAME_SIZE[1] - image.height) // 2
+        frame.paste(image, (x, y))
+
+        output = BytesIO()
+        frame.save(output, format="JPEG", quality=94, optimize=True)
+        return BufferedInputFile(output.getvalue(), filename=filename)
