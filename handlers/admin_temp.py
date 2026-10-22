@@ -262,7 +262,7 @@ def player_search_results_keyboard(
         [
             InlineKeyboardButton(
                 text=f"👤 {character.name} · Lv.{character.level}",
-                callback_data=f"admin:delete:select:{character.telegram_id}",
+                callback_data=f"admin:profile:view:{character.telegram_id}",
             )
         ]
         for character in characters
