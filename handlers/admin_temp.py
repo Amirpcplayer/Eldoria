@@ -1587,21 +1587,14 @@ async def admin_boss_target(cb: CallbackQuery):
     try:
         from aiogram.types import FSInputFile
         if image_path is not None:
-            # Send the artwork by itself, without a caption, so Telegram shows it fully.
-            sent_photo = await bot.send_photo(chat_id, FSInputFile(str(image_path)))
-            try:
-                # Send the story template as a clean, independent message (no reply).
-                sent_text = await bot.send_message(
-                    chat_id,
-                    caption,
-                    parse_mode="HTML",
-                )
-            except Exception:
-                try:
-                    await bot.delete_message(chat_id, sent_photo.message_id)
-                except Exception:
-                    logger.debug("Could not remove orphaned manual boss photo", exc_info=True)
-                raise
+            # Restore the original single-message presentation: boss image with story caption.
+            sent_photo = await bot.send_photo(
+                chat_id,
+                FSInputFile(str(image_path)),
+                caption=caption,
+                parse_mode="HTML",
+            )
+            sent_text = sent_photo
         else:
             sent_text = await bot.send_message(chat_id, caption, parse_mode="HTML")
     except Exception:
