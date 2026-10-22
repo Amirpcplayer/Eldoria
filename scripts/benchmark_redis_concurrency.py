@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import os
 import statistics
 import time
@@ -17,17 +18,24 @@ from redis.asyncio import Redis
 
 
 def percentile(values: list[float], fraction: float) -> float:
-    ordered = sorted(values)
-    if not ordered:
+    """Return the nearest-rank percentile (fraction is in the 0..1 range)."""
+    if not 0 <= fraction <= 1:
+        raise ValueError("fraction must be between 0 and 1")
+    if not values:
         return 0.0
-    index = min(len(ordered) - 1, max(0, int((len(ordered) - 1) * fraction)))
+    ordered = sorted(values)
+    index = max(0, math.ceil(fraction * len(ordered)) - 1)
     return ordered[index]
 
 
 async def benchmark(redis: Redis, concurrency: int, operations: int) -> dict[str, float]:
+    if concurrency < 1 or concurrency > 500:
+        raise ValueError("concurrency must be between 1 and 500")
+    if operations < 1:
+        raise ValueError("operations must be positive")
+
     run_id = uuid.uuid4().hex
     latencies_ms: list[float] = []
-    latency_lock = asyncio.Lock()
     per_worker = (operations + concurrency - 1) // concurrency
 
     async def worker(worker_id: int) -> None:
@@ -38,15 +46,16 @@ async def benchmark(redis: Redis, concurrency: int, operations: int) -> dict[str
             await redis.set(key, "1", ex=120)
             await redis.get(key)
             local.append((time.perf_counter() - started) * 1000)
-        async with latency_lock:
-            latencies_ms.extend(local)
+        latencies_ms.extend(local)
 
-    started = time.perf_counter()
+    elapsed = 0.0
     try:
+        started = time.perf_counter()
         await asyncio.gather(*(worker(i) for i in range(concurrency)))
+        # Measure workload only; cleanup latency must not distort throughput.
+        elapsed = time.perf_counter() - started
     finally:
-        # Keys expire automatically; scan only this unique benchmark namespace
-        # so interrupted runs can be cleaned without touching application keys.
+        # Only scan this unique run namespace. TTL is a fallback if cleanup fails.
         cursor = 0
         pattern = f"eldoria:benchmark:{run_id}:*"
         while True:
@@ -56,12 +65,12 @@ async def benchmark(redis: Redis, concurrency: int, operations: int) -> dict[str
             if cursor == 0:
                 break
 
-    elapsed = time.perf_counter() - started
+    count = len(latencies_ms)
     return {
         "concurrency": float(concurrency),
-        "operations": float(len(latencies_ms)),
+        "operations": float(count),
         "seconds": elapsed,
-        "ops_per_second": len(latencies_ms) / elapsed if elapsed else 0.0,
+        "ops_per_second": count / elapsed if elapsed else 0.0,
         "p50_ms": percentile(latencies_ms, 0.50),
         "p95_ms": percentile(latencies_ms, 0.95),
         "p99_ms": percentile(latencies_ms, 0.99),
@@ -74,12 +83,19 @@ async def main() -> None:
     parser.add_argument(
         "--confirm-isolated-redis",
         action="store_true",
-        help="Required safety acknowledgement: the target must be disposable staging Redis.",
+        help="Required acknowledgement: the target must be disposable staging Redis.",
     )
-    parser.add_argument("--operations", type=int, default=2000,
-                        help="Approximate SET+GET pairs per concurrency level (default: 2000).")
-    parser.add_argument("--levels", default="1,10,50,100,500",
-                        help="Comma-separated concurrency levels (default: 1,10,50,100,500).")
+    parser.add_argument(
+        "--operations",
+        type=int,
+        default=2000,
+        help="Approximate SET+GET pairs per concurrency level (default: 2000).",
+    )
+    parser.add_argument(
+        "--levels",
+        default="1,10,50,100,500",
+        help="Comma-separated concurrency levels (default: 1,10,50,100,500).",
+    )
     args = parser.parse_args()
 
     url = os.getenv("ELDORIA_BENCHMARK_REDIS_URL", "").strip()
@@ -96,6 +112,8 @@ async def main() -> None:
         parser.error("--levels must be comma-separated positive integers")
     if not levels or any(level < 1 or level > 500 for level in levels):
         parser.error("--levels values must be between 1 and 500")
+    if len(set(levels)) != len(levels):
+        parser.error("--levels must not contain duplicates")
 
     client = Redis.from_url(url, decode_responses=True, socket_timeout=5)
     try:
