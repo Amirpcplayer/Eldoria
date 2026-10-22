@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
+from utils.group_name_uniqueness import reserve_name_check
 from database.database import AsyncSessionLocal
 from models.character import Character
 from models.social_systems import DungeonRun, GroupDungeonEvent, Party, PartyMember
@@ -238,6 +239,9 @@ async def create_party(
                     f"{current_gold:,} طلا.",
                     None,
                 )
+
+            if await reserve_name_check(session, 714001, Party, name, active_only=True):
+                return False, "این نام یا نامی مشابه آن قبلاً برای پارتی دیگری ثبت شده است.", None
 
             party = Party(
                 leader_telegram_id=telegram_id,
@@ -542,6 +546,9 @@ async def rename_party(
 
         if party is None:
             return False, "فقط رهبر یک پارتی فعال می‌تواند نام را تغییر دهد."
+
+        if await reserve_name_check(session, 714001, Party, new_name, active_only=True, exclude_id=party.id):
+            return False, "این نام یا نامی مشابه آن قبلاً برای پارتی دیگری ثبت شده است."
 
         party.name = new_name
         await session.commit()
