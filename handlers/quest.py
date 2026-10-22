@@ -227,7 +227,7 @@ async def quest_internal_menu(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=text,
+        text=_quest_translate(text, await _quest_language(callback.from_user.id)),
         reply_markup=quest_main_keyboard(),
     )
 
@@ -396,7 +396,7 @@ async def current_quests(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text="\n".join(lines),
+        text=_quest_translate("\n".join(lines), await _quest_language(callback.from_user.id)),
         reply_markup=quest_current_list_keyboard(),
     )
 
@@ -530,7 +530,7 @@ async def claim_quest_reward(callback: CallbackQuery):
         quest_id = int(callback.data.split(":", 2)[2])
     except (ValueError, IndexError):
         await callback.answer(
-            "❌ شناسه مأموریت نامعتبر است.",
+            _quest_translate("❌ شناسه مأموریت نامعتبر است.", await _quest_language(callback.from_user.id)),
             show_alert=True,
         )
         return
@@ -544,13 +544,13 @@ async def claim_quest_reward(callback: CallbackQuery):
 
     if not success:
         await callback.answer(
-            message,
+            _quest_translate(message, await _quest_language(callback.from_user.id)),
             show_alert=True,
         )
         return
 
     await callback.answer(
-        "🎁 پاداش دریافت شد!",
+        _quest_translate("🎁 پاداش دریافت شد!", await _quest_language(callback.from_user.id)),
         show_alert=True,
     )
 
@@ -603,7 +603,7 @@ async def claim_quest_reward(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=text,
+        text=_quest_translate(text, await _quest_language(callback.from_user.id)),
         reply_markup=quest_detail_keyboard(
             quest.id,
             False,
