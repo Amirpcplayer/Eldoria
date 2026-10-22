@@ -236,7 +236,7 @@ def player_details_keyboard(
             [
                 InlineKeyboardButton(
                     text="🗑 حذف این پلیر",
-                    callback_data=f"admin:delete:select:{telegram_id}",
+                    callback_data=f"admin:delete:confirm:{telegram_id}",
                 )
             ],
             [
@@ -266,7 +266,6 @@ def player_search_results_keyboard(
             )
         ]
         for character in characters
-        if character.telegram_id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
     ]
 
     rows.append(
@@ -776,13 +775,6 @@ async def search_player_submit(
         )
         return
 
-    # جست‌وجوی عادی مدیریت، اکانت ادمین را مخفی نگه می‌دارد.
-    characters = [
-        character
-        for character in characters
-        if character.telegram_id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID)
-    ]
-
     if not characters:
         await message.answer(
             f"پلیر قابل مدیریتی با عبارت «{query}» پیدا نشد.",
@@ -822,7 +814,6 @@ async def admin_players_list_alias(callback: CallbackQuery):
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(Character)
-                .where(Character.telegram_id.not_in((settings.admin_id, GLOBAL_BOT_OWNER_ID)))
                 .order_by(Character.id.desc())
                 .offset(page * PAGE_SIZE)
                 .limit(PAGE_SIZE + 1)
@@ -918,7 +909,7 @@ async def admin_player_profile_view(callback: CallbackQuery):
             [InlineKeyboardButton(text="💰 دادن گلد", callback_data=f"admin:gold:select:{telegram_id}")],
             [InlineKeyboardButton(text="🔎 جست‌وجوی بازیکن دیگر", callback_data="admin:players:search")],
             [InlineKeyboardButton(text="📚 بازگشت به لیست بازیکنان", callback_data="admin:players:list:0")],
-            [InlineKeyboardButton(text="🗑 حذف بازیکن", callback_data=f"admin:delete:confirm:{telegram_id}")],
+            [InlineKeyboardButton(text="🗑 حذف بازیکن", callback_data=f"admin:delete:select:{telegram_id}")],
             [InlineKeyboardButton(text="🔙 مدیریت پلیرها", callback_data="admin:delete_players")],
         ])
         if callback.message:
