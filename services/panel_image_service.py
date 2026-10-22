@@ -133,68 +133,67 @@ async def show_panel(
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
 ):
-    """Send a panel; shop navigation replaces only that player's previous shop panel."""
+    """Edit the clicked bot panel in place whenever Telegram supports it."""
+    from aiogram.exceptions import TelegramBadRequest
+
     message = callback.message
     if message is None:
         await callback.answer()
         return None
 
     owner_id = callback.from_user.id
-    chat_id = message.chat.id
-    reference_message_id = await _get_reference(chat_id, owner_id)
-    if reference_message_id is None:
-        reference_message_id = message.message_id
-        await _save_reference(chat_id, owner_id, reference_message_id)
-
-    # Only the shop is configured for replacement. The Redis key includes the
-    # owner ID, so a different player in the same group cannot delete this panel.
-    active_key = _active_panel_key(chat_id, owner_id, panel_name) if panel_name == "shop" else None
-    if active_key is not None:
-        try:
-            previous_value = await redis.get(active_key)
-            previous_id = int(previous_value) if previous_value else None
-        except (TypeError, ValueError):
-            previous_id = None
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Could not read active shop panel reference")
-            previous_id = None
-
-        if previous_id is not None:
-            try:
-                await message.bot.delete_message(chat_id=chat_id, message_id=previous_id)
-            except Exception:
-                # It may already be deleted or too old; don't block shop navigation.
-                pass
-
     keyboard = protect_keyboard(reply_markup, owner_id)
     image_path = get_panel_image(panel_name)
-    send_kwargs = {
-        "reply_to_message_id": reference_message_id,
-        "allow_sending_without_reply": True,
-    }
 
-    if image_path is not None:
-        sent_message = await message.answer_photo(
-            photo=FSInputFile(image_path),
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode=parse_mode,
-            **send_kwargs,
-        )
-    else:
-        sent_message = await message.answer(
-            text=text,
-            reply_markup=keyboard,
-            parse_mode=parse_mode,
-            **send_kwargs,
-        )
-
-    if active_key is not None:
+    if image_path is None:
         try:
-            await redis.set(active_key, str(sent_message.message_id), ex=PANEL_REFERENCE_TTL)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Could not save active shop panel reference")
+            if message.photo:
+                # Telegram cannot convert a photo message to a text message.
+                # This only affects old photo panels or navigation from profile.
+                raise ValueError("Photo-to-text conversion requires a new message")
+            return await message.edit_text(
+                text=text, reply_markup=keyboard, parse_mode=parse_mode,
+            )
+        except TelegramBadRequest as exc:
+            if "message is not modified" in str(exc).lower():
+                return message
+            if not message.photo:
+                import logging
+                logging.getLogger(__name__).warning("Panel edit failed: %s", exc)
+        except (ValueError, TypeError, AttributeError):
+            pass
+        # Never delete an unrelated user message; only replace the clicked bot panel.
+        sent = await message.answer(
+            text=text, reply_markup=keyboard, parse_mode=parse_mode,
+        )
+        if message.from_user and message.from_user.is_bot:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+        return sent
 
-    return sent_message
+    # Media panels: edit the existing caption when the clicked message has a photo.
+    if message.photo:
+        try:
+            from aiogram.types import InputMediaPhoto
+            return await message.edit_media(
+                media=InputMediaPhoto(
+                    media=FSInputFile(image_path), caption=text, parse_mode=parse_mode,
+                ),
+                reply_markup=keyboard,
+            )
+        except TelegramBadRequest as exc:
+            if "message is not modified" in str(exc).lower():
+                return message
+
+    sent = await message.answer_photo(
+        photo=FSInputFile(image_path), caption=text,
+        reply_markup=keyboard, parse_mode=parse_mode,
+    )
+    if message.from_user and message.from_user.is_bot:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    return sent
