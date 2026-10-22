@@ -397,6 +397,25 @@ async def admin_panel(
 
     await state.clear()
 
+    if message.chat.type != "private":
+        bot_username = (await message.bot.get_me()).username
+        if not bot_username:
+            await message.answer("برای باز کردن پنل مدیریت، لطفاً ربات را در پی‌وی باز کن.")
+            return
+        markup = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="🔐 باز کردن پنل ادمین در پی‌وی",
+                url=f"https://t.me/{bot_username}?start=admin",
+            )
+        ]])
+        await message.answer(
+            "🛡 پنل مدیریت فقط در گفت‌وگوی خصوصی باز می‌شود.\n\n"
+            "روی دکمه بزن تا پی‌وی ربات باز شود و پنل ادمین خودکار نمایش داده شود.",
+            reply_markup=markup,
+        )
+        return
+
+    await state.clear()
     await message.answer(
         "🛡 پنل مدیریت World Eldoria\n\n"
         "بخش موردنظرت را انتخاب کن:",
