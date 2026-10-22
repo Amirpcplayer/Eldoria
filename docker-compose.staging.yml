@@ -30,7 +30,7 @@ services:
     volumes:
       - eldoria_redis_staging_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"${REDIS_PASSWORD}\" ping"]
+      test: ["CMD-SHELL", "      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]"]
       interval: 5s
       timeout: 5s
       retries: 12
