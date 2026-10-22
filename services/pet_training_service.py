@@ -19,7 +19,7 @@ TRAINING_XP = 100
 async def process_completed_pet_training(bot: Bot) -> None:
     now = datetime.utcnow()
     async with AsyncSessionLocal() as session:
-        due = list((await session.execute(select(CharacterPet, Character, Pet).join(Character, Character.id == CharacterPet.character_id).join(Pet, Pet.id == CharacterPet.pet_id).where(CharacterPet.last_training_at.is_not(None), CharacterPet.training_completed_at.is_(None), CharacterPet.last_training_at <= now - TRAINING_DURATION).with_for_update())).all())
+        due = list((await session.execute(select(CharacterPet, Character, Pet).join(Character, Character.id == CharacterPet.character_id).join(Pet, Pet.id == CharacterPet.pet_id).where(CharacterPet.last_training_at.is_not(None), CharacterPet.training_completed_at.is_(None), CharacterPet.last_training_at <= now - TRAINING_DURATION).limit(200).with_for_update(skip_locked=True))).all())
         for row, character, pet in due:
             row.training_start_level = int(row.level or 1) if row.training_start_level is None else row.training_start_level
             row.xp += TRAINING_XP
@@ -34,7 +34,7 @@ async def process_completed_pet_training(bot: Bot) -> None:
         await session.commit()
     # Completed rewards are persisted before DM delivery. If Telegram is unavailable, notification stays pending.
     async with AsyncSessionLocal() as session:
-        pending = list((await session.execute(select(CharacterPet, Character, Pet).join(Character, Character.id == CharacterPet.character_id).join(Pet, Pet.id == CharacterPet.pet_id).where(CharacterPet.training_completed_at.is_not(None), CharacterPet.training_notified_at.is_(None)))).all())
+        pending = list((await session.execute(select(CharacterPet, Character, Pet).join(Character, Character.id == CharacterPet.character_id).join(Pet, Pet.id == CharacterPet.pet_id).where(CharacterPet.training_completed_at.is_not(None), CharacterPet.training_notified_at.is_(None)).limit(200))).all())
     for row, character, pet in pending:
         old_level = None
         async with AsyncSessionLocal() as session:
