@@ -244,6 +244,47 @@ def get_reward_lock_key(
     return f"eldoria:battle_reward:{battle_id}"
 
 
+def get_player_active_battle_key(telegram_id: int) -> str:
+    """O(1) index from a Telegram user to their current adventure battle."""
+    return f"eldoria:active_battle:{int(telegram_id)}"
+
+
+async def get_active_battle_for_player(telegram_id: int) -> dict[str, Any] | None:
+    """Read the indexed battle; scan only as a compatibility fallback for old keys."""
+    index_key = get_player_active_battle_key(telegram_id)
+    battle_id = await redis.get(index_key)
+    if battle_id:
+        battle = await get_battle(str(battle_id))
+        if battle is not None and int(battle.get("telegram_id", 0)) == int(telegram_id):
+            if battle.get("player_hp", 0) > 0 and battle.get("enemy_hp", 0) > 0:
+                return battle
+        await redis.delete(index_key)
+
+    # One-time migration path for battles created before the index was introduced.
+    async for key in redis.scan_iter(match="eldoria:battle:*"):
+        key = key.decode("utf-8") if isinstance(key, bytes) else str(key)
+        if ":battle_reward:" in key:
+            continue
+        raw = await redis.hgetall(key)
+        if not raw:
+            continue
+        owner = raw.get("telegram_id", 0)
+        try:
+            if int(owner) != int(telegram_id):
+                continue
+        except (TypeError, ValueError):
+            continue
+        candidate_id = key.rsplit(":", 1)[-1]
+        battle = await get_battle(candidate_id)
+        if battle is None:
+            continue
+        if battle.get("player_hp", 0) <= 0 or battle.get("enemy_hp", 0) <= 0:
+            continue
+        await redis.set(index_key, candidate_id, ex=BATTLE_TTL)
+        return battle
+    return None
+
+
 # ============================================================
 # BATTLE STORAGE
 # ============================================================
@@ -365,6 +406,15 @@ async def save_battle(
         BATTLE_TTL,
     )
 
+    # Keep player-to-battle lookup O(1), instead of scanning every Redis battle key.
+    telegram_id = int(battle.get("telegram_id") or 0)
+    if telegram_id:
+        await redis.set(
+            get_player_active_battle_key(telegram_id),
+            battle_id,
+            ex=BATTLE_TTL,
+        )
+
     # Keep the canonical character HP/Mana in PostgreSQL in sync with battle state.
     try:
         telegram_id = int(battle.get("telegram_id") or 0)
@@ -386,28 +436,28 @@ async def save_battle(
 
 
 async def sync_character_vitals_to_battles(telegram_id: int, hp: int, mana: int) -> None:
-    """Update an active Adventure battle cache after an out-of-panel recovery action."""
-    async for key in redis.scan_iter(match="eldoria:battle:*"):
-        if isinstance(key, bytes): key = key.decode("utf-8")
-        if str(key).startswith("eldoria:battle_reward:"): continue
-        raw = await redis.hgetall(key)
-        if not raw: continue
-        stored = raw.get("telegram_id", 0)
-        if isinstance(stored, bytes): stored = stored.decode("utf-8")
-        if int(stored or 0) != int(telegram_id): continue
-        max_hp = int(raw.get("player_max_hp", hp) or hp)
-        max_mana = int(raw.get("player_max_mana", mana) or mana)
-        await redis.hset(key, mapping={"player_hp": str(min(int(hp), max_hp)), "player_mana": str(min(int(mana), max_mana))})
+    """Update the indexed active Adventure battle after an out-of-panel recovery action."""
+    battle = await get_active_battle_for_player(telegram_id)
+    if battle is None:
+        return
+    await redis.hset(
+        get_battle_key(battle["battle_id"]),
+        mapping={
+            "player_hp": str(min(int(hp), int(battle.get("player_max_hp", hp) or hp))),
+            "player_mana": str(min(int(mana), int(battle.get("player_max_mana", mana) or mana))),
+        },
+    )
 
 async def delete_battle(
     battle_id: str,
 ) -> None:
-
-    await redis.delete(
-        get_battle_key(
-            battle_id
-        )
-    )
+    battle = await get_battle(battle_id)
+    await redis.delete(get_battle_key(battle_id))
+    if battle is not None:
+        index_key = get_player_active_battle_key(int(battle.get("telegram_id") or 0))
+        indexed_id = await redis.get(index_key)
+        if indexed_id and str(indexed_id) == str(battle_id):
+            await redis.delete(index_key)
 
 
 # ============================================================
