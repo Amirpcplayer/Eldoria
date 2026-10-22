@@ -483,11 +483,11 @@ def boss_death_dialogue(cfg: dict) -> str:
 
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
     """Keep the image caption short so Telegram gives the boss artwork more room."""
-    weak = f"\\n🜂 ضعف: <b>{ELEMENTS.get(weakness, weakness)}</b>" if weakness else ""
+    weak = f"\n🜂 ضعف: <b>{ELEMENTS.get(weakness, weakness)}</b>" if weakness else ""
     return (
-        f"👹 <b>{html.escape(cfg['name'])}</b> · Lv.{level}\\n"
-        f"❤️ HP: <b>{hp:,}</b>{weak}\\n\\n"
-        "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\\n"
+        f"👹 <b>{html.escape(cfg['name'])}</b> · Lv.{level}\n"
+        f"❤️ HP: <b>{hp:,}</b>{weak}\n\n"
+        "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
         "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای."
     )
 
@@ -1099,7 +1099,6 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
                 f"آخرین نیروی خویش را آزاد کرد و {html.escape(boss.name)} را به زانو درآورد!\n\n"
                 f"💥 <b>آسیب نهایی: {damage:,}</b>\n"
                 f"👹 <b>{html.escape(boss.name)}</b>\n"
-                f"{boss_hp_bar(0, boss.max_hp)}\n\n"
                 "✨ نام قهرمان در دفتر کهن اِلدوریا جاودانه شد.\n"
                 "╚══════ ✧ سرنوشت هنوز نوشته نشده است ✧ ══════╝"
             )
@@ -1139,11 +1138,10 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
                 f"💥 <b>آسیب فن باس: {retaliation:,}</b>\n"
                 "╟─────── ✦ وضعیت نبرد ✦ ───────╒\n\n"
                 "🛡️ <b>وضعیت قهرمان</b>\n"
-                f"❤️ سلامتی: <b>{char.hp:,} / {char.max_hp:,}</b>\n"
-                f"🔵 مانا: <b>{char.mana:,} / {char.max_mana:,}</b>\n\n"
+                f"❤️ سلامتی: <b>{char.hp:,} HP</b>\n"
+                f"🔵 مانا: <b>{char.mana:,} MP</b>\n\n"
                 "🐉 <b>وضعیت باس</b>\n"
-                f"❤️ سلامتی: <b>{boss.hp:,} / {boss.max_hp:,}</b>\n"
-                f"{boss_hp_bar(boss.hp, boss.max_hp)}"
+                f"❤️ سلامتی باس: <b>{boss.hp:,} HP</b>\n"
                 f"{defeat_line}\n\n"
                 "╚══════ ✧ سرنوشت هنوز نوشته نشده است ✧ ══════╝"
             )
@@ -1151,14 +1149,14 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
     try:
         if boss.message_id:
             if boss.status == "defeated":
-                caption = (f"🏆 <b>{html.escape(boss.name)} شکست خورد!</b>\\n"
-                           f"❤️ HP: <b>0</b>\\n"
+                caption = (f"🏆 <b>{html.escape(boss.name)} شکست خورد!</b>\n"
+                           f"❤️ HP: <b>0</b>\n"
                            "⏳ باس بعدی طبق چرخهٔ ساعتی ظاهر می‌شود.")
             else:
-                caption = (f"👹 <b>{html.escape(boss.name)}</b> · Lv.{getattr(boss, 'boss_level', 1)}\\n"
-                           f"❤️ HP: <b>{boss.hp:,}</b>\\n"
-                           f"🜂 ضعف: <b>{ELEMENTS[boss_weakness(cfg)]}</b> (جادوی هم‌عنصر ×1.75)\\n\\n"
-                           "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\\n"
+                caption = (f"👹 <b>{html.escape(boss.name)}</b> · Lv.{getattr(boss, 'boss_level', 1)}\n"
+                           f"❤️ HP: <b>{boss.hp:,}</b>\n"
+                           f"🜂 ضعف: <b>{ELEMENTS[boss_weakness(cfg)]}</b> (جادوی هم‌عنصر ×1.75)\n\n"
+                           "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
                            "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای.")
             try:
                 await bot.edit_message_caption(chat_id=message.chat.id, message_id=int(boss.message_id), caption=caption, parse_mode="HTML")
