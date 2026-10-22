@@ -14,8 +14,8 @@ FRAME_SIZE = (1280, 720)
 FRAME_COLOR = (18, 20, 30)
 
 
-async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg") -> BufferedInputFile:
-    """Normalize any local image or Telegram file_id to a 16:9 canvas safely."""
+async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg", portrait: bool = False) -> BufferedInputFile:
+    """Normalize an image to a landscape canvas, or portrait for profiles."""
     raw = BytesIO()
 
     if isinstance(source, (str, Path)) and Path(str(source)).is_file():
@@ -32,11 +32,12 @@ async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jp
     raw.seek(0)
     with Image.open(raw) as opened:
         image = ImageOps.exif_transpose(opened).convert("RGB")
-        image.thumbnail(FRAME_SIZE, Image.Resampling.LANCZOS)
+        frame_size = (720, 1280) if portrait else FRAME_SIZE
+        image.thumbnail(frame_size, Image.Resampling.LANCZOS)
 
-        frame = Image.new("RGB", FRAME_SIZE, FRAME_COLOR)
-        x = (FRAME_SIZE[0] - image.width) // 2
-        y = (FRAME_SIZE[1] - image.height) // 2
+        frame = Image.new("RGB", frame_size, FRAME_COLOR)
+        x = (frame_size[0] - image.width) // 2
+        y = (frame_size[1] - image.height) // 2
         frame.paste(image, (x, y))
 
         output = BytesIO()
