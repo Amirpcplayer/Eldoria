@@ -165,7 +165,7 @@ def party_main_keyboard(has_party: bool) -> InlineKeyboardMarkup:
         ]
 
     rows.append([_button("🔄 تازه‌سازی", "menu:party")])
-    rows.append([_button("🏠 منوی اصلی", "menu:back")])
+    rows.append([_button("🏠 منوی اصلی", "party:home")])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -500,6 +500,13 @@ async def render_party_after_input(
     lines = ([notice, ""] if notice else []) + _party_summary_lines(details, is_leader)
     keyboard = party_manage_keyboard(details) if is_leader else party_main_keyboard(True)
     await _edit_message_or_send(message, panel_message_id, "\n".join(lines), keyboard)
+
+
+@router.callback_query(F.data == "party:home")
+async def party_to_main_menu(callback: CallbackQuery) -> None:
+    from handlers.main_menu import main_menu_back_handler
+    await clear_party_flow(callback.from_user.id)
+    await main_menu_back_handler(callback)
 
 
 @router.callback_query(F.data == "menu:party")
