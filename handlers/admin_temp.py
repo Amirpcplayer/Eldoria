@@ -1578,7 +1578,7 @@ async def admin_boss_target(cb: CallbackQuery):
         await session.execute(delete(GroupBossContribution).where(GroupBossContribution.boss_id==group.id))
         scaled_hp=min(2_000_000_000,boss_level_stats(cfg, level)["hp"])
         group.boss_key=cfg["key"]; group.boss_level=level; group.name=cfg["name"]
-        group.max_hp=scaled_hp; group.hp=scaled_hp; group.status="active"; group.spawned_at=now; group.next_spawn_at=now+timedelta(hours=1); group.message_id=None
+        group.max_hp=scaled_hp; group.hp=scaled_hp; group.status="active"; group.spawned_at=now; group.next_spawn_at=now+timedelta(hours=12); group.message_id=None
         await session.commit(); group_id=group.id; title=group.chat_title
     caption=boss_spawn_caption(cfg, level, scaled_hp, boss_weakness(cfg))
     image_path=resolve_boss_image(cfg)
