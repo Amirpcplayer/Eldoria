@@ -476,11 +476,23 @@ def boss_death_dialogue(cfg: dict) -> str:
     return random.choice(variants)
 
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
-    """Compact Persian caption; keep interaction instructions out of the image caption."""
-    weak = f" · 🜂 ضعف {ELEMENTS.get(weakness, weakness)}" if weakness else ""
+    """Original story-style boss template, sent as a text reply to the separate artwork."""
+    story = html.escape(boss_entrance_story(cfg))
+    weak = f"\n╟─ 🜂 <b>نقطه‌ضعف:</b> {ELEMENTS.get(weakness, weakness)}" if weakness else ""
     return (
-        f"👹 <b>{html.escape(cfg['name'])}</b> · سطح {level}\n"
-        f"❤️ سلامتی <b>{hp:,}</b>{weak}"
+        f"╔══════ 🜲 <b>طومار بیداری باس</b> 🜲 ══════╗\n\n"
+        f"📜 <i>{story}</i>\n\n"
+        f"╟─ ⚔️ <b>{html.escape(cfg['name'])}</b> · <b>Lv.{level}</b>\n"
+        f"╟─ ❤️ <b>جانِ باس</b>  <b>{hp:,} / {hp:,}</b>\n"
+        f"╟─ {boss_hp_bar(hp, hp)}{weak}\n\n"
+        "╠═══════ ✦ <b>فرامین نبرد</b> ✦ ═══════╣\n"
+        "🗡️ برای حمله روی <b>پیام متنی باس</b> ریپلای کن.\n"
+        "➤ برای اتک دادن عبارت <code>&lt; حمله &gt;</code> را بفرست.\n"
+        "✨ برای استفاده از جادو عبارت <code>&lt; جادو &gt;</code> را بفرست.\n"
+        "💚 برای استفاده از معجون سلامتی عبارت <code>&lt; هیل &gt;</code> را تایپ کن <i>(بدون نیاز به ریپلای)</i>.\n"
+        "🔷 برای استفاده از معجون مانا عبارت <code>&lt; ریکاوری مانا &gt;</code> را تایپ کن <i>(بدون نیاز به ریپلای)</i>.\n\n"
+        "🏆 پاداش بر اساس مشارکت محاسبه می‌شود و ضربهٔ آخر جایزهٔ ویژه دارد.\n"
+        "╚══════════════════════════════════════╝"
     )
 
 def resolve_boss_image(cfg: dict) -> Path | None:
