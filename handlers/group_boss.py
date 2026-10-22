@@ -478,8 +478,8 @@ def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = No
     """Keep the image caption short so Telegram gives the boss artwork more room."""
     weak = f"\n🜂 ضعف: <b>{ELEMENTS.get(weakness, weakness)}</b>" if weakness else ""
     return (
-        f"👹 <b>{html.escape(cfg['name'])}</b> · Lv.{level}\n"
-        f"❤️ HP: <b>{hp:,}</b>{weak}\n\n"
+        f"👹 <b>{html.escape(cfg['name'])}</b> · سطح {level}\n"
+        f"❤️ سلامتی: <b>{hp:,}</b>{weak}\n\n"
         "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
         "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای."
     )
@@ -1131,10 +1131,10 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
                 f"💥 <b>آسیب فن باس: {retaliation:,}</b>\n"
                 "╟─────── ✦ وضعیت نبرد ✦ ───────╒\n\n"
                 "🛡️ <b>وضعیت قهرمان</b>\n"
-                f"❤️ سلامتی: <b>{char.hp:,} HP</b>\n"
-                f"🔵 مانا: <b>{char.mana:,} MP</b>\n\n"
+                f"❤️ سلامتی قهرمان: <b>{char.hp:,}</b>\n"
+                f"🔵 مانا: <b>{char.mana:,}</b>\n\n"
                 "🐉 <b>وضعیت باس</b>\n"
-                f"❤️ سلامتی باس: <b>{boss.hp:,} HP</b>\n"
+                f"❤️ سلامتی باس: <b>{boss.hp:,}</b>\n"
                 f"{defeat_line}\n\n"
                 "╚══════ ✧ سرنوشت هنوز نوشته نشده است ✧ ══════╝"
             )
@@ -1143,11 +1143,11 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
         if boss.message_id:
             if boss.status == "defeated":
                 caption = (f"🏆 <b>{html.escape(boss.name)} شکست خورد!</b>\n"
-                           f"❤️ HP: <b>0</b>\n"
+                           f"❤️ سلامتی: <b>0</b>\n"
                            "⏳ باس بعدی طبق چرخهٔ ساعتی ظاهر می‌شود.")
             else:
-                caption = (f"👹 <b>{html.escape(boss.name)}</b> · Lv.{getattr(boss, 'boss_level', 1)}\n"
-                           f"❤️ HP: <b>{boss.hp:,}</b>\n"
+                caption = (f"👹 <b>{html.escape(boss.name)}</b> · سطح {getattr(boss, 'boss_level', 1)}\n"
+                           f"❤️ سلامتی: <b>{boss.hp:,}</b>\n"
                            f"🜂 ضعف: <b>{ELEMENTS[boss_weakness(cfg)]}</b> (جادوی هم‌عنصر ×1.75)\n\n"
                            "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
                            "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای.")
@@ -1196,7 +1196,7 @@ async def group_boss_status(message: Message):
                 remaining = f"{seconds // 60} دقیقه"
             text = (f"🐉 باس فعال: <b>{html.escape(boss.name or 'باس اِلدوریا')}</b>\n"
                     f"⭐ سطح: <b>{int(getattr(boss, 'boss_level', 1) or 1)}</b>\n"
-                    f"❤️ HP: <b>{int(boss.hp or 0):,}</b>\n"
+                    f"❤️ سلامتی: <b>{int(boss.hp or 0):,}</b>\n"
                     f"⏳ زمان باقی‌مانده: <b>{remaining}</b>\n\n"
                     "دستورها: /ATTACK · /MAGIC · /HEAL · /USE_MANA · /REMOVE_BOSS")
         else:
