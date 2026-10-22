@@ -47,10 +47,10 @@ async def menu_command(message: Message):
     if character is None:
         await message.answer("هنوز حساب کاربری نداری. برای ساخت حساب، در پی‌وی دستور /start را بزن.")
         return
-    language = await get_language(message.from_user.id)
+    # Keep /menu identical to the Persian "منو" shortcut panel.
     await send_panel(
         message=message,
         panel_name="main_menu",
-        text=tr(language, "main_title") + "\\n\\n" + tr(language, "main_sub"),
-        reply_markup=main_menu_keyboard(language),
+        text=MAIN_MENU_TEXT,
+        reply_markup=main_menu_keyboard("fa"),
     )
