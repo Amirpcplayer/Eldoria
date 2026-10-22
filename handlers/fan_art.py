@@ -36,7 +36,7 @@ from services.fan_art_service import (
 )
 from states.fan_art import FanArtStates
 from database.redis import redis
-from services.panel_image_service import replace_panel_with_photo, replace_panel_with_text
+from services.panel_image_service import replace_panel_with_photo, replace_panel_with_text, send_panel
 
 FAN_ART_PANEL_TTL = 60 * 60 * 24 * 30
 
@@ -803,28 +803,16 @@ async def fan_art_sell(callback: CallbackQuery):
 
 
 @router.message(Command("arts", ignore_case=True))
-@router.message(F.text.regexp(r"(?i)^\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\s*$"))
+@router.message(F.text.regexp(r"(?i)^\\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\\s*$"))
 async def fan_art_text_entry(message: Message):
-    """Open the Fan Art section from a slash command or Persian shortcut."""
-    if message.from_user is not None:
-        await _remove_active_shop_panel(
-            message.chat.id,
-            message.from_user.id,
-            message.bot,
-        )
-    sent = await message.answer(
-        "🎨 <b>تالار فن‌آرت اِلدوریا</b>\n\n"
-        "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین.",
-        reply_markup=protect_keyboard(fan_art_main_keyboard(), message.from_user.id if message.from_user else 0),
+    """Open Fan Art as the player's current panel, replacing the previous menu."""
+    await send_panel(
+        message=message,
+        panel_name="fan_art",
+        text=(
+            "🎨 <b>تالار فن‌آرت اِلدوریا</b>\\n\\n"
+            "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین."
+        ),
+        reply_markup=fan_art_main_keyboard(),
         parse_mode="HTML",
     )
-    if message.from_user is not None:
-        try:
-            await redis.set(
-                _fan_art_panel_key(message.chat.id, message.from_user.id),
-                str(sent.message_id),
-                ex=FAN_ART_PANEL_TTL,
-            )
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Could not save initial Fan Art panel reference")
