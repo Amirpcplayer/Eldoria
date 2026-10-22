@@ -1,15 +1,41 @@
 from __future__ import annotations
 
-LANGUAGES = {"fa"}
-TEXT = {
- "fa": {"main_title":"🎮 <b>منوی اصلی World Eldoria</b>","main_sub":"🌌 ماجراجویی تو در اِلدوریا ادامه دارد...","settings":"⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات بازیکن خود را مدیریت کن.","settings_button":"⚙️ تنظیمات","rename":"✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold","back":"🔙 بازگشت","profile":"👤 پروفایل","inventory":"🗃 صندوقچه","skills":"⚔️ مهارت‌ها","equipment":"🛡️ تجهیزات","quest":"📜 مأموریت‌ها","adventure":"🗺️ ماجراجویی","crafting":"🔨 کرفتینگ","pets":"🐾 پت","events":"🎉 ایونت","party":"👥 پارتی","guild":"🛡️ گیلد","ranking":"🏆 رتبه‌بندی","forge":"⚒️ آهنگری","marketplace":"🏪 بازار بازیکنان","bestiary":"📖 دفترچهٔ هیولا","exchange":"💱 تبدیل گلد به جم","guide":"📖 راهنما","shop":"🛒 فروشگاه"},
- "en": {"main_title":"🎮 <b>World Eldoria · Main Menu</b>","main_sub":"🌌 Your adventure in Eldoria continues...","settings":"⚙️ <b>Eldoria Settings</b>\n\nManage your player settings.","settings_button":"⚙️ Settings","rename":"✍️ Rename hero · 2,000 Gold","back":"🔙 Back","profile":"👤 Profile","inventory":"🗃 Chest","skills":"⚔️ Skills","equipment":"🛡️ Equipment","quest":"📜 Quests","adventure":"🗺️ Adventure","crafting":"🔨 Crafting","pets":"🐾 Pets","events":"🎉 Events","party":"👥 Party","guild":"🛡️ Guild","ranking":"🏆 Rankings","forge":"⚒️ Forge","marketplace":"🏪 Player Market","bestiary":"📖 Bestiary","exchange":"💱 Gold to Gems","guide":"📖 Guide","shop":"🛒 Shop"},
- "ru": {"main_title":"🎮 <b>World Eldoria · Главное меню</b>","main_sub":"🌌 Ваше приключение в Элдории продолжается...","settings":"⚙️ <b>Настройки Элдории</b>\n\nУправляйте настройками игрока.","settings_button":"⚙️ Настройки","rename":"✍️ Сменить имя · 2 000 золота","back":"🔙 Назад","profile":"👤 Профиль","inventory":"🗃 Сундук","skills":"⚔️ Навыки","equipment":"🛡️ Снаряжение","quest":"📜 Задания","adventure":"🗺️ Приключения","crafting":"🔨 Ремесло","pets":"🐾 Питомцы","events":"🎉 События","party":"👥 Отряд","guild":"🛡️ Гильдия","ranking":"🏆 Рейтинг","forge":"⚒️ Кузница","marketplace":"🏪 Рынок игроков","bestiary":"📖 Бестиарий","exchange":"💱 Золото в самоцветы","guide":"📖 Помощь","shop":"🛒 Магазин"}
+# World Eldoria is Persian-only. There is no player language preference or
+# language-switching feature. These helpers remain as a compatibility layer for
+# existing handlers and always resolve to Persian.
+PERSIAN_TEXT = {
+    "main_title": "🎮 <b>منوی اصلی World Eldoria</b>",
+    "main_sub": "🌌 ماجراجویی تو در اِلدوریا ادامه دارد...",
+    "settings": "⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات بازیکن خود را مدیریت کن.",
+    "settings_button": "⚙️ تنظیمات",
+    "rename": "✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold",
+    "back": "🔙 بازگشت",
+    "profile": "👤 پروفایل",
+    "inventory": "🗃 صندوقچه",
+    "skills": "⚔️ مهارت‌ها",
+    "equipment": "🛡️ تجهیزات",
+    "quest": "📜 مأموریت‌ها",
+    "adventure": "🗺️ ماجراجویی",
+    "crafting": "🔨 کرفتینگ",
+    "pets": "🐾 پت",
+    "events": "🎉 ایونت",
+    "party": "👥 پارتی",
+    "guild": "🛡️ گیلد",
+    "ranking": "🏆 رتبه‌بندی",
+    "forge": "⚒️ آهنگری",
+    "marketplace": "🏪 بازار بازیکنان",
+    "bestiary": "📖 دفترچهٔ هیولا",
+    "exchange": "💱 تبدیل گلد به جم",
+    "guide": "📖 راهنما",
+    "shop": "🛒 فروشگاه",
 }
 
+
 async def get_language(telegram_id: int) -> str:
-    """The game is Persian-only; language switching has been removed."""
+    """Return the fixed game language; no per-player setting is read or stored."""
     return "fa"
 
+
 def tr(language: str, key: str) -> str:
-    return TEXT.get(language, TEXT["fa"]).get(key, TEXT["fa"].get(key, key))
+    """Compatibility translator that always returns Persian text."""
+    return PERSIAN_TEXT.get(key, key)
