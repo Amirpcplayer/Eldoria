@@ -360,11 +360,11 @@ def build_profile_text(
     race = html.escape(str(character.race or "نامشخص"))
     title = html.escape(str(character.active_title or title_for_level(level)))
     return (
-        f"🛡️ <b>قهرمان اِلدوریا</b> · Lv.{level}\\n"
-        f"👤 <b>{name}</b> · {race}\\n"
-        f"🎖️ {title}\\n"
-        f"❤️ HP <b>{current_hp:,}</b> · 💧 MP <b>{current_mana:,}</b>\\n"
-        f"⚔️ قدرت رزمی <b>{combat_power:,}</b>\\n"
+        f"🛡️ <b>قهرمان اِلدوریا</b> · Lv.{level}\n"
+        f"👤 <b>{name}</b> · {race}\n"
+        f"🎖️ {title}\n"
+        f"❤️ HP <b>{current_hp:,}</b> · 💧 MP <b>{current_mana:,}</b>\n"
+        f"⚔️ قدرت رزمی <b>{combat_power:,}</b>\n"
         f"💰 {int(character.gold or 0):,} گلد · 💎 {int(character.gems or 0):,} جم"
     )
 
@@ -427,7 +427,7 @@ async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
             scroll_line += f" +{len(buff_lines) - 3}"
     else:
         scroll_line = "✨ اسکرول فعال ندارد"
-    return text + "\\n" + guild_line + " · " + party_line + "\\n" + scroll_line
+    return text + "\n" + guild_line + " · " + party_line + "\n" + scroll_line
 
 
 
