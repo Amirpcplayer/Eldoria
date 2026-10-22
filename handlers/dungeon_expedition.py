@@ -24,6 +24,61 @@ router = Router(name="dungeon_expedition")
 logger = logging.getLogger(__name__)
 
 
+async def _dungeon_language(user_id: int) -> str:
+    try:
+        from services.language_service import get_language
+        return await get_language(user_id)
+    except Exception:
+        return "fa"
+
+
+def _dungeon_translate(text: str, language: str) -> str:
+    if language == "fa":
+        return text
+    translations = {
+        "🚪 ورود به دانجن": ("🚪 Enter Dungeon", "🚪 Войти в подземелье"),
+        "📜 قوانین اکتشاف": ("📜 Expedition Rules", "📜 Правила экспедиции"),
+        "🟢 اعلام آمادگی": ("🟢 Ready", "🟢 Готов"),
+        "🔄 تازه‌سازی وضعیت": ("🔄 Refresh Status", "🔄 Обновить статус"),
+        "🔄 وضعیت اکتشاف": ("🔄 Expedition Status", "🔄 Статус экспедиции"),
+        "🔄 بررسی دانجن": ("🔄 Check Dungeon", "🔄 Проверить подземелье"),
+        "⌛ مهلت باقی‌مانده برای ورود:": ("⌛ Time left to enter:", "⌛ Осталось времени на вход:"),
+        "🌀 <b>پارتی در آستانهٔ ورود به ": ("🌀 <b>Party preparing to enter ", "🌀 <b>Группа готовится войти в "),
+        "🧭 درجه:": ("🧭 Difficulty:", "🧭 Сложность:"),
+        "🎚 سطح پیشنهادی:": ("🎚 Recommended level:", "🎚 Рекомендуемый уровень:"),
+        "👥 اعضای پارتی:": ("👥 Party members:", "👥 Участники группы:"),
+        "🟢 آماده:": ("🟢 Ready:", "🟢 Готовы:"),
+        "⏳ زمان باقی‌مانده برای آمادگی:": ("⏳ Time left to get ready:", "⏳ Осталось времени на подготовку:"),
+        "هر عضو باید خودش دکمهٔ «اعلام آمادگی» را بزند.": ("Each member must press “Ready” themselves.", "Каждый участник должен сам нажать «Готов»."),
+        "🌌 <b>اکتشاف در جریان است: ": ("🌌 <b>Expedition in progress: ", "🌌 <b>Экспедиция проходит: "),
+        "⏳ زمان باقی‌مانده:": ("⏳ Time remaining:", "⏳ Осталось времени:"),
+        "قهرمانان در مسیرند؛ گزارش و غنیمت‌ها پس از پایان به پیام خصوصی ارسال می‌شود.": ("Heroes are on their way; the report and loot will be sent by private message when finished.", "Герои в пути; отчёт и добыча будут отправлены в личные сообщения после завершения."),
+        "🌫️ <b>این دروازه بسته شده است.</b>": ("🌫️ <b>This gate is closed.</b>", "🌫️ <b>Эти врата закрыты.</b>"),
+        "برای دانجن بعدی منتظر بمانید.": ("Wait for the next dungeon.", "Дождитесь следующего подземелья."),
+        "🗝 <b>صندوقچهٔ غنیمت‌های دانجن</b>": ("🗝 <b>Dungeon Loot Chest</b>", "🗝 <b>Сундук добычи подземелья</b>"),
+        "هنوز یادگاری‌ای از ژرفای دانجن‌ها پیدا نکرده‌ای.": ("You have not found any dungeon loot yet.", "Вы ещё не нашли добычу в подземельях."),
+        "این یادگارها فقط از دانجن به دست می‌آیند و با تجهیزات یا آیتم‌های فروشگاه قاطی نمی‌شوند.": ("This loot comes only from dungeons and is kept separate from equipment and shop items.", "Эта добыча доступна только в подземельях и хранится отдельно от экипировки и товаров магазина."),
+        "ارزش هر عدد:": ("Value each:", "Цена за штуку:"),
+        "💰 ارزش کل صندوقچه:": ("💰 Total chest value:", "💰 Общая стоимость сундука:"),
+        "💰 فروش همهٔ غنیمت‌ها": ("💰 Sell All Loot", "💰 Продать всю добычу"),
+        "💰 <b>معاملهٔ غنیمت‌ها انجام شد!</b>": ("💰 <b>Loot sold successfully!</b>", "💰 <b>Добыча успешно продана!</b>"),
+        "گلد دریافت‌شده:": ("Gold received:", "Получено золота:"),
+        "🔄 صندوقچهٔ دانجن": ("🔄 Dungeon Chest", "🔄 Сундук подземелья"),
+        "فروش انجام شد.": ("Sale completed.", "Продажа завершена."),
+        "وضعیت تازه شد.": ("Status refreshed.", "Статус обновлён."),
+        "هنوز دانجنی در این گپ ظاهر نشده است.": ("No dungeon has appeared in this group yet.", "В этой группе ещё не появилось подземелье."),
+        "⛔ دسترسی ندارید.": ("⛔ Access denied.", "⛔ Доступ запрещён."),
+        "ورود به دانجن فقط از داخل گپی انجام می‌شود که دروازه در آن ظاهر شده.": ("You can only enter from the group where the gate appeared.", "Войти можно только из группы, где появились врата."),
+        "این دکمه فقط داخل گروه دانجن کار می‌کند.": ("This button only works in the dungeon group.", "Эта кнопка работает только в группе подземелья."),
+        "❌ ارسال پیام به گروه ناموفق بود؛ مطمئن شو ربات هنوز عضو گروه است.": ("❌ Could not send a message to the group; make sure the bot is still a member.", "❌ Не удалось отправить сообщение в группу; убедитесь, что бот всё ещё состоит в ней."),
+    }
+    index = 0 if language == "en" else 1
+    for source, options in translations.items():
+        text = text.replace(source, options[index])
+    return text
+
+
+
 def event_keyboard(status: str = "waiting") -> InlineKeyboardMarkup:
     if status == "waiting":
         rows = [[InlineKeyboardButton(text="🚪 ورود به دانجن", callback_data="dungeon:enter")],
