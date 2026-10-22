@@ -391,6 +391,11 @@ async def admin_panel(
     message: Message,
     state: FSMContext,
 ):
+    # پنل مدیریت فقط در گفت‌وگوی خصوصی ربات نمایش داده می‌شود.
+    # در گروه هیچ پیام یا پنلی در پاسخ به /admin ارسال نکن.
+    if message.chat.type != "private":
+        return
+
     if message.from_user is None or not is_admin(message.from_user.id):
         await message.answer("⛔ شما دسترسی ادمین ندارید.")
         return
