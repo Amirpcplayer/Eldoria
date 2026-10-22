@@ -36,6 +36,7 @@ from services.party_service import (
 )
 
 from handlers.membership_requests import parse_id, public_id, request_membership
+from services.language_service import get_language
 
 router = Router(name="party")
 logger = logging.getLogger(__name__)
