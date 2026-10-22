@@ -152,7 +152,7 @@ async def resource_gift_amount(message: Message, state: FSMContext):
         "╭─── ✦ 🎁 ✦ ───╮\n"
         f"   <b>تأیید گیفت {title}</b>\n"
         "╰─── ✦ 🎁 ✦ ───╯\n\n"
-        f"👤 دریافت‌کننده: <b>{name}</b>" + (f" (@{username})" if username else "") + "\n"
+        f"👤 دریافت‌کننده: <b>{html.escape(str(name))}</b>" + (f" (@{username})" if username else "") + "\n"
         f"🎁 مقدار هدیه: <b>+{amount:,} {title}</b>\n"
         f"📊 موجودی فعلی: <b>{old_value:,}</b>\n"
         f"📈 موجودی تقریبی پس از هدیه: <b>{min(maximum, old_value + amount):,}</b>\n\n"
