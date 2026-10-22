@@ -25,6 +25,7 @@ from services.fan_art_service import (
     reject_order,
 )
 from states.fan_art import FanArtAdminStates, FanArtStates
+from services.admin_permissions import is_fanart_admin
 
 
 router = Router()
@@ -140,7 +141,7 @@ async def render_order_details(message_or_callback, order):
 @router.callback_query(F.data == "admin:fanart:orders")
 @router.callback_query(F.data.startswith("fanartadmin:orders:"))
 async def fanart_admin_orders(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     try:
@@ -163,7 +164,7 @@ async def fanart_admin_orders(callback: CallbackQuery):
 
 @router.callback_query(F.data == "fanartadmin:order:search")
 async def fanart_admin_order_search_start(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     await state.clear()
@@ -180,7 +181,7 @@ async def fanart_admin_order_search_start(callback: CallbackQuery, state: FSMCon
 
 @router.message(FanArtAdminStates.search_order_code, F.text)
 async def fanart_admin_order_search_finish(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
     query = message.text.strip()
     if query.lower() == "/cancel":
@@ -203,7 +204,7 @@ async def fanart_admin_order_search_finish(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("fanartadmin:order:view:"))
 async def fanart_admin_order_view(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     try:
@@ -221,7 +222,7 @@ async def fanart_admin_order_view(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("fanartadmin:cancel:"))
 async def fanart_admin_order_cancel(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     try:
@@ -240,7 +241,7 @@ async def fanart_admin_order_cancel(callback: CallbackQuery):
 @router.message(Command("fanart_clear_active_orders"))
 async def fanart_clear_active_orders(message: Message):
     """Admin-only cleanup: cancel all pending Fan Art orders, keep history."""
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     count = await cancel_all_active_orders()
@@ -253,7 +254,7 @@ async def fanart_clear_active_orders(message: Message):
 
 @router.callback_query(F.data == "admin:fanart:add")
 async def fanart_add_panel_start(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
 
@@ -275,7 +276,7 @@ async def fanart_add_start(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     await state.clear()
@@ -293,7 +294,7 @@ async def fanart_cancel(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     current_state = await state.get_state()
@@ -316,7 +317,7 @@ async def fanart_add_image(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     await state.update_data(
@@ -336,7 +337,7 @@ async def fanart_add_image(
 async def fanart_add_image_invalid(
     message: Message,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     await message.answer(
@@ -352,7 +353,7 @@ async def fanart_add_name(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     name = message.text.strip()
@@ -394,7 +395,7 @@ async def fanart_add_description(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     description = message.text.strip()
@@ -432,7 +433,7 @@ async def fanart_add_rarity(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     value = message.text.strip().lower()
@@ -472,7 +473,7 @@ async def fanart_add_price(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     raw_price = (
@@ -514,7 +515,7 @@ async def fanart_add_limited(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     value = message.text.strip().lower()
@@ -571,7 +572,7 @@ async def fanart_add_stock(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     try:
@@ -674,9 +675,7 @@ async def create_fan_art(
 async def fanart_admin_approve(
     callback: CallbackQuery,
 ):
-    if not is_admin(
-        callback.from_user.id
-    ):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer(
             "دسترسی ندارید.",
             show_alert=True,
@@ -766,9 +765,7 @@ async def fanart_admin_reject_start(
     callback: CallbackQuery,
     state: FSMContext,
 ):
-    if not is_admin(
-        callback.from_user.id
-    ):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
         await callback.answer(
             "دسترسی ندارید.",
             show_alert=True,
@@ -811,9 +808,7 @@ async def fanart_admin_reject_finish(
     message: Message,
     state: FSMContext,
 ):
-    if not is_admin(
-        message.from_user.id
-    ):
+    if not is_admin(message.from_user.id) and not await is_fanart_admin(message.from_user.id):
         return
 
     data = await state.get_data()
