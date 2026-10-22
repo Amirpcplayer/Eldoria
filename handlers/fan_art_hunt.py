@@ -136,6 +136,11 @@ async def fan_art_scheduler() -> None:
                             GroupFanArtSpawn.spawned_at <= cutoff,
                         )
                     )
+                    .order_by(
+                        GroupFanArtSpawn.spawned_at.asc().nullsfirst(),
+                        GroupBoss.chat_id,
+                    )
+                    .limit(100)
                 )).all())
             for chat_id in due:
                 await spawn_fan_art(chat_id)
