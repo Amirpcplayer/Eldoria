@@ -69,13 +69,7 @@ async def character_name_handler(message: Message, state: FSMContext):
     await state.update_data(name=name)
     await state.set_state(CharacterCreation.waiting_for_gender)
     await message.answer(
-        "༺ 📜 پیمان سرنوشت 📜 ༻\n\n"
-        f"✅ نام قهرمان در دفتر کهن ثبت شد: <b>{escape(name)}</b>\n\n"
-        "اما پیش از آن‌که قدم در مسیر قدرت بگذاری، باید هویت قهرمانت را آشکار کنی.\n\n"
-        "⚔️ انتخاب تو، بخشی از داستانی خواهد بود که در اِلدوریا رقم می‌زنی.\n\n"
-        "⚧ <b>جنسیت قهرمانت را انتخاب کن:</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "✦ سرنوشت هنوز نوشته نشده است ✦",
+        f"👤 نام قهرمان: <b>{escape(name)}</b>\n\n⚧ جنسیت قهرمانت را انتخاب کن:",
         reply_markup=gender_keyboard(),
         parse_mode=ParseMode.HTML,
     )
@@ -96,15 +90,7 @@ async def character_gender_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(gender=gender_id)
     await replace_panel_with_text(
         callback=callback,
-        text=(
-            "༺ 🧬 میراث نیاکان 🧬 ༻\n\n"
-            f"✅ جنسیت قهرمان: <b>{gender_name}</b>\n\n"
-            "در اعماق اِلدوریا، خون نیاکان هنوز قدرتی فراموش‌نشده در خود دارد. هر نژاد، ریشه‌ای متفاوت و داستانی ویژه دارد.\n\n"
-            "🌑 انتخاب تو، نخستین گام در شکل‌گیری هویت قهرمانت خواهد بود.\n\n"
-            "🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "✦ میراثت را برگزین، قهرمان ✦"
-        ),
+        text=f"⚧ جنسیت: <b>{gender_name}</b>\n\n🧬 نژاد قهرمانت را انتخاب کن:".replace("\\\n", "\n"),
         reply_markup=race_keyboard(),
         parse_mode=ParseMode.HTML,
     )
