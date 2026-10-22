@@ -81,37 +81,17 @@ def guild_home_keyboard(has_guild: bool, is_owner: bool = False) -> InlineKeyboa
 
 
 async def _show(callback: CallbackQuery, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
-    """نمایش پنل گیلد؛ دکمه‌های هر پنل فقط برای بازکنندهٔ همان پنل فعال‌اند."""
-    message = callback.message
-    if markup is not None:
-        markup = protect_keyboard(markup, callback.from_user.id)
-    if message is not None:
-        if message.photo:
-            # تلگرام caption یک پیام تصویری را نمی‌تواند به متن تبدیل کند.
-            try:
-                await message.answer(text, reply_markup=markup, parse_mode="HTML")
-            except Exception:
-                logger.exception("Could not send guild text panel")
-        else:
-            try:
-                await message.edit_text(text, reply_markup=markup, parse_mode="HTML")
-            except Exception as exc:
-                # در صورت یکسان‌بودن متن، پنل درست است؛ پیام تازه نساز.
-                if "message is not modified" not in str(exc).lower():
-                    # اگر واقعاً قابل ویرایش نیست، پیام قبلی را حذف کن و بعد جایگزین بساز.
-                    try:
-                        await message.delete()
-                    except Exception:
-                        logger.warning("Could not delete stale guild panel", exc_info=True)
-                    try:
-                        await message.answer(text, reply_markup=markup, parse_mode="HTML")
-                    except Exception:
-                        logger.exception("Could not replace guild panel")
+    """Render the guild panel by editing the current player panel."""
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=markup,
+        parse_mode="HTML",
+    )
     try:
         await callback.answer()
     except Exception:
         pass
-
 
 async def _home(callback: CallbackQuery, notice: str = "") -> None:
     user_id = callback.from_user.id
