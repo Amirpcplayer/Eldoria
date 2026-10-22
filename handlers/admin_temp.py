@@ -1245,8 +1245,8 @@ async def admin_gold_cancel_message(
     await state.clear()
 
     await message.answer(
-        "❌ عملیات واریز گلد لغو شد.\n\nبرای ادامه از پنل اصلی مدیریت استفاده کن.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]),
+        "🛡 پنل مدیریت World Eldoria\n\nعملیات واریز گلد لغو شد؛ به منوی اصلی برگشتی.",
+        reply_markup=admin_keyboard() if is_admin(message.from_user.id) else delegated_admin_keyboard(),
     )
 
 
