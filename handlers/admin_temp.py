@@ -73,20 +73,14 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="🎨 مدیریت فن‌آرت شاپ",
+                    callback_data="admin:fanart:manage",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎁 مدیریت گیفت فن‌آرت",
                     callback_data="admin:fanart_gifts",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="➕ افزودن فن‌آرت به شاپ",
-                    callback_data="admin:fanart:add",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🧾 سفارش‌های فن‌آرت",
-                    callback_data="admin:fanart:orders",
                 )
             ],
             [
@@ -139,6 +133,7 @@ def delegated_admin_keyboard() -> InlineKeyboardMarkup:
         "admin:admins:add",
         "admin:admins:remove",
         "admin:fanart_gifts",
+        "admin:fanart:manage",
         "admin:fanart:add",
         "admin:fanart:orders",
         "admin:fanart:spawn",
