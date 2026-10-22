@@ -20,6 +20,7 @@ from models.character import Character
 from models.fan_art import FanArt
 
 from middlewares.panel_owner import protect_keyboard
+from services.panel_image_service import replace_panel_with_photo, replace_panel_with_text
 
 from services.fan_art_service import (
     clear_active_fan_art,
@@ -415,43 +416,13 @@ async def replace_with_text_panel(
     text: str,
     keyboard: InlineKeyboardMarkup,
 ) -> None:
-    """
-    جایگزینی پنل با کیبورد محافظت‌شده.
-    پیام مشترک گروه همچنان یک پیام تلگرام است؛
-    کنترل مالکیت دکمه‌ها در middleware انجام می‌شود.
-    """
-
-    telegram_id = callback.from_user.id
-    markup = owned_keyboard(keyboard, telegram_id)
-    message = callback.message
-
-    if message is None:
-        return
-
-    try:
-        if message.photo:
-            await message.delete()
-            await message.answer(
-                text,
-                reply_markup=markup,
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await message.edit_text(
-                text,
-                reply_markup=markup,
-                parse_mode=ParseMode.HTML,
-            )
-
-    except Exception:
-        # اگر پیام قابل ویرایش نبود، پیام تازه می‌فرستیم.
-        # از حذف اجباری پیام قبلی در این مسیر خودداری می‌کنیم.
-        await message.answer(
-            text,
-            reply_markup=markup,
-            parse_mode=ParseMode.HTML,
-        )
-
+    """Replace the current player panel in-place, re-sending only when media changes."""
+    await replace_panel_with_text(
+        callback=callback,
+        text=text,
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML,
+    )
 
 # ============================================================
 # SHOW PROFILE
@@ -536,14 +507,13 @@ async def show_profile(
     if message is None:
         return
 
-    if (
-        active_fan_art is not None
-        and active_fan_art.image_file_id
-    ):
-        await message.answer_photo(
+    # پروفایل یکی از استثناهای تصویری است؛ پنل قبلی حذف و تصویر جدید جایگزین می‌شود.
+    if active_fan_art is not None and active_fan_art.image_file_id:
+        await replace_panel_with_photo(
+            callback=callback,
             photo=active_fan_art.image_file_id,
             caption=text,
-            reply_markup=keyboard,
+            reply_markup=profile_keyboard(),
             parse_mode=ParseMode.HTML,
         )
         return
@@ -551,11 +521,12 @@ async def show_profile(
     # اگر فن‌آرت فعال نیست، از عکس اکانت تلگرام بازیکن استفاده کن.
     try:
         photos = await callback.bot.get_user_profile_photos(telegram_id, limit=1)
-        if photos.total_count and photos.photos and message is not None:
-            await message.answer_photo(
+        if photos.total_count and photos.photos:
+            await replace_panel_with_photo(
+                callback=callback,
                 photo=photos.photos[0][-1].file_id,
                 caption=text,
-                reply_markup=keyboard,
+                reply_markup=profile_keyboard(),
                 parse_mode=ParseMode.HTML,
             )
             return
@@ -563,11 +534,7 @@ async def show_profile(
         # نبودن عکس یا خطای API نباید مانع نمایش پروفایل شود.
         pass
 
-    await replace_with_text_panel(
-        callback,
-        text,
-        profile_keyboard(),
-    )
+    await replace_with_text_panel(callback, text, profile_keyboard())
 
 
 # ============================================================
