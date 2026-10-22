@@ -130,7 +130,7 @@ async def render_command_panel(message: Message, section: str) -> None:
         "forge": ("⚒️ <b>آهنگری اِلدوریا</b>\n\nتجهیزاتت را انتخاب و با گلد و مواد اولیه ارتقا بده.", keyboard([button("⚒️ باز کردن آهنگری", "menu:forge")], [button("🛡️ تجهیزات", "menu:equipment")], [button("🔙 منوی اصلی", "menu:back")]), "forge"),
         "guide": ("📖 <b>کتاب راهنمای اِلدوریا</b>\\n\\nیکی از دو مسیر زیر را انتخاب کن تا سفر خود را آسان‌تر آغاز کنی.", guide_keyboard(), "guide"),
         "exchange": ("💱 <b>صرافی اِلدوریا</b>\n\nنرخ تبدیل: ۱۰٬۰۰۰ گلد = ۱ جم. مقدار موردنظر را انتخاب کن؛ موجودی هنگام تأیید دوباره بررسی می‌شود.", keyboard([button("💱 تبدیل ۱ جم", "exchange:confirm:1")], [button("💱 تبدیل ۵ جم", "exchange:confirm:5")], [button("💱 تبدیل ۱۰ جم", "exchange:confirm:10")], [button("🔙 منوی اصلی", "menu:back")]), "exchange"),
-        "settings": ("⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.", keyboard([button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")], [button("🔙 منوی اصلی", "menu:back")]), "settings"),
+        "settings": ("⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.", InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")], [button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")], [button("🔙 منوی اصلی", "menu:back")]]), "settings"),
     }
     text, markup, panel_name = texts[section]
     # Send the actual section panel on the command itself; no extra "open" button.
