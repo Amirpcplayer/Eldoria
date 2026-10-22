@@ -511,7 +511,7 @@ async def mypet_command(message: Message):
     rows.append([InlineKeyboardButton(text="🔙 بازگشت به منو", callback_data="menu:back")])
 
     await message.answer(
-        "\\n\\n".join(lines),
+        "\n\n".join(lines),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         parse_mode="HTML",
     )
