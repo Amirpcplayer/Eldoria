@@ -7,6 +7,7 @@ from sqlalchemy import select
 from database.database import AsyncSessionLocal
 from models.character import Character
 from keyboards.main_menu import main_menu_keyboard
+from services.language_service import get_language, tr
 from aiogram.types import CallbackQuery
 
 # Define the router before importing project services so that even if a
@@ -24,11 +25,12 @@ MAIN_MENU_TEXT = (
 
 @router.callback_query(F.data == "menu:back")
 async def main_menu_back_handler(callback: CallbackQuery) -> None:
+    language = await get_language(callback.from_user.id)
     await show_panel(
         callback=callback,
         panel_name="main_menu",
-        text=MAIN_MENU_TEXT,
-        reply_markup=main_menu_keyboard(),
+        text=tr(language, "main_title") + "\n\n" + tr(language, "main_sub"),
+        reply_markup=main_menu_keyboard(language),
     )
     await callback.answer()
 
@@ -45,9 +47,10 @@ async def menu_command(message: Message):
     if character is None:
         await message.answer("هنوز حساب کاربری نداری. برای ساخت حساب، در پی‌وی دستور /start را بزن.")
         return
+    language = await get_language(message.from_user.id)
     await send_panel(
         message=message,
         panel_name="main_menu",
-        text=MAIN_MENU_TEXT,
-        reply_markup=main_menu_keyboard(),
+        text=tr(language, "main_title") + "\\n\\n" + tr(language, "main_sub"),
+        reply_markup=main_menu_keyboard(language),
     )
