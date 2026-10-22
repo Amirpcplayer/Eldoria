@@ -446,6 +446,17 @@ async def admin_panel(
     )
 
 
+@router.callback_query(F.data == "admin:fanart:close")
+async def fanart_admin_close(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id) and not await is_fanart_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text("پنل مدیریت فن‌آرت بسته شد.")
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin:admins:add")
 async def admin_add_fanart_admin_start(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
