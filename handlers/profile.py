@@ -334,12 +334,20 @@ def build_profile_text(
     active_fan_art: FanArt | None,
     stats: dict[str, int],
 ) -> str:
-    """Render the original compact profile template without menu controls."""
+    """Render a compact, ornate fantasy profile that fits Telegram captions."""
     final_hp = max(1, int(stats.get("hp", 1)))
     final_mana = max(1, int(stats.get("mana", 1)))
     current_hp = max(0, min(int(character.hp or 0), final_hp))
     current_mana = max(0, min(int(character.mana or 0), final_mana))
+
+    def bar(current: int, maximum: int, filled: str, empty: str = "▫️", width: int = 8) -> str:
+        ratio = max(0.0, min(1.0, current / max(1, maximum)))
+        count = min(width, int(ratio * width))
+        return filled * count + empty * (width - count)
+
     level = max(1, int(character.level or 1))
+    xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
+    # A readable, comparable combat rating; it is informational and doesn't alter combat math.
     combat_power = (
         int(stats.get("attack", 0))
         + int(stats.get("magic_power", 0))
@@ -349,15 +357,44 @@ def build_profile_text(
     )
     name = html.escape(str(character.name or "قهرمان بی‌نام"))
     race = html.escape(str(character.race or "نامشخص"))
+    gender_value = getattr(character, "gender", None)
+    gender = "مرد" if gender_value == "male" else "زن" if gender_value == "female" else "ثبت نشده"
     title = html.escape(str(character.active_title or title_for_level(level)))
-    return (
-        f"🛡️ <b>قهرمان اِلدوریا</b> · سطح {level}\n"
-        f"👤 <b>{name}</b> · {race}\n"
-        f"🎖️ {title}\n"
-        f"❤️ سلامتی <b>{current_hp:,}</b> · 💧 مانا <b>{current_mana:,}</b>\n"
-        f"⚔️ قدرت رزمی <b>{combat_power:,}</b>\n"
-        f"💰 {int(character.gold or 0):,} گلد · 💎 {int(character.gems or 0):,} جم"
-    )
+
+    lines = [
+        "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
+        "  ⚔️ <b>قهرمان اِلدوریا</b> ⚔️",
+        "",
+        f"🧙 نام قهرمان: <b>{name}</b>",
+        f"🎖️ لقب: {title}",
+        f"🏅 سطح: Lv. {level}",
+        f"🧬 نژاد: {race}  ·  ⚧️ جنسیت: {gender}",
+        "",
+        "━━━━━━━━ ⚜️ هویت قهرمان ⚜️ ━━━━━━━━",
+        "",
+        f"⚔️ قدرت رزمی: <b>{combat_power:,}</b>",
+        f"💰 طلا: <b>{int(character.gold or 0):,}</b>  ·  💎 جم: <b>{int(character.gems or 0):,}</b>",
+        "",
+        "━━━━━━━━ ❤️ وضعیت حیاتی 💧 ━━━━━━━━",
+        "",
+        f"❤️ سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
+        f"{bar(current_hp, final_hp, '🟥', empty='⬜️')}",
+        "",
+        f"💧 مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
+        f"{bar(current_mana, final_mana, '🟦', empty='⬜️')}",
+        "",
+        "━━━━━━━━ ⚔️ ویژگی‌های رزمی ⚔️ ━━━━━━━━",
+        "",
+        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
+        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  ✨ دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
+        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
+        f"🍀 شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  💥 ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
+        "",
+        "━━━━━━━━ 🌟 مسیر قهرمانی 🌟 ━━━━━━━━",
+        "",
+        xp_progress,
+    ]
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -457,6 +494,11 @@ async def show_profile(
         profile_keyboard(),
         telegram_id,
     )
+
+    # Full profile may exceed Telegram's photo caption limit.
+    if len(text) > 1024:
+        await replace_with_text_panel(callback, text, keyboard)
+        return
 
     message = callback.message
 
