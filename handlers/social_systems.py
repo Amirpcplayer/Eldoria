@@ -142,8 +142,7 @@ async def get_profile_fan_art(
 async def settings_menu(callback: CallbackQuery):
     language = await get_language(callback.from_user.id)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=tr(language, "rename"), callback_data="settings:rename")],
-        [InlineKeyboardButton(text=tr(language, "language"), callback_data="settings:language")],
+        [InlineKeyboardButton(text="✍️ تغییر نام قهرمان", callback_data="settings:rename")],
         [InlineKeyboardButton(text=tr(language, "back"), callback_data="menu:back")],
     ])
     await settings_panel(callback, tr(language, "settings"), keyboard)
