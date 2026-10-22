@@ -725,7 +725,9 @@ async def boss_scheduler() -> None:
                 try:
                     if image_path is not None:
                         from aiogram.types import FSInputFile
-                        sent = await bot.send_photo(chat_id, FSInputFile(str(image_path)), caption=caption, parse_mode="HTML")
+                        from utils.telegram_image_preview import prepare_telegram_image
+                        preview_path = prepare_telegram_image(image_path)
+                        sent = await bot.send_photo(chat_id, FSInputFile(str(preview_path)), caption=caption, parse_mode="HTML")
                     else:
                         sent = await bot.send_message(chat_id, caption, parse_mode="HTML")
                 except Exception:
