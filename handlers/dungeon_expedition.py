@@ -125,7 +125,8 @@ async def _show_event(message: Message, chat_id: int):
     if not event:
         await message.answer("🌫️ هنوز دروازه‌ای در این گپ ظاهر نشده است. هر گپ چرخهٔ مستقل خودش را دارد.")
         return
-    await message.answer(event_text(event), reply_markup=event_keyboard(event.status), parse_mode="HTML")
+    language = await _dungeon_language(message.from_user.id if message.from_user else 0)
+    await message.answer(_dungeon_translate(event_text(event), language), reply_markup=event_keyboard(event.status), parse_mode="HTML")
 
 @router.message(Command("dungeon"))
 @router.message(F.text.regexp(r"^غنیمت[ \u200c]+دانجن$"))
@@ -144,11 +145,11 @@ async def dungeon_menu(callback: CallbackQuery):
     if callback.message and callback.message.chat.type in {"group", "supergroup"}:
         event = await get_group_event(callback.message.chat.id)
         if event:
-            try: await callback.message.edit_text(event_text(event), reply_markup=event_keyboard(event.status), parse_mode="HTML")
+            try: await callback.message.edit_text(_dungeon_translate(event_text(event), await _dungeon_language(callback.from_user.id)), reply_markup=event_keyboard(event.status), parse_mode="HTML")
             except Exception: pass
             await callback.answer()
         else:
-            await callback.answer("هنوز دانجنی در این گپ ظاهر نشده است.", show_alert=True)
+            await callback.answer(_dungeon_translate("هنوز دانجنی در این گپ ظاهر نشده است.", await _dungeon_language(callback.from_user.id)), show_alert=True)
     else:
         if callback.message:
             await _show_loot(callback.message)
@@ -161,7 +162,7 @@ async def dungeon_rules(callback: CallbackQuery):
 @router.callback_query(F.data == "dungeon:enter")
 async def dungeon_enter(callback: CallbackQuery):
     if not callback.message or callback.message.chat.type not in {"group", "supergroup"}:
-        await callback.answer("ورود به دانجن فقط از داخل گپی انجام می‌شود که دروازه در آن ظاهر شده.", show_alert=True); return
+        await callback.answer(_dungeon_translate("ورود به دانجن فقط از داخل گپی انجام می‌شود که دروازه در آن ظاهر شده.", await _dungeon_language(callback.from_user.id)), show_alert=True); return
     ok, message, data = await join_dungeon(callback.message.chat.id, callback.from_user.id)
     if not ok:
         await callback.answer(message, show_alert=True); return
@@ -174,7 +175,7 @@ async def dungeon_enter(callback: CallbackQuery):
 @router.callback_query(F.data == "dungeon:ready")
 async def dungeon_ready(callback: CallbackQuery):
     if not callback.message or callback.message.chat.type not in {"group", "supergroup"}:
-        await callback.answer("این دکمه فقط داخل گروه دانجن کار می‌کند.", show_alert=True); return
+        await callback.answer(_dungeon_translate("این دکمه فقط داخل گروه دانجن کار می‌کند.", await _dungeon_language(callback.from_user.id)), show_alert=True); return
     ok, message, data = await join_dungeon(callback.message.chat.id, callback.from_user.id)
     if not ok:
         await callback.answer(message, show_alert=True); return
@@ -192,7 +193,7 @@ async def dungeon_refresh(callback: CallbackQuery):
     if event:
         try: await callback.message.edit_text(event_text(event), reply_markup=event_keyboard(event.status), parse_mode="HTML")
         except Exception: pass
-    await callback.answer("وضعیت تازه شد.")
+    await callback.answer(_dungeon_translate("وضعیت تازه شد.", await _dungeon_language(callback.from_user.id)))
 
 async def _show_loot(message: Message):
     rows = await get_dungeon_loot(message.from_user.id if message.from_user else 0)
@@ -214,7 +215,7 @@ async def dungeon_sell_all(callback: CallbackQuery):
         text = (f"💰 <b>معاملهٔ غنیمت‌ها انجام شد!</b>\n\n{html.escape(msg)}\nگلد دریافت‌شده: <b>+{total:,}</b>" if ok else html.escape(msg))
         try: await callback.message.edit_text(text, reply_markup=protect_keyboard(InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 صندوقچهٔ دانجن", callback_data="dungeon:loot:refresh")]]), callback.from_user.id), parse_mode="HTML")
         except Exception: await callback.message.answer(text, parse_mode="HTML")
-    await callback.answer("فروش انجام شد." if ok else msg, show_alert=not ok)
+    await callback.answer(_dungeon_translate("فروش انجام شد." if ok else msg, await _dungeon_language(callback.from_user.id)), show_alert=not ok)
 
 @router.callback_query(F.data == "dungeon:loot:refresh")
 async def dungeon_loot_refresh(callback: CallbackQuery):
