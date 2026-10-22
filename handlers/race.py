@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 
 from database.database import AsyncSessionLocal
 from models.character import Character
+from models.item import Item
+from models.inventory import Inventory
 from keyboards.main_menu import enter_game_keyboard
 from game.stats import get_base_stats
 from services.panel_image_service import replace_panel_with_text
@@ -73,7 +75,7 @@ async def race_preview(callback: CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="✅ تأیید نژاد", callback_data="race:confirm")],
         [InlineKeyboardButton(text="↩️ بازگشت به نژادها", callback_data="race:back")],
     ])
-    await replace_panel(callback, f"༺ 🧬 {RACE_NAMES[race_id]} 🧬 ༻\n\n{RACE_LORE[race_id]}\n\n<b>📊 قدرت آغازین (+۳۰٪)</b>\n{lines}\n\n🪙 هدیهٔ شروع: ۵۰۰ گلد\n\nآیا این نژاد را تأیید می‌کنی؟", kb)
+    await replace_panel(callback, f"༺ 🧬 {RACE_NAMES[race_id]} 🧬 ༻\n\n{RACE_LORE[race_id]}\n\n<b>📊 ویژگی‌های آغازین</b>\n{lines}\n\nآیا این نژاد را تأیید می‌کنی؟", kb)
     await callback.answer()
 
 @router.callback_query(lambda c: c.data == "race:confirm")
@@ -104,6 +106,24 @@ async def race_handler(callback: CallbackQuery, state: FSMContext):
             **{k:stats[k] for k in ("attack", "magic_power", "defense", "magic_defense", "speed", "accuracy", "luck", "critical")})
         session.add(character)
         try:
+            await session.flush()
+            # Starting supplies and character are committed atomically.
+            for potion_name in ("🧪 معجون سلامتی", "🔷 معجون مانا"):
+                item = await session.scalar(
+                    select(Item).where(Item.name == potion_name, Item.item_type == "potion")
+                )
+                if item is None:
+                    item = Item(name=potion_name, item_type="potion", rarity="common",
+                                description="معجون معمولی؛ بازیابی ۲۰٪.", buy_price=0, sell_price=0)
+                    session.add(item)
+                    await session.flush()
+                inventory = await session.scalar(
+                    select(Inventory).where(Inventory.character_id == character.id, Inventory.item_id == item.id)
+                )
+                if inventory is None:
+                    session.add(Inventory(character_id=character.id, item_id=item.id, quantity=3))
+                else:
+                    inventory.quantity += 3
             await session.commit()
         except IntegrityError:
             await session.rollback()
@@ -111,5 +131,5 @@ async def race_handler(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             return
     await state.clear()
-    await replace_panel(callback, f"༺ ✨ بیداری قهرمان ✨ ༻\n\nنور سرنوشت بر {escape(name)} تابید...\n\n⚔️ نژاد: {race_name}\n🪙 طلای آغازین: ۵۰۰\n📈 قدرت پایه: ۳۰٪ بیشتر\n\n✦ افسانهٔ تو آغاز شد ✦", enter_game_keyboard())
+    await replace_panel(callback, f"༺ ✨ بیداری قهرمان ✨ ༻\n\nنور سرنوشت بر {escape(name)} تابید...\n\n⚔️ نژاد: {race_name}\n🪙 طلای آغازین: ۵۰۰\n🧪 معجون سلامتی معمولی: ۳ عدد\n🔷 معجون مانا معمولی: ۳ عدد\n\n✦ افسانهٔ تو آغاز شد ✦", enter_game_keyboard())
     await callback.answer()
