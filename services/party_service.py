@@ -741,3 +741,12 @@ async def start_party_dungeon(
             True,
             f"پارتی «{party.name}» با {len(members)} عضو وارد دانجن شد.",
         )
+
+async def browse_parties(limit: int = 10) -> list[dict]:
+    async with AsyncSessionLocal() as session:
+        parties = (await session.scalars(select(Party).where(Party.status == "open").order_by(Party.id.desc()).limit(max(1, min(limit, 20))))).all()
+        output = []
+        for party in parties:
+            count = await session.scalar(select(func.count(PartyMember.id)).where(PartyMember.party_id == party.id)) or 0
+            output.append({"id": party.id, "name": party.name, "member_count": int(count), "max_members": int(party.max_members)})
+        return output
