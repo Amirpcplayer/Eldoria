@@ -25,12 +25,12 @@ MAIN_MENU_TEXT = (
 
 @router.callback_query(F.data == "menu:back")
 async def main_menu_back_handler(callback: CallbackQuery) -> None:
-    # Keep the main menu layout and emoji labels stable across language changes.
+    language = await get_language(callback.from_user.id)
     await show_panel(
         callback=callback,
         panel_name="main_menu",
-        text=MAIN_MENU_TEXT,
-        reply_markup=main_menu_keyboard("fa"),
+        text=f"{tr(language, 'main_title')}\\n\\n{tr(language, 'main_sub')}",
+        reply_markup=main_menu_keyboard(language),
     )
     await callback.answer()
 
@@ -45,12 +45,18 @@ async def menu_command(message: Message):
             select(Character).where(Character.telegram_id == message.from_user.id)
         )
     if character is None:
-        await message.answer("هنوز حساب کاربری نداری. برای ساخت حساب، در پی‌وی دستور /start را بزن.")
+        language = await get_language(message.from_user.id)
+        messages = {
+            "fa": "هنوز حساب کاربری نداری. برای ساخت حساب، در پی‌وی دستور /start را بزن.",
+            "en": "You don't have a character yet. Open the bot in private chat and send /start to create one.",
+            "ru": "У вас ещё нет персонажа. Откройте личный чат с ботом и отправьте /start, чтобы создать его.",
+        }
+        await message.answer(messages.get(language, messages["fa"]))
         return
-    # Keep /menu identical to the Persian "منو" shortcut panel.
+    language = await get_language(message.from_user.id)
     await send_panel(
         message=message,
         panel_name="main_menu",
-        text=MAIN_MENU_TEXT,
-        reply_markup=main_menu_keyboard("fa"),
+        text=f"{tr(language, 'main_title')}\\n\\n{tr(language, 'main_sub')}",
+        reply_markup=main_menu_keyboard(language),
     )
