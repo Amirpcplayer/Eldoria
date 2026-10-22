@@ -42,5 +42,5 @@ async def test_stale_active_battle_index_is_removed(monkeypatch):
     result = await combat_service.get_active_battle_for_player(42)
 
     assert result is None
-    assert redis_get.await_count == 3
+    assert redis_get.await_count == 2
     redis_delete.assert_awaited_once_with(combat_service.get_player_active_battle_key(42))
