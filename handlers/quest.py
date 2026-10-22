@@ -45,6 +45,24 @@ def _quest_translate(text: str, language: str) -> str:
         "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.": ("You must be in a guild to access quests.", "Чтобы получить доступ к заданиям, нужно вступить в гильдию."),
         "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن.": ("Join a guild from the Guilds section, then try again.", "Вступите в гильдию в разделе гильдий и попробуйте снова."),
         "ابتدا باید عضو گیلد شوی.": ("Join a guild first.", "Сначала вступите в гильдию."),
+        "❌ دسته‌بندی مأموریت نامعتبر است.": ("❌ Invalid quest category.", "❌ Неверная категория задания."),
+        "📭 در حال حاضر مأموریتی در این بخش وجود ندارد.": ("📭 There are no quests in this category right now.", "📭 Сейчас в этой категории нет заданий."),
+        "📜 مأموریت‌های موجود:": ("📜 Available quests:", "📜 Доступные задания:"),
+        "برای مشاهده جزئیات، یک مأموریت را انتخاب کن.": ("Select a quest to view its details.", "Выберите задание, чтобы посмотреть подробности."),
+        "❌ شناسه مأموریت نامعتبر است.": ("❌ Invalid quest ID.", "❌ Неверный ID задания."),
+        "❌ این مأموریت دیگر فعال نیست.": ("❌ This quest is no longer active.", "❌ Это задание больше не активно."),
+        "❌ این مأموریت برای قهرمان تو فعال نشده است.": ("❌ This quest is not active for your hero.", "❌ Это задание не активировано для вашего героя."),
+        "به فهرست مأموریت‌ها برگرد و دوباره انتخاب کن.": ("Return to the quest list and select it again.", "Вернитесь к списку заданий и выберите его снова."),
+        "🏷️ دسته‌بندی: ": ("🏷️ Category: ", "🏷️ Категория: "),
+        "🎯 هدف: ": ("🎯 Objective: ", "🎯 Цель: "),
+        "📊 پیشرفت:": ("📊 Progress:", "📊 Прогресс:"),
+        "📌 وضعیت: ": ("📌 Status: ", "📌 Статус: "),
+        "🎁 <b>پاداش</b>": ("🎁 <b>Reward</b>", "🎁 <b>Награда</b>"),
+        "🔒 حداقل سطح: ": ("🔒 Minimum level: ", "🔒 Минимальный уровень: "),
+        "🔄 این مأموریت روزانه است.": ("🔄 This is a daily quest.", "🔄 Это ежедневное задание."),
+        "تجهیزات": ("Equipment", "Экипировка"),
+        "🎁 بدون پاداش": ("🎁 No reward", "🎁 Нет награды"),
+        "❔ نامشخص": ("❔ Unknown", "❔ Неизвестно"),
         "❌ شخصیت بازی پیدا نشد.": ("❌ Game character not found.", "❌ Игровой персонаж не найден."),
         "لطفاً ابتدا شخصیت خود را بساز.": ("Please create your character first.", "Сначала создайте персонажа."),
         "📜 <b>مأموریت‌های اِلدوریا</b>": ("📜 <b>Eldoria Quests</b>", "📜 <b>Задания Эльдории</b>"),
@@ -235,7 +253,7 @@ async def quest_list(callback: CallbackQuery):
         await show_panel(
             callback=callback,
             panel_name="quest",
-            text="❌ دسته‌بندی مأموریت نامعتبر است.",
+            text=_quest_translate("❌ دسته‌بندی مأموریت نامعتبر است.", await _quest_language(callback.from_user.id)),
             reply_markup=quest_main_keyboard(),
         )
         await callback.answer()
@@ -281,7 +299,7 @@ async def quest_list(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=text,
+        text=_quest_translate(text, await _quest_language(callback.from_user.id)),
         reply_markup=quest_list_keyboard(quests, category),
     )
 
@@ -404,7 +422,7 @@ async def quest_detail(callback: CallbackQuery):
         await show_panel(
             callback=callback,
             panel_name="quest",
-            text="❌ شناسه مأموریت نامعتبر است.",
+            text=_quest_translate("❌ شناسه مأموریت نامعتبر است.", await _quest_language(callback.from_user.id)),
             reply_markup=quest_main_keyboard(),
         )
         await callback.answer()
@@ -426,7 +444,7 @@ async def quest_detail(callback: CallbackQuery):
         await show_panel(
             callback=callback,
             panel_name="quest",
-            text="❌ این مأموریت دیگر فعال نیست.",
+            text=_quest_translate("❌ این مأموریت دیگر فعال نیست.", await _quest_language(callback.from_user.id)),
             reply_markup=quest_main_keyboard(),
         )
         await callback.answer()
@@ -485,7 +503,7 @@ async def quest_detail(callback: CallbackQuery):
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=text,
+        text=_quest_translate(text, await _quest_language(callback.from_user.id)),
         reply_markup=quest_detail_keyboard(
             quest.id,
             can_claim,
