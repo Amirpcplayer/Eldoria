@@ -286,3 +286,14 @@ async def claim_guild_leader_reward(telegram_id: int) -> tuple[bool, str]:
         guild.last_leader_reward_at = now
         await session.commit()
         return True, f"👑 پاداش روزانهٔ رهبری دریافت شد: {GUILD_LEADER_REWARD_GOLD:,} طلا به موجودی شخصی‌ات افزوده شد."
+
+
+async def get_guild_by_id(guild_id: int) -> dict | None:
+    async with AsyncSessionLocal() as session:
+        guild = await session.scalar(select(Guild).where(Guild.id == guild_id))
+        if guild is None:
+            return None
+        count = await session.scalar(select(func.count(GuildMember.id)).where(GuildMember.guild_id == guild.id)) or 0
+        return {"id": guild.id, "name": guild.name, "tag": guild.tag,
+                "owner_telegram_id": int(guild.owner_telegram_id),
+                "member_count": int(count), "max_members": int(guild.max_members)}
