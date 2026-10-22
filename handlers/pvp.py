@@ -1117,42 +1117,6 @@ class ActivePetAttackPhraseFilter(BaseFilter):
         return match is not None
 
 
-@router.message(Command("mypet"))
-async def mypet_help(message: Message) -> None:
-    if message.from_user is None:
-        return
-    active = await _get_active_pet_row(message.from_user.id)
-    if not active:
-        await message.reply("🐾 هنوز پت فعالی نداری. ابتدا از بخش پت‌ها یک پت تهیه و فعال کن.")
-        return
-    pet_row, pet, _character = active
-    now = datetime.utcnow()
-    started = pet_row.pet_attack_window_started_at
-    uses = int(pet_row.pet_attack_uses or 0)
-    if started is None or now - started >= PET_ATTACK_WINDOW:
-        remaining_text = "آماده؛ سهمیهٔ ۲۴ ساعته از اولین حمله شروع می‌شود."
-        uses = 0
-    elif uses < PET_ATTACKS_PER_WINDOW:
-        remaining_text = f"{PET_ATTACKS_PER_WINDOW - uses} حمله باقی مانده در بازهٔ ۲۴ ساعته."
-    else:
-        seconds = max(0, int((started + PET_ATTACK_WINDOW - now).total_seconds()))
-        remaining_text = f"سهمیه پر شده؛ بازگشت حمله‌ها تا {seconds // 3600} ساعت و {(seconds % 3600) // 60} دقیقهٔ دیگر."
-    phrase = pet_row.pet_attack_phrase or "تنظیم نشده"
-    await message.reply(
-        f"🐾 <b>پیوند پت اِلدوریا</b>\n\n"
-        f"✨ پت فعال: <b>{html.escape(pet.name)}</b> · Lv.{min(100, int(pet_row.level or 1))}\n"
-        f"🗝 کلمهٔ حملهٔ اختصاصی: <code>{html.escape(phrase)}</code>\n"
-        f"⚔️ حمله با پت: حداکثر ۳ بار در هر ۲۴ ساعت\n"
-        f"⏳ وضعیت سهمیه: {html.escape(remaining_text)}\n\n"
-        "<b>راهنما</b>\n"
-        "۱. برای تعیین کلمهٔ اختصاصی بنویس: <code>تنظیم حمله پت < عبارت ></code>\n"
-        "۲. در گروه روی پیام بازیکن هدف ریپلای کن و کلمهٔ اختصاصی پتت را بفرست.\n"
-        "۳. کلمهٔ عمومی <code>حمله</code> همچنان حملهٔ عادی قهرمان را اجرا می‌کند.\n\n"
-        "قدرت پایهٔ حملهٔ پت با سطحش بالا می‌رود؛ در Lv.100 به حدود ۱۱۰٪ حملهٔ قهرمان می‌رسد.",
-        parse_mode="HTML",
-    )
-
-
 @router.message(F.text.regexp(r"(?i)^\s*تنظیم\s+حمله\s+پت\s+([^\s]+)\s*$"))
 async def set_pet_attack_phrase(message: Message) -> None:
     if message.from_user is None or message.from_user.is_bot:
