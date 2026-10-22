@@ -8,14 +8,13 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from PIL import Image, ImageOps
 
-# A phone-wallpaper portrait frame for bot artwork. Images are contained, never
-# stretched or cropped; other aspect ratios receive padding.
-FRAME_SIZE = (1080, 1920)
-FRAME_COLOR = (18, 20, 30)
+# Maximum output dimensions. Preserve each image's own aspect ratio and size
+# when already within these limits; never add a canvas or padding.
+MAX_IMAGE_SIZE = (1080, 1920)
 
 
 async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg", portrait: bool = False) -> BufferedInputFile:
-    """Normalize images to a phone-wallpaper portrait canvas without cropping."""
+    """Keep native aspect ratio; downscale only if wider than 1080 or taller than 1920."""
     raw = BytesIO()
 
     if isinstance(source, (str, Path)) and Path(str(source)).is_file():
@@ -32,14 +31,8 @@ async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jp
     raw.seek(0)
     with Image.open(raw) as opened:
         image = ImageOps.exif_transpose(opened).convert("RGB")
-        frame_size = FRAME_SIZE
-        image.thumbnail(frame_size, Image.Resampling.LANCZOS)
-
-        frame = Image.new("RGB", frame_size, FRAME_COLOR)
-        x = (frame_size[0] - image.width) // 2
-        y = (frame_size[1] - image.height) // 2
-        frame.paste(image, (x, y))
+        image.thumbnail(MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
 
         output = BytesIO()
-        frame.save(output, format="JPEG", quality=94, optimize=True)
+        image.save(output, format="JPEG", quality=94, optimize=True)
         return BufferedInputFile(output.getvalue(), filename=filename)
