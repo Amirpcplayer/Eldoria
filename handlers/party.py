@@ -204,7 +204,8 @@ def party_manage_keyboard(
         [
             [_button("👥 نمایش اعضا", "party:members")],
             [_button("🗑️ حذف پارتی", "party:disband")],
-            [_button("🔙 بازگشت", "menu:party")],
+            [_button("🔙 بازگشت به پارتی", "menu:party")],
+            [_button("🏠 منوی اصلی", "party:home")],
         ]
     )
 
