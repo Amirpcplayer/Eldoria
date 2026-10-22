@@ -261,11 +261,17 @@ async def fanart_add_panel_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FanArtStates.add_image)
     if callback.message:
         await callback.message.answer(
-            "🎨 افزودن فن‌آرت به شاپ\n\n"
-            "۱) تصویر فن‌آرت را به‌صورت Photo ارسال کن.\n"
-            "بعد نام، رریتی، قیمت به تومان و موجودی را وارد می‌کنی.\n"
-            "قیمت گلد خودکار با نرخ ۵۰٬۰۰۰ تومان = ۲٬۰۰۰ گلد محاسبه می‌شود.\n\n"
-            "برای لغو: /cancel"
+            "╭─── ✦ 🎨 ✦ ───╮\n"
+            "   <b>کارگاه افزودن فن‌آرت</b>\n"
+            "╰─── ✦ 🎨 ✦ ───╯\n\n"
+            "بیایید یک اثر تازه به فروشگاه اِلدوریا اضافه کنیم. ✨\n"
+            "من قدم‌به‌قدم همراهت هستم؛ اطلاعات هر مرحله را می‌پرسم و در پایان اثر را ثبت می‌کنم.\n\n"
+            "🧭 <b>مراحل کار</b>\n"
+            "۱. تصویر اثر\n۲. نام و رریتی\n۳. قیمت واقعی\n۴. موجودی محدود یا نامحدود\n\n"
+            "🪙 ارزش گلد خودکار با نرخ ۵۰٬۰۰۰ تومان = ۲٬۰۰۰ گلد محاسبه می‌شود.\n"
+            "📷 <b>مرحله ۱ از ۴:</b> تصویر فن‌آرت را به‌صورت Photo ارسال کن.\n\n"
+            "هر زمان خواستی، /cancel را بفرست تا به پنل ادمین برگردی.",
+            parse_mode="HTML"
         )
     await callback.answer()
 
@@ -304,7 +310,8 @@ async def fanart_cancel(
     await state.clear()
 
     await message.answer(
-        "❌ عملیات لغو شد."
+        "❌ فرایند افزودن فن‌آرت لغو شد.\n\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 بازگشت به پنل ادمین", callback_data="admin:home")]])
     )
 
 
@@ -328,7 +335,11 @@ async def fanart_add_image(
     )
 
     await message.answer(
-        "📝 نام Fan Art را ارسال کن."
+        "✅ تصویر دریافت شد!\n\n"
+        "📝 <b>مرحله ۲ از ۴ — نام اثر</b>\n"
+        "یک نام کوتاه و جذاب برای این فن‌آرت بفرست. این نام در فروشگاه نمایش داده می‌شود.\n\n"
+        "لغو و بازگشت به پنل: /cancel",
+        parse_mode="HTML"
     )
 
 
@@ -340,7 +351,7 @@ async def fanart_add_image_invalid(
         return
 
     await message.answer(
-        "❌ لطفاً تصویر Fan Art را به صورت Photo ارسال کن."
+        "📷 هنوز تصویری دریافت نکردم. لطفاً عکس فن‌آرت را به شکل Photo بفرست؛ متن به‌تنهایی کافی نیست.\\nبرای خروج از فرایند: /cancel"
     )
 
 
@@ -376,13 +387,11 @@ async def fanart_add_name(
     # Descriptions are not collected for Fan Art anymore.
     await state.set_state(FanArtStates.add_rarity)
     await message.answer(
-        "💎 رریتی Fan Art را ارسال کن.\n\n"
-        "گزینه‌ها:\n"
-        "common\n"
-        "rare\n"
-        "epic\n"
-        "legendary\n"
-        "mythic"
+        "💎 <b>مرحله ۲ از ۴ — درجه کمیابی</b>\n"
+        "رریتی اثر را انتخاب کن؛ می‌توانی نام فارسی یا انگلیسی را بفرستی.\n\n"
+        "▫️ common — معمولی\n🔹 rare — کمیاب\n🟣 epic — حماسی\n🟡 legendary — افسانه‌ای\n🔴 mythic — اسطوره‌ای\n\n"
+        "لغو: /cancel",
+        parse_mode="HTML"
     )
 
 
@@ -458,9 +467,12 @@ async def fanart_add_rarity(
     )
 
     await message.answer(
-        "💰 قیمت Fan Art را به صورت عددی وارد کن.\n\n"
-        "مثال:\n"
-        "250000"
+        "💰 <b>مرحله ۳ از ۴ — قیمت فن‌آرت</b>\n"
+        "قیمت نهایی را به تومان و فقط با عدد وارد کن.\n"
+        "مثال: <code>250000</code>\n\n"
+        "ارزش گلد داخل بازی به‌صورت خودکار محاسبه می‌شود.\n"
+        "لغو: /cancel",
+        parse_mode="HTML"
     )
 
 
@@ -502,7 +514,13 @@ async def fanart_add_price(
     await state.update_data(price=price, value_gold=value_gold)
     await state.set_state(FanArtStates.add_limited)
     await message.answer(
-        "🗃 آیا Fan Art محدود است؟\n\nبله\nیا\nخیر"
+        "🗃 <b>مرحله ۴ از ۴ — نوع موجودی</b>\n"
+        "این فن‌آرت تعداد محدودی دارد؟\n\n"
+        "اگر «بله» انتخاب کنی، تعداد موجودی را هم وارد می‌کنی.\n"
+        "اگر «خیر» انتخاب کنی، موجودی نامحدود خواهد بود.\n\n"
+        "فقط «بله» یا «خیر» را بفرست.\n"
+        "لغو: /cancel",
+        parse_mode="HTML"
     )
 
 
@@ -533,9 +551,11 @@ async def fanart_add_limited(
         )
 
         await message.answer(
-            "🗃 تعداد موجودی را وارد کن.\n\n"
-            "مثال:\n"
-            "10"
+            "📦 <b>موجودی محدود</b>\n"
+            "چند عدد از این فن‌آرت برای فروش موجود است؟ تعداد را به‌صورت عدد صحیح مثبت بفرست.\n"
+            "مثال: <code>10</code>\n\n"
+            "لغو: /cancel",
+            parse_mode="HTML"
         )
 
         return
