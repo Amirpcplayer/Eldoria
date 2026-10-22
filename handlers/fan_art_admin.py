@@ -312,14 +312,14 @@ async def fanart_cancel(
     is_fanart_flow = bool(current_state and current_state.startswith("FanArtStates"))
 
     if is_fanart_flow:
-        text = "❌ فرایند افزودن فن‌آرت لغو شد.\n\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی."
+        text = "❌ فرایند افزودن فن‌آرت لغو شد.\\n\\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی."
+        markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 بازگشت به پنل ادمین", callback_data="admin:home")]])
     else:
-        text = "❌ عملیات جاری لغو شد.\n\nبه پنل اصلی مدیریت برگشتی."
+        text = "🛡 پنل مدیریت World Eldoria\\n\\nعملیات جاری لغو شد؛ به منوی اصلی برگشتی."
+        from handlers.admin_temp import admin_keyboard, delegated_admin_keyboard
+        markup = admin_keyboard() if is_admin(message.from_user.id) else delegated_admin_keyboard()
 
-    await message.answer(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 بازگشت به پنل ادمین", callback_data="admin:home")]])
-    )
+    await message.answer(text, reply_markup=markup)
 
 
 @router.message(
