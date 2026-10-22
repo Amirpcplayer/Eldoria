@@ -8,14 +8,14 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from PIL import Image, ImageOps
 
-# A single landscape frame for bot artwork. Images are contained, never stretched
-# or cropped; portrait/square artwork receives padding instead of being distorted.
-FRAME_SIZE = (1280, 720)
+# A phone-wallpaper portrait frame for bot artwork. Images are contained, never
+# stretched or cropped; other aspect ratios receive padding.
+FRAME_SIZE = (720, 1280)
 FRAME_COLOR = (18, 20, 30)
 
 
 async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jpg", portrait: bool = False) -> BufferedInputFile:
-    """Normalize an image to a landscape canvas, or portrait for profiles."""
+    """Normalize images to a phone-wallpaper portrait canvas without cropping."""
     raw = BytesIO()
 
     if isinstance(source, (str, Path)) and Path(str(source)).is_file():
@@ -32,7 +32,7 @@ async def prepare_photo(bot: Bot, source: Any, filename: str = "eldoria-image.jp
     raw.seek(0)
     with Image.open(raw) as opened:
         image = ImageOps.exif_transpose(opened).convert("RGB")
-        frame_size = (720, 1280) if portrait else FRAME_SIZE
+        frame_size = FRAME_SIZE
         image.thumbnail(frame_size, Image.Resampling.LANCZOS)
 
         frame = Image.new("RGB", frame_size, FRAME_COLOR)
