@@ -741,20 +741,14 @@ async def boss_scheduler() -> None:
                             image_path,
                             filename="eldoria-boss.jpg",
                         )
-                        sent_photo = await bot.send_photo(chat_id, prepared_photo)
-                        try:
-                            sent_text = await bot.send_message(
-                                chat_id,
-                                caption,
-                                parse_mode="HTML",
-                            )
-                        except Exception:
-                            # Avoid leaving an orphaned boss image if its text template failed.
-                            try:
-                                await bot.delete_message(chat_id, sent_photo.message_id)
-                            except Exception:
-                                logger.debug("Could not remove orphaned boss photo", exc_info=True)
-                            raise
+                        # Restore the original single-message presentation: image plus story caption.
+                        sent_photo = await bot.send_photo(
+                            chat_id,
+                            prepared_photo,
+                            caption=caption,
+                            parse_mode="HTML",
+                        )
+                        sent_text = sent_photo
                     else:
                         sent_text = await bot.send_message(chat_id, caption, parse_mode="HTML")
                 except Exception:
