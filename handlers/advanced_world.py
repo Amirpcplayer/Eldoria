@@ -1,6 +1,6 @@
 from __future__ import annotations
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -597,6 +597,10 @@ async def pet_attack_phrase_receive(message: Message, state: FSMContext):
         return
 
     phrase = " ".join(message.text.strip().split())
+    if phrase in {"لغو", "انصراف"}:
+        await state.clear()
+        await message.answer("تنظیم عبارت حمله لغو شد؛ پنل اصلی پت با /mypet در دسترس است.")
+        return
     if phrase.startswith("/") or not 3 <= len(phrase) <= 32:
         await message.answer(
             "عبارت باید بین ۳ تا ۳۲ نویسه باشد و با / شروع نشود. دوباره بفرست."
