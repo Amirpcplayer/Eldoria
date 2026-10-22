@@ -45,6 +45,7 @@ from keyboards.item import (
 )
 
 from states.character import PlayerTrade
+from services.language_service import get_language
 
 
 router = Router()
@@ -84,6 +85,17 @@ async def _get_character(telegram_id: int):
         )
 
 
+_INV_TEXT = {
+"en": {"صندوقچه قهرمان":"Hero's chest","دسته‌بندی موردنظر را انتخاب کنید:":"Choose a category:","تمام آیتم‌های واقعی صندوقچه":"All items in chest","آیتم‌ها":"Items","تجهیزات موجود در صندوقچه":"Equipment in chest","برای مشاهده جزئیات روی یکی از تجهیزات بزنید.":"Select equipment to view details.","فن‌آرت‌های صندوقچه":"Fan art in chest","فن‌آرت موردنظر را انتخاب کنید:":"Choose fan art:","معجون‌های صندوقچه":"Potions in chest","متریال‌های صندوقچه":"Materials in chest","اسکرول‌های صندوقچه":"Scrolls in chest","صندوقچه‌ات فعلاً خالی است.":"Your chest is empty.","توضیحی برای این آیتم ثبت نشده است.":"No description available for this item.","توضیحی برای این تجهیزات ثبت نشده است.":"No description available for this equipment.","تعداد":"Quantity","قیمت فروش":"Sell price","کمیابی":"Rarity","نوع":"Type","حمله":"Attack","قدرت جادو":"Magic power","دفاع جادویی":"Magic defense","دفاع":"Defense","سرعت":"Speed","دقت":"Accuracy","کریتیکال":"Critical","فعال‌سازی":"Activate","فعال است":"Active","فروش به بازیکن":"Sell to player","فروش به فروشگاه":"Sell to shop","بازگشت به اسکرول‌ها":"Back to scrolls","بازگشت به تجهیزات":"Back to equipment","تجهیز کردن":"Equip","خارج کردن از تجهیزات":"Unequip","بازگشت به صندوقچه":"Back to chest","این آیتم در صندوقچه شما نیست.":"This item is not in your chest.","قهرمان پیدا نشد.":"Hero not found.","شخصیت شما پیدا نشد.":"Your character was not found.","موردی برای نمایش در این بخش وجود ندارد.":"Nothing to display here.","شناسهٔ اسکرول معتبر نیست.":"Invalid scroll ID.","این اسکرول در صندوقچه‌ات نیست.":"This scroll is not in your chest.","معامله با موفقیت انجام شد!":"Trade completed successfully!","معامله رد شد.":"Trade rejected.","طلای کافی برای این معامله ندارید.":"Not enough Gold for this trade."},
+"ru": {"صندوقچه قهرمان":"Сундук героя","دسته‌بندی موردنظر را انتخاب کنید:":"Выберите категорию:","تمام آیتم‌های واقعی صندوقچه":"Все предметы в сундуке","آیتم‌ها":"Предметы","تجهیزات موجود در صندوقچه":"Снаряжение в сундуке","برای مشاهده جزئیات روی یکی از تجهیزات بزنید.":"Выберите снаряжение, чтобы увидеть подробности.","فن‌آرت‌های صندوقچه":"Фан-арт в сундуке","فن‌آرت موردنظر را انتخاب کنید:":"Выберите фан-арт:","معجون‌های صندوقچه":"Зелья в сундуке","متریال‌های صندوقچه":"Материалы в сундуке","اسکرول‌های صندوقچه":"Свитки в сундуке","صندوقچه‌ات فعلاً خالی است.":"Ваш сундук пуст.","توضیحی برای این آیتم ثبت نشده است.":"Описание предмета отсутствует.","توضیحی برای این تجهیزات ثبت نشده است.":"Описание снаряжения отсутствует.","تعداد":"Количество","قیمت فروش":"Цена продажи","کمیابی":"Редкость","نوع":"Тип","حمله":"Атака","قدرت جادو":"Сила магии","دفاع جادویی":"Магическая защита","دفاع":"Защита","سرعت":"Скорость","دقت":"Точность","کریتیکال":"Критический удар","فعال‌سازی":"Активировать","فعال است":"Активно","فروش به بازیکن":"Продать игроку","فروش به فروشگاه":"Продать магазину","بازگشت به اسکرول‌ها":"Назад к свиткам","بازگشت به تجهیزات":"Назад к снаряжению","تجهیز کردن":"Экипировать","خارج کردن از تجهیزات":"Снять снаряжения","بازگشت به صندوقچه":"Назад в сундук","این آیتم در صندوقچه شما نیست.":"Этого предмета нет в сундуке.","قهرمان پیدا نشد.":"Герой не найден.","شخصیت شما پیدا نشد.":"Персонаж не найден.","موردی برای نمایش در این بخش وجود ندارد.":"Здесь нечего показывать.","شناسهٔ اسکرول معتبر نیست.":"Неверный ID свитка.","این اسکرول در صندوقچه‌ات نیست.":"Этого свитка нет в сундуке.","معامله با موفقیت انجام شد!":"Обмен успешно завершён!","معامله رد شد.":"Обмен отклонён.","طلای کافی برای این معامله ندارید.":"Недостаточно золота для обмена."}
+}
+
+def _translate_inventory_text(text: str, language: str) -> str:
+    for source, target in _INV_TEXT.get(language, {}).items():
+        text = text.replace(source, target)
+    return text
+
+
 async def _show(
     callback: CallbackQuery,
     text: str,
@@ -97,6 +109,14 @@ async def _show(
     """
 
     try:
+        language = await get_language(callback.from_user.id)
+        if language in ("en", "ru"):
+            text = _translate_inventory_text(text, language)
+            if reply_markup is not None and getattr(reply_markup, "inline_keyboard", None):
+                rows = []
+                for row in reply_markup.inline_keyboard:
+                    rows.append([button.model_copy(update={"text": _translate_inventory_text(button.text, language)}) for button in row])
+                reply_markup = reply_markup.model_copy(update={"inline_keyboard": rows})
         await show_panel(
             callback=callback,
             panel_name="inventory",
