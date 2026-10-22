@@ -528,11 +528,36 @@ async def admin_add_delegated_admin_finish(message: Message, state: FSMContext):
         return
     await add_delegated_admin(target.telegram_id)
     await state.clear()
+
+    # Notify the newly appointed admin privately. Failure to deliver the DM
+    # must not undo the permission change.
+    try:
+        await bot.send_message(
+            target.telegram_id,
+            "╭─── ✦ 🛡️ ✦ ───╮\n"
+            "   <b>خوش‌آمدید، ادمین محترم اِلدوریا</b>\n"
+            "╰─── ✦ 🛡️ ✦ ───╯\n\n"
+            "با احترام، به جمع مدیران منتخب <b>World Eldoria</b> خوش آمدید. ✨\n"
+            "مالک ربات به شما اعتماد کرده و دسترسی مدیریتی محدود و مشخصی در اختیارتان قرار داده است.\n\n"
+            "🔑 <b>دسترسی‌های شما</b>\n"
+            "• دادن گلد به بازیکنان\n"
+            "• گیفت XP، Skill XP و Gem\n"
+            "• اسپان دستی باس و دانجن\n"
+            "• جست‌وجوی بازیکنان، مدیریت پلیرها و مشاهده فهرست آن‌ها\n\n"
+            "لطفاً با دقت، انصاف و احترام از این دسترسی‌ها استفاده کنید. سایر بخش‌های مدیریتی همچنان در اختیار مالک ربات است.\n\n"
+            "برای ورود به پنل، به پی‌وی ربات برگردید و دستور /admin را ارسال کنید.\n\n"
+            "🌟 از همراهی و مسئولیت‌پذیری شما سپاسگزاریم.\n"
+            "<i>تیم World Eldoria</i>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        logger.warning("Could not DM newly appointed delegated admin telegram_id=%s", target.telegram_id, exc_info=True)
+
     await message.answer(
         "✅ ادمین با موفقیت اضافه شد.\n\n"
         f"👤 @{target.telegram_username or username}\n"
         f"🆔 {target.telegram_id}\n\n"
-        "دسترسی او فقط شامل گلد، XP، Skill XP، Gem، اسپان دستی باس/دانجن و مدیریت بازیکنان است.",
+        "پیام خوش‌آمدگویی و توضیحات دسترسی نیز در صورت امکان به پی‌وی او ارسال شد.",
         reply_markup=admin_keyboard(),
     )
 
@@ -594,6 +619,32 @@ async def admin_remove_delegated_admin_confirm(callback: CallbackQuery):
         return
 
     await remove_delegated_admin(target_id)
+
+    # Notify the former admin privately. Revocation remains successful even
+    # if Telegram does not allow the bot to deliver a private message.
+    try:
+        async with AsyncSessionLocal() as session:
+            target = await session.scalar(
+                select(Character).where(Character.telegram_id == target_id)
+            )
+        username = (getattr(target, "telegram_username", None) or "").strip().lstrip("@")
+        identity = f"@{username}" if username else f"شناسه تلگرام: {target_id}"
+        await bot.send_message(
+            target_id,
+            "╭─── ✦ 📜 ✦ ───╮\n"
+            "   <b>اطلاعیه محترمانه مدیریت اِلدوریا</b>\n"
+            "╰─── ✦ 📜 ✦ ───╯\n\n"
+            "ادمین گرامی،\n"
+            "با احترام به اطلاع می‌رسانیم که دسترسی مدیریتی شما در <b>World Eldoria</b> بنا به تصمیم مالک ربات لغو شده است.\n\n"
+            "از زمانی که برای همراهی و کمک به مدیریت اِلدوریا گذاشتید، صمیمانه سپاسگزاریم. این تغییر صرفاً به معنی پایان دسترسی مدیریتی است و از احترام ما به شما کم نمی‌کند. 🤝\n\n"
+            "از این پس امکان استفاده از پنل و ابزارهای مدیریتی برای شما فعال نخواهد بود. همچنان می‌توانید مانند سایر بازیکنان از دنیای اِلدوریا لذت ببرید.\n\n"
+            "برای شما روزهایی خوش و ماجراجویی‌هایی درخشان آرزو می‌کنیم. ✨\n\n"
+            "<i>با احترام، تیم World Eldoria</i>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        logger.warning("Could not DM removed delegated admin telegram_id=%s", target_id, exc_info=True)
+
     await admin_remove_delegated_admin_list(callback)
 
 
