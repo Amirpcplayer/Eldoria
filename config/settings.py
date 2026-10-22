@@ -7,6 +7,12 @@ class Settings(BaseSettings):
     redis_url: str
     admin_id: int
 
+    # Tune these to the hosting provider/database connection budget.
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
+
     fanart_payment_info: str = (
         "اطلاعات پرداخت توسط مدیریت اعلام می‌شود."
     )
