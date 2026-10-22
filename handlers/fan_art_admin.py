@@ -395,11 +395,47 @@ async def fanart_add_name(
     await state.set_state(FanArtStates.add_rarity)
     await message.answer(
         "💎 <b>مرحله ۲ از ۴ — درجه کمیابی</b>\n"
-        "رریتی اثر را انتخاب کن؛ می‌توانی نام فارسی یا انگلیسی را بفرستی.\n\n"
-        "▫️ common — معمولی\n🔹 rare — کمیاب\n🟣 epic — حماسی\n🟡 legendary — افسانه‌ای\n🔴 mythic — اسطوره‌ای\n\n"
+        "یکی از گزینه‌های زیر را لمس کن تا رریتی اثر انتخاب شود. ✨\n\n"
         "لغو: /cancel",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="▫️ معمولی · Common", callback_data="fanartcreate:rarity:common")],
+            [InlineKeyboardButton(text="🔹 کمیاب · Rare", callback_data="fanartcreate:rarity:rare")],
+            [InlineKeyboardButton(text="🟣 حماسی · Epic", callback_data="fanartcreate:rarity:epic")],
+            [InlineKeyboardButton(text="🟡 افسانه‌ای · Legendary", callback_data="fanartcreate:rarity:legendary")],
+            [InlineKeyboardButton(text="🔴 اسطوره‌ای · Mythic", callback_data="fanartcreate:rarity:mythic")],
+        ]),
     )
+
+
+@router.callback_query(F.data.startswith("fanartcreate:rarity:"))
+async def fanart_add_rarity_button(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    if await state.get_state() != FanArtStates.add_rarity.state:
+        await callback.answer("این مرحله منقضی شده؛ دوباره افزودن فن‌آرت را شروع کن.", show_alert=True)
+        return
+
+    rarity = callback.data.rsplit(":", 1)[-1]
+    if rarity not in {"common", "rare", "epic", "legendary", "mythic"}:
+        await callback.answer("رریتی نامعتبر است.", show_alert=True)
+        return
+
+    await state.update_data(rarity=rarity)
+    await state.set_state(FanArtStates.add_price)
+    if callback.message:
+        await callback.message.edit_text(
+            f"✅ رریتی انتخاب شد: <b>{rarity}</b>\n\n"
+            "💰 <b>مرحله ۳ از ۴ — قیمت فن‌آرت</b>\n"
+            "قیمت نهایی را به تومان و فقط با عدد وارد کن.\n"
+            "مثال: <code>250000</code>\n\n"
+            "ارزش گلد داخل بازی به‌صورت خودکار محاسبه می‌شود.\n"
+            "لغو: /cancel",
+            parse_mode="HTML",
+        )
+    await callback.answer("رریتی انتخاب شد.")
 
 
 @router.message(
