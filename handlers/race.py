@@ -84,6 +84,11 @@ async def race_handler(callback: CallbackQuery, state: FSMContext):
         return
     name = data.get("name")
     gender_id = data.get("gender")
+    if not isinstance(name, str) or not name.strip() or name.strip().startswith(("/", "!")) or len(name.strip()) < 3 or len(name.strip()) > 32:
+        await callback.answer("نام قهرمان معتبر نیست؛ دوباره از /start نام تازه‌ای انتخاب کن.", show_alert=True)
+        await state.clear()
+        return
+    name = name.strip()
     gender_name = GENDER_NAMES.get(gender_id)
     if not name or not gender_name:
         await callback.answer("اطلاعات ناقص است؛ /start را بزن.", show_alert=True)
