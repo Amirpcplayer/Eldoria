@@ -555,10 +555,6 @@ async def pet_attack_phrase_start(cb: CallbackQuery, state: FSMContext):
     current_phrase = (character_pet.pet_attack_phrase or "").strip()
     await state.set_state(PetAttackPhraseStates.waiting_for_phrase)
     await state.update_data(pet_phrase_owner=cb.from_user.id)
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بازگشت به عبارت پیش‌فرض", callback_data="pets:phrase:reset")],
-        [InlineKeyboardButton(text="❌ لغو", callback_data="pets:phrase:cancel")],
-    ])
     await cb.answer()
     await cb.message.answer(
         "✏️ <b>تنظیم عبارت حملهٔ پت</b>\n\n"
@@ -654,9 +650,6 @@ async def pet_attack_phrase_receive(message: Message, state: FSMContext):
         f"🐾 عبارت جدید: <code>{html.escape(phrase)}</code>\n"
         "عبارت برای پت فعال تو ذخیره شد.",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🐾 باز کردن پت‌ها", callback_data="pets:list")]
-        ]),
     )
 
 @router.callback_query(F.data=='pets:evolve')
