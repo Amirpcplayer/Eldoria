@@ -77,6 +77,9 @@ async def direct_magic_attack(
             if attacker is None or target is None:
                 await redis.delete(key)
                 return {"ok": False, "message": "❌ هر دو بازیکن باید شخصیت ساخته باشند."}
+            if str(attacker.name or "").strip().startswith("/") or str(target.name or "").strip().startswith("/"):
+                await redis.delete(key)
+                return {"ok": False, "message": "🚫 نام یکی از قهرمانان نامعتبر است (شبیه دستور ربات). لطفاً نام قهرمان را اصلاح کن؛ هیچ جان، مانا یا طلایی تغییر نکرد."}
 
             now = datetime.utcnow()
             if (
