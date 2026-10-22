@@ -10,7 +10,7 @@ from PIL import Image, ImageOps
 
 # A phone-wallpaper portrait frame for bot artwork. Images are contained, never
 # stretched or cropped; other aspect ratios receive padding.
-FRAME_SIZE = (720, 1280)
+FRAME_SIZE = (1080, 1920)
 FRAME_COLOR = (18, 20, 30)
 
 
