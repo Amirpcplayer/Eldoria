@@ -47,6 +47,7 @@ from handlers.combat import router as combat_router
 from handlers.adventure import router as adventure_router
 from handlers.pvp import router as pvp_router
 from handlers.party import router as party_router
+from handlers.membership_requests import router as membership_requests_router
 from handlers.social_systems import router as social_systems_router
 from handlers.dungeon_expedition import router as dungeon_expedition_router
 from handlers.guild import router as guild_router
@@ -138,6 +139,7 @@ dp.include_router(fan_art_hunt_router)
 dp.include_router(combat_router)
 dp.include_router(adventure_router)
 dp.include_router(pvp_router)
+dp.include_router(membership_requests_router)
 dp.include_router(party_router)
 dp.include_router(social_systems_router)
 dp.include_router(dungeon_expedition_router)
