@@ -843,7 +843,7 @@ async def party_text_input(message: Message) -> None:
         if not text or len(text) > MAX_NAME_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                ff"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
+                f"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
                 "create_name",
             )
             return
@@ -851,8 +851,8 @@ async def party_text_input(message: Message) -> None:
         await show_input_prompt_from_message(
             message,
             (
-                "➕ <b>ساخت پارتی — مرحلهٔ ۲ از ۴</b>\n\n"
-                "عنوان پارتی را وارد کن."
+                "➕ <b>ساخت پارتی · ۲/۴</b>\n\n"
+                "عنوان پارتی را بفرست."
             ),
             "create_title",
             party_name=text,
@@ -872,9 +872,8 @@ async def party_text_input(message: Message) -> None:
         await show_input_prompt_from_message(
             message,
             (
-                "➕ <b>ساخت پارتی — مرحلهٔ ۳ از ۴</b>\n\n"
-                "توضیحات پارتی را وارد کن.\n"
-                "اگر توضیحی نمی‌خواهی، فقط «-» ارسال کن."
+                "➕ <b>ساخت پارتی · ۳/۴</b>\n\n"
+                "توضیحات را بفرست؛ برای رد کردن، «-» را ارسال کن."
             ),
             "create_description",
             party_name=state.get("party_name"),
@@ -907,12 +906,12 @@ async def party_text_input(message: Message) -> None:
         sent = await show_party_message(
             message,
             (
-                "➕ <b>ساخت پارتی — مرحلهٔ ۴ از ۴</b>\n\n"
-                "ظرفیت پارتی را انتخاب کن:\n\n"
-                "💰 ۴ نفر: ۵٬۰۰۰ طلا\n"
-                "💰 ۶ نفر: ۷٬۰۰۰ طلا\n"
-                "💰 ۸ نفر: ۹٬۰۰۰ طلا\n"
-                "💰 ۱۰ نفر: ۱۱٬۰۰۰ طلا"
+                "➕ <b>ساخت پارتی · ۴/۴</b>\n\n"
+                "ظرفیت را انتخاب کن:\n\n"
+                "👥 ۴ نفر · ۵٬۰۰۰ طلا\n"
+                "👥 ۶ نفر · ۷٬۰۰۰ طلا\n"
+                "👥 ۸ نفر · ۹٬۰۰۰ طلا\n"
+                "👥 ۱۰ نفر · ۱۱٬۰۰۰ طلا"
             ),
             party_capacity_keyboard(),
         )
@@ -960,7 +959,7 @@ async def party_text_input(message: Message) -> None:
         if not text or len(text) > MAX_NAME_LENGTH:
             await show_input_prompt_from_message(
                 message,
-                ff"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
+                f"⚠️ نام باید ۱ تا {MAX_NAME_LENGTH} نویسه باشد.",
                 "rename_party",
             )
             return
