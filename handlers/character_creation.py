@@ -10,6 +10,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from states.character import CharacterCreation
 from keyboards.character import gender_keyboard, race_keyboard
+from services.language_service import get_language
 
 
 router = Router()
@@ -81,7 +82,7 @@ async def character_name_handler(message: Message, state: FSMContext):
         "⚧ <b>جنسیت قهرمانت را انتخاب کن:</b>\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "✦ سرنوشت هنوز نوشته نشده است ✦",
-        reply_markup=gender_keyboard(),
+        reply_markup=gender_keyboard(await get_language(message.from_user.id)),
         parse_mode=ParseMode.HTML,
     )
 
@@ -107,7 +108,7 @@ async def character_gender_handler(callback: CallbackQuery, state: FSMContext):
         "🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "✦ میراثت را برگزین، قهرمان ✦",
-        reply_markup=race_keyboard(),
+        reply_markup=race_keyboard(await get_language(callback.from_user.id)),
         parse_mode=ParseMode.HTML,
     )
     try:
