@@ -29,6 +29,23 @@ def _reference_key(chat_id: int, owner_id: int) -> str:
     return f"eldoria:panel_reference:v2:{chat_id}:{owner_id}"
 
 
+async def _get_reference(chat_id: int, owner_id: int) -> int | None:
+    """Return the remembered bot-panel message ID, if available."""
+    try:
+        value = await redis.get(_reference_key(chat_id, owner_id))
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="ignore")
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Invalid stored panel reference for chat=%s owner=%s", chat_id, owner_id)
+        return None
+    except Exception:
+        logger.exception("Could not read panel reference")
+        return None
+
+
 async def _save_reference(chat_id: int, owner_id: int, message_id: int) -> None:
     try:
         await redis.set(
