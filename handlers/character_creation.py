@@ -90,7 +90,7 @@ async def character_gender_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(gender=gender_id)
     await replace_panel_with_text(
         callback=callback,
-        text=f"⚧ جنسیت: <b>{gender_name}</b>\n\n🧬 نژاد قهرمانت را انتخاب کن:".replace("\\\n", "\n"),
+        text=f"⚧ جنسیت: <b>{gender_name}</b>\\n\\n🧬 نژاد قهرمانت را انتخاب کن:",
         reply_markup=race_keyboard(),
         parse_mode=ParseMode.HTML,
     )
