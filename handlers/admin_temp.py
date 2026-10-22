@@ -236,7 +236,7 @@ def player_details_keyboard(
             [
                 InlineKeyboardButton(
                     text="🗑 حذف این پلیر",
-                    callback_data=f"admin:delete:confirm:{telegram_id}",
+                    callback_data=f"admin:delete:select:{telegram_id}",
                 )
             ],
             [
@@ -854,7 +854,7 @@ async def admin_players_list_alias(callback: CallbackQuery):
     rows.append([InlineKeyboardButton(text="🔙 مدیریت پلیرها", callback_data="admin:delete_players")])
     if callback.message:
         await callback.message.edit_text(
-            f"📚 <b>لیست بازیکنان</b> · صفحه {page + 1}\\n\\nبازیکن موردنظر را انتخاب کن تا پروفایل و دارایی‌هایش نمایش داده شود.",
+            f"📚 <b>لیست بازیکنان</b> · صفحه {page + 1}\n\nبازیکن موردنظر را انتخاب کن تا پروفایل و دارایی‌هایش نمایش داده شود.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -899,20 +899,20 @@ async def admin_player_profile_view(callback: CallbackQuery):
         items_text = [f"📦 {name} ×{quantity}" for name, quantity in item_rows]
         fan_art_text = [f"🎨 {name}" for (name,) in fan_art_rows]
         profile = (
-            "╭─── ✦ 👤 ✦ ───╮\\n"
-            f"  <b>پروفایل بازیکن · {html.escape(character.name)}</b>\\n"
-            "╰─── ✦ 👤 ✦ ───╯\\n\\n"
-            f"🔎 یوزرنیم: @{html.escape(character.telegram_username or 'ثبت نشده')}\\n"
-            f"🆔 شناسه: <code>{telegram_id}</code>\\n"
-            f"🧬 نژاد: {html.escape(character.race or 'نامشخص')}\\n"
-            f"⭐ سطح: {character.level} · ✨ XP: {int(character.xp or 0):,}\\n"
-            f"🔮 Skill XP: {int(character.skill_xp or 0):,}\\n"
-            f"💰 گلد: {int(character.gold or 0):,} · 💎 جم: {int(character.gems or 0):,}\\n"
-            f"❤️ HP: {character.hp:,}/{character.max_hp:,} · 💧 مانا: {character.mana:,}/{character.max_mana:,}\\n"
-            f"⚔️ حمله: {character.attack:,} · 🛡 دفاع: {character.defense:,}\\n\\n"
-            "<b>🛡️ تجهیزات</b>\\n" + ("\\n".join(equipment_text) if equipment_text else "تجهیزاتی ثبت نشده") + "\\n\\n"
-            "<b>📦 صندوقچه و آیتم‌ها</b>\\n" + ("\\n".join(items_text) if items_text else "آیتمی ثبت نشده") + "\\n\\n"
-            "<b>🎨 فن‌آرت‌ها</b>\\n" + ("\\n".join(fan_art_text) if fan_art_text else "فن‌آرتی ندارد")
+            "╭─── ✦ 👤 ✦ ───╮\n"
+            f"  <b>پروفایل بازیکن · {html.escape(character.name)}</b>\n"
+            "╰─── ✦ 👤 ✦ ───╯\n\n"
+            f"🔎 یوزرنیم: @{html.escape(character.telegram_username or 'ثبت نشده')}\n"
+            f"🆔 شناسه: <code>{telegram_id}</code>\n"
+            f"🧬 نژاد: {html.escape(character.race or 'نامشخص')}\n"
+            f"⭐ سطح: {character.level} · ✨ XP: {int(character.xp or 0):,}\n"
+            f"🔮 Skill XP: {int(character.skill_xp or 0):,}\n"
+            f"💰 گلد: {int(character.gold or 0):,} · 💎 جم: {int(character.gems or 0):,}\n"
+            f"❤️ HP: {character.hp:,}/{character.max_hp:,} · 💧 مانا: {character.mana:,}/{character.max_mana:,}\n"
+            f"⚔️ حمله: {character.attack:,} · 🛡 دفاع: {character.defense:,}\n\n"
+            "<b>🛡️ تجهیزات</b>\n" + ("\n".join(equipment_text) if equipment_text else "تجهیزاتی ثبت نشده") + "\n\n"
+            "<b>📦 صندوقچه و آیتم‌ها</b>\n" + ("\n".join(items_text) if items_text else "آیتمی ثبت نشده") + "\n\n"
+            "<b>🎨 فن‌آرت‌ها</b>\n" + ("\n".join(fan_art_text) if fan_art_text else "فن‌آرتی ندارد")
         )
         markup = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="💰 دادن گلد", callback_data=f"admin:gold:select:{telegram_id}")],
@@ -1254,7 +1254,7 @@ async def admin_gold_cancel_message(
     await state.clear()
 
     await message.answer(
-        "❌ عملیات واریز گلد لغو شد.\\n\\nبرای ادامه از پنل اصلی مدیریت استفاده کن.",
+        "❌ عملیات واریز گلد لغو شد.\n\nبرای ادامه از پنل اصلی مدیریت استفاده کن.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]),
     )
 
@@ -1471,7 +1471,7 @@ async def admin_gold_cancel_callback(
 
     if callback.message:
         await callback.message.edit_text(
-            "❌ عملیات واریز گلد لغو شد.\\n\\nبه پنل اصلی مدیریت برگشتی.",
+            "❌ عملیات واریز گلد لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🛡 بازگشت به پنل /admin", callback_data="admin:home")]
             ]),
@@ -1730,14 +1730,14 @@ async def admin_gold_confirm(
     try:
         await bot.send_message(
             telegram_id,
-            "╭─── ✦ 💰 ✦ ───╮\\n"
-            "   <b>هدیه‌ای از سوی مدیریت اِلدوریا</b>\\n"
-            "╰─── ✦ 💰 ✦ ───╯\\n\\n"
-            f"قهرمان <b>{html.escape(character_name or 'اِلدوریا')}</b>، خبر خوش! ✨\\n"
-            "مدیریت World Eldoria برای قدردانی از حضورت، این هدیه را به حسابت اضافه کرد.\\n\\n"
-            f"🎁 گلد دریافتی: <b>+{amount:,}</b>\\n"
-            f"💰 موجودی جدید: <b>{new_gold:,}</b>\\n\\n"
-            "امیدواریم این هدیه در ماجراجویی‌های بعدی همراهت باشد.\\n"
+            "╭─── ✦ 💰 ✦ ───╮\n"
+            "   <b>هدیه‌ای از سوی مدیریت اِلدوریا</b>\n"
+            "╰─── ✦ 💰 ✦ ───╯\n\n"
+            f"قهرمان <b>{html.escape(character_name or 'اِلدوریا')}</b>، خبر خوش! ✨\n"
+            "مدیریت World Eldoria برای قدردانی از حضورت، این هدیه را به حسابت اضافه کرد.\n\n"
+            f"🎁 گلد دریافتی: <b>+{amount:,}</b>\n"
+            f"💰 موجودی جدید: <b>{new_gold:,}</b>\n\n"
+            "امیدواریم این هدیه در ماجراجویی‌های بعدی همراهت باشد.\n"
             "<i>با آرزوی درخشش بیشتر، تیم World Eldoria</i>",
             parse_mode="HTML",
         )
@@ -1746,16 +1746,16 @@ async def admin_gold_confirm(
 
     if callback.message:
         await callback.message.edit_text(
-            "╭─── ✦ 🧾 ✦ ───╮\\n"
-            "   <b>فاکتور واریز گلد</b>\\n"
-            "╰─── ✦ 🧾 ✦ ───╯\\n\\n"
-            f"👤 بازیکن: <b>{html.escape(character_name or 'نامشخص')}</b>\\n"
-            f"🆔 Telegram ID: <code>{telegram_id}</code>\\n"
-            f"💰 موجودی قبلی: <b>{old_gold:,}</b>\\n"
-            f"➕ گلد واریزشده: <b>{amount:,}</b>\\n"
-            f"💰 موجودی جدید: <b>{new_gold:,}</b>\\n"
-            f"🛡 انجام‌دهنده: <code>{callback.from_user.id}</code>\\n"
-            "📌 وضعیت: <b>موفق</b>\\n\\n"
+            "╭─── ✦ 🧾 ✦ ───╮\n"
+            "   <b>فاکتور واریز گلد</b>\n"
+            "╰─── ✦ 🧾 ✦ ───╯\n\n"
+            f"👤 بازیکن: <b>{html.escape(character_name or 'نامشخص')}</b>\n"
+            f"🆔 Telegram ID: <code>{telegram_id}</code>\n"
+            f"💰 موجودی قبلی: <b>{old_gold:,}</b>\n"
+            f"➕ گلد واریزشده: <b>{amount:,}</b>\n"
+            f"💰 موجودی جدید: <b>{new_gold:,}</b>\n"
+            f"🛡 انجام‌دهنده: <code>{callback.from_user.id}</code>\n"
+            "📌 وضعیت: <b>موفق</b>\n\n"
             "رسید این عملیات ثبت شد.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
