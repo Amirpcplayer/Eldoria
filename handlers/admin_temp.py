@@ -25,8 +25,10 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from models.fan_art import FanArtOwnership
 from models.quest import CharacterQuest
-from models.equipment import Equipment
+from models.equipment import Equipment, CharacterEquipment
 from models.item import Item
+from models.inventory import Inventory
+from models.fan_art import FanArt
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
 from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins, remove_delegated_admin
@@ -113,18 +115,9 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="✨ مدیریت ایموجی‌های پرمیوم", callback_data="admin:emoji:home"),
             ],
             [
-                InlineKeyboardButton(text="🔎 جست‌وجوی بازیکن با یوزرنیم", callback_data="admin:players:search"),
-            ],
-            [
                 InlineKeyboardButton(
                     text="🗑 مدیریت پلیرها",
                     callback_data="admin:delete_players",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👥 فهرست پلیرها",
-                    callback_data="admin:delete:list:0",
                 )
             ],
             [
@@ -169,34 +162,11 @@ def fanart_admin_keyboard() -> InlineKeyboardMarkup:
 
 
 def player_management_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🔎 جست‌وجوی پلیر",
-                    callback_data="admin:players:search",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💰 دادن گلد به پلیر",
-                    callback_data="admin:gold:start",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👥 فهرست پلیرها",
-                    callback_data="admin:delete:list:0",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔙 بازگشت به پنل ادمین",
-                    callback_data="admin:home",
-                )
-            ],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📚 لیست بازیکنان", callback_data="admin:players:list:0")],
+        [InlineKeyboardButton(text="🔎 جست‌وجو با یوزرنیم تلگرام", callback_data="admin:players:search")],
+        [InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")],
+    ])
 
 
 def player_list_keyboard(
@@ -700,7 +670,7 @@ async def delete_players_start(
     if callback.message:
         await callback.message.edit_text(
             "🗑 مدیریت پلیرها\n\n"
-            "می‌توانی پلیر را جست‌وجو کنی یا فهرست پلیرها را ببینی.",
+            "از اینجا می‌توانی لیست بازیکنان را باز کنی یا با یوزرنیم تلگرام، مستقیم پروفایل یک بازیکن را ببینی.",
             reply_markup=player_management_keyboard(),
         )
 
@@ -822,14 +792,13 @@ async def search_player_submit(
 
     if len(characters) == 1:
         character = characters[0]
-
+        await state.clear()
         await message.answer(
-            "👤 پلیر پیدا شد\n\n"
-            f"نام شخصیت: {character.name}\n"
-            f"سطح: {character.level}\n"
-            f"یوزرنیم: @{character.telegram_username or 'ثبت نشده'}\n"
-            f"Telegram ID: {character.telegram_id}",
-            reply_markup=player_details_keyboard(character.telegram_id),
+            f"👤 بازیکن «{character.name}» پیدا شد. برای مشاهده پروفایل کامل، تجهیزات، آیتم‌ها و فن‌آرت‌ها روی دکمه زیر بزن.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="👤 مشاهده پروفایل کامل", callback_data=f"admin:profile:view:{character.telegram_id}")],
+                [InlineKeyboardButton(text="🔎 جست‌وجوی دوباره", callback_data="admin:players:search")],
+            ]),
         )
         return
 
@@ -837,6 +806,128 @@ async def search_player_submit(
         f"🔎 {len(characters)} نتیجه پیدا شد؛ پلیر موردنظر را انتخاب کن:",
         reply_markup=player_search_results_keyboard(characters),
     )
+
+
+@router.callback_query(F.data.startswith("admin:players:list:"))
+async def admin_players_list_alias(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id) and not await is_delegated_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        page = max(0, int((callback.data or "").rsplit(":", 1)[-1]))
+    except (ValueError, AttributeError):
+        await callback.answer("شماره صفحه نامعتبر است.", show_alert=True)
+        return
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Character)
+                .where(Character.telegram_id.not_in((settings.admin_id, GLOBAL_BOT_OWNER_ID)))
+                .order_by(Character.id.desc())
+                .offset(page * PAGE_SIZE)
+                .limit(PAGE_SIZE + 1)
+            )
+            characters = list(result.scalars().all())
+    except SQLAlchemyError:
+        logger.exception("Admin player listing failed. Page=%s AdminID=%s", page, callback.from_user.id)
+        await callback.answer("خطای پایگاه داده؛ جزئیات در ترمینال ثبت شد.", show_alert=True)
+        return
+    has_next = len(characters) > PAGE_SIZE
+    characters = characters[:PAGE_SIZE]
+    if not characters:
+        if callback.message:
+            await callback.message.edit_text("📚 در این صفحه بازیکنی برای نمایش وجود ندارد.", reply_markup=player_management_keyboard())
+        await callback.answer()
+        return
+    rows = [[InlineKeyboardButton(
+        text=f"👤 {c.name} · Lv.{c.level}",
+        callback_data=f"admin:profile:view:{c.telegram_id}",
+    )] for c in characters]
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ قبلی", callback_data=f"admin:players:list:{page - 1}"))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"admin:players:list:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔎 جست‌وجو با یوزرنیم", callback_data="admin:players:search")])
+    rows.append([InlineKeyboardButton(text="🔙 مدیریت پلیرها", callback_data="admin:delete_players")])
+    if callback.message:
+        await callback.message.edit_text(
+            f"📚 <b>لیست بازیکنان</b> · صفحه {page + 1}\\n\\nبازیکن موردنظر را انتخاب کن تا پروفایل و دارایی‌هایش نمایش داده شود.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:profile:view:"))
+async def admin_player_profile_view(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id) and not await is_delegated_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    try:
+        telegram_id = int((callback.data or "").rsplit(":", 1)[1])
+    except (TypeError, ValueError):
+        await callback.answer("شناسه بازیکن معتبر نیست.", show_alert=True)
+        return
+    try:
+        async with AsyncSessionLocal() as session:
+            character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id))
+            if character is None:
+                await callback.answer("بازیکن پیدا نشد.", show_alert=True)
+                return
+            equipment_rows = (await session.execute(
+                select(Equipment.name, CharacterEquipment.quantity, CharacterEquipment.equipped, CharacterEquipment.enhancement_level)
+                .join(CharacterEquipment, CharacterEquipment.equipment_id == Equipment.id)
+                .where(CharacterEquipment.character_id == character.id)
+                .order_by(CharacterEquipment.equipped.desc(), Equipment.name)
+            )).all()
+            item_rows = (await session.execute(
+                select(Item.name, Inventory.quantity)
+                .join(Inventory, Inventory.item_id == Item.id)
+                .where(Inventory.character_id == character.id)
+                .order_by(Item.name)
+            )).all()
+            fan_art_rows = (await session.execute(
+                select(FanArt.name)
+                .join(FanArtOwnership, FanArtOwnership.fan_art_id == FanArt.id)
+                .where(FanArtOwnership.telegram_id == telegram_id)
+                .order_by(FanArt.name)
+            )).all()
+        equipment_text = [f"{'🛡️' if equipped else '🎒'} {name} ×{quantity}" + (f" · +{enhancement}" if enhancement else "") for name, quantity, equipped, enhancement in equipment_rows]
+        items_text = [f"📦 {name} ×{quantity}" for name, quantity in item_rows]
+        fan_art_text = [f"🎨 {name}" for (name,) in fan_art_rows]
+        profile = (
+            "╭─── ✦ 👤 ✦ ───╮\\n"
+            f"  <b>پروفایل بازیکن · {html.escape(character.name)}</b>\\n"
+            "╰─── ✦ 👤 ✦ ───╯\\n\\n"
+            f"🔎 یوزرنیم: @{html.escape(character.telegram_username or 'ثبت نشده')}\\n"
+            f"🆔 شناسه: <code>{telegram_id}</code>\\n"
+            f"🧬 نژاد: {html.escape(character.race or 'نامشخص')}\\n"
+            f"⭐ سطح: {character.level} · ✨ XP: {int(character.xp or 0):,}\\n"
+            f"🔮 Skill XP: {int(character.skill_xp or 0):,}\\n"
+            f"💰 گلد: {int(character.gold or 0):,} · 💎 جم: {int(character.gems or 0):,}\\n"
+            f"❤️ HP: {character.hp:,}/{character.max_hp:,} · 💧 مانا: {character.mana:,}/{character.max_mana:,}\\n"
+            f"⚔️ حمله: {character.attack:,} · 🛡 دفاع: {character.defense:,}\\n\\n"
+            "<b>🛡️ تجهیزات</b>\\n" + ("\\n".join(equipment_text) if equipment_text else "تجهیزاتی ثبت نشده") + "\\n\\n"
+            "<b>📦 صندوقچه و آیتم‌ها</b>\\n" + ("\\n".join(items_text) if items_text else "آیتمی ثبت نشده") + "\\n\\n"
+            "<b>🎨 فن‌آرت‌ها</b>\\n" + ("\\n".join(fan_art_text) if fan_art_text else "فن‌آرتی ندارد")
+        )
+        markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 دادن گلد", callback_data=f"admin:gold:select:{telegram_id}")],
+            [InlineKeyboardButton(text="🔎 جست‌وجوی بازیکن دیگر", callback_data="admin:players:search")],
+            [InlineKeyboardButton(text="📚 بازگشت به لیست بازیکنان", callback_data="admin:players:list:0")],
+            [InlineKeyboardButton(text="🗑 حذف بازیکن", callback_data=f"admin:delete:confirm:{telegram_id}")],
+            [InlineKeyboardButton(text="🔙 مدیریت پلیرها", callback_data="admin:delete_players")],
+        ])
+        if callback.message:
+            await callback.message.edit_text(profile, parse_mode="HTML", reply_markup=markup)
+    except SQLAlchemyError:
+        logger.exception("Admin profile view failed for telegram_id=%s", telegram_id)
+        await callback.answer("خطای پایگاه داده هنگام خواندن پروفایل.", show_alert=True)
+        return
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("admin:delete:list:"))
@@ -1163,8 +1254,8 @@ async def admin_gold_cancel_message(
     await state.clear()
 
     await message.answer(
-        "❌ عملیات دادن گلد لغو شد.",
-        reply_markup=player_management_keyboard(),
+        "❌ عملیات واریز گلد لغو شد.\\n\\nبرای ادامه از پنل اصلی مدیریت استفاده کن.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")]]),
     )
 
 
@@ -1380,23 +1471,10 @@ async def admin_gold_cancel_callback(
 
     if callback.message:
         await callback.message.edit_text(
-            "❌ عملیات دادن گلد لغو شد.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="🔙 مدیریت پلیرها",
-                            callback_data="admin:delete_players",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="🛡 پنل ادمین",
-                            callback_data="admin:home",
-                        )
-                    ],
-                ]
-            ),
+            "❌ عملیات واریز گلد لغو شد.\\n\\nبه پنل اصلی مدیریت برگشتی.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🛡 بازگشت به پنل /admin", callback_data="admin:home")]
+            ]),
         )
 
     await callback.answer("عملیات لغو شد.")
@@ -1649,37 +1727,41 @@ async def admin_gold_confirm(
         callback.from_user.id,
     )
 
+    try:
+        await bot.send_message(
+            telegram_id,
+            "╭─── ✦ 💰 ✦ ───╮\\n"
+            "   <b>هدیه‌ای از سوی مدیریت اِلدوریا</b>\\n"
+            "╰─── ✦ 💰 ✦ ───╯\\n\\n"
+            f"قهرمان <b>{html.escape(character_name or 'اِلدوریا')}</b>، خبر خوش! ✨\\n"
+            "مدیریت World Eldoria برای قدردانی از حضورت، این هدیه را به حسابت اضافه کرد.\\n\\n"
+            f"🎁 گلد دریافتی: <b>+{amount:,}</b>\\n"
+            f"💰 موجودی جدید: <b>{new_gold:,}</b>\\n\\n"
+            "امیدواریم این هدیه در ماجراجویی‌های بعدی همراهت باشد.\\n"
+            "<i>با آرزوی درخشش بیشتر، تیم World Eldoria</i>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        logger.info("Could not DM gold gift recipient telegram_id=%s", telegram_id, exc_info=True)
+
     if callback.message:
         await callback.message.edit_text(
-            "✅ گلد با موفقیت به بازیکن اضافه شد!\n\n"
-            f"👤 بازیکن: {character_name}\n"
-            f"🆔 Telegram ID: {telegram_id}\n"
-            f"💰 موجودی قبلی: {old_gold:,}\n"
-            f"➕ گلد اهدایی: {amount:,}\n"
-            f"💰 موجودی جدید: {new_gold:,}\n\n"
-            "تغییرات در دیتابیس ذخیره شد.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="💰 واریز گلد دیگر",
-                            callback_data="admin:gold:start",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="🔙 مدیریت پلیرها",
-                            callback_data="admin:delete_players",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="🛡 پنل ادمین",
-                            callback_data="admin:home",
-                        )
-                    ],
-                ]
-            ),
+            "╭─── ✦ 🧾 ✦ ───╮\\n"
+            "   <b>فاکتور واریز گلد</b>\\n"
+            "╰─── ✦ 🧾 ✦ ───╯\\n\\n"
+            f"👤 بازیکن: <b>{html.escape(character_name or 'نامشخص')}</b>\\n"
+            f"🆔 Telegram ID: <code>{telegram_id}</code>\\n"
+            f"💰 موجودی قبلی: <b>{old_gold:,}</b>\\n"
+            f"➕ گلد واریزشده: <b>{amount:,}</b>\\n"
+            f"💰 موجودی جدید: <b>{new_gold:,}</b>\\n"
+            f"🛡 انجام‌دهنده: <code>{callback.from_user.id}</code>\\n"
+            "📌 وضعیت: <b>موفق</b>\\n\\n"
+            "رسید این عملیات ثبت شد.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💰 واریز گلد دیگر", callback_data="admin:gold:start")],
+                [InlineKeyboardButton(text="🛡 پنل ادمین", callback_data="admin:home")],
+            ]),
         )
 
     await callback.answer("گلد با موفقیت واریز شد.")
