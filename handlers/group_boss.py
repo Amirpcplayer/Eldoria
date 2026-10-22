@@ -705,23 +705,36 @@ async def boss_scheduler() -> None:
                     row.message_id = None
                     await session.commit()
                 caption = boss_spawn_caption(cfg, spawned_level, row.max_hp, boss_weakness(cfg))
-                sent = None
+                sent_text = None
+                sent_photo = None
                 image_path = resolve_boss_image(cfg)
                 try:
+                    # Keep the artwork and the original boss template in separate messages.
+                    # The text message is a reply to the photo and is the canonical boss
+                    # message that /attack and the Persian "حمله" command must target.
                     if image_path is not None:
                         prepared_photo = await prepare_photo(
                             bot,
                             image_path,
                             filename="eldoria-boss.jpg",
                         )
-                        sent = await bot.send_photo(
-                            chat_id,
-                            prepared_photo,
-                            caption=caption,
-                            parse_mode="HTML",
-                        )
+                        sent_photo = await bot.send_photo(chat_id, prepared_photo)
+                        try:
+                            sent_text = await bot.send_message(
+                                chat_id,
+                                caption,
+                                parse_mode="HTML",
+                                reply_to_message_id=sent_photo.message_id,
+                            )
+                        except Exception:
+                            # Avoid leaving an orphaned boss image if its text template failed.
+                            try:
+                                await bot.delete_message(chat_id, sent_photo.message_id)
+                            except Exception:
+                                logger.debug("Could not remove orphaned boss photo", exc_info=True)
+                            raise
                     else:
-                        sent = await bot.send_message(chat_id, caption, parse_mode="HTML")
+                        sent_text = await bot.send_message(chat_id, caption, parse_mode="HTML")
                 except Exception:
                     logger.exception("Could not announce group boss: chat_id=%s", chat_id)
                     async with AsyncSessionLocal() as session:
@@ -734,7 +747,7 @@ async def boss_scheduler() -> None:
                 async with AsyncSessionLocal() as session:
                     row = await session.scalar(select(GroupBoss).where(GroupBoss.id == row_id))
                     if row:
-                        row.message_id = sent.message_id
+                        row.message_id = sent_text.message_id
                         await session.commit()
         except asyncio.CancelledError:
             raise
