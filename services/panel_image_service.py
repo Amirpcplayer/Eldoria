@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, FSInputFile, Message
 from config.panel_images import PANEL_IMAGES
 from database.redis import redis
 from middlewares.panel_owner import protect_keyboard
+from utils.telegram_image_preview import prepare_telegram_image
 
 
 PANEL_REFERENCE_TTL = 60 * 60 * 24 * 30
@@ -24,7 +25,7 @@ def get_panel_image(panel_name: str) -> Path | None:
     if not path.is_file():
         return None
 
-    return path
+    return prepare_telegram_image(path)
 
 
 def _reference_key(chat_id: int, owner_id: int) -> str:
