@@ -22,6 +22,8 @@ from services.guild_service import (
     leave_guild,
 )
 
+from handlers.membership_requests import parse_id, public_id, request_membership
+
 router = Router(name="guild")
 logger = logging.getLogger(__name__)
 FLOW_PREFIX = "eldoria:guild:flow:"
@@ -75,7 +77,7 @@ def guild_home_keyboard(has_guild: bool, is_owner: bool = False) -> InlineKeyboa
     else:
         rows = [
             [_btn("🏰 ساخت گیلد", "guild:create")],
-            [_btn("🔎 یافتن گیلدها", "guild:rankings")],
+            [_btn("📜 لیست گیلدها", "guild:browse")],
             [_btn("🔗 پیوستن با شناسه", "guild:join")],
         ]
     rows.append([_btn("🔄 به‌روزرسانی", "menu:guild"), _btn("🏠 منوی اصلی", "menu:back")])
@@ -126,7 +128,7 @@ async def _home(callback: CallbackQuery, notice: str = "") -> None:
         text = (
             "🛡️ <b>تالار گیلد اِلدوریا</b>\n\n"
             f"🏰 <b>{html.escape(guild['name'])}</b>  <code>[{html.escape(guild['tag'])}]</code>\n"
-            f"🆔 شناسه: <code>{guild['id']}</code>\n"
+            f"🆔 شناسه: <code>{public_id('guild', guild['id'])}</code>\n"
             f"⭐ سطح گیلد: <b>{guild['level']}</b>\n"
             f"👥 اعضا: <b>{guild['member_count']}/{guild['max_members']}</b>\n"
             f"✨ تجربه: {guild['xp']:,}/{guild['next_level_xp']:,}\n{bar}\n\n"
@@ -155,10 +157,45 @@ async def guild_create_start(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "guild:join")
 async def guild_join_start(callback: CallbackQuery) -> None:
     if await get_guild_for_player(callback.from_user.id):
-        await _show(callback, "⚠️ هم‌اکنون عضو یک گیلد هستی.", guild_home_keyboard(True))
+        await _home(callback, "⚠️ هم‌اکنون عضو یک گیلد هستی.")
         return
+    await _show(callback, "🔎 <b>پیوستن به گیلد</b>\n\nروش پیوستن را انتخاب کن.", _keyboard([
+        [_btn("🔗 پیوستن با شناسه", "guild:join:id")],
+        [_btn("📜 لیست گیلدها", "guild:browse")],
+        [_btn("🔙 بازگشت", "menu:guild")],
+    ]))
+
+
+@router.callback_query(F.data == "guild:join:id")
+async def guild_join_id(callback: CallbackQuery) -> None:
     await _set_flow(callback.from_user.id, "join_id", chat_id=callback.message.chat.id if callback.message else None)
-    await _show(callback, "🔗 <b>پیوستن به گیلد</b>\n\nشناسهٔ گیلد را ارسال کن.", _keyboard([[_btn("✖️ لغو", "guild:cancel")]]))
+    await _show(callback, "🔗 شناسه را ارسال کن؛ نمونه: <code>GLD-0001</code>", _keyboard([[_btn("✖️ لغو", "guild:cancel")]]))
+
+
+@router.callback_query(F.data == "guild:browse")
+async def guild_browse(callback: CallbackQuery) -> None:
+    guilds = await browse_guilds(20)
+    lines = ["📜 <b>گیلدهای اِلدوریا</b>", ""]
+    rows = []
+    for g in guilds:
+        lines.append(f"🏰 <b>{html.escape(g['name'])}</b> · 👥 {g['member_count']}/{g['max_members']} · <code>{public_id('guild', g['id'])}</code>")
+        if g["member_count"] < g["max_members"]:
+            rows.append([_btn(f"➕ پیوستن · {str(g['name'])[:22]}", f"guild:apply:{g['id']}")])
+    if not guilds:
+        lines.append("هنوز گیلدی ساخته نشده است.")
+    rows.append([_btn("🔙 بازگشت", "guild:join")])
+    await _show(callback, "\n".join(lines), _keyboard(rows))
+
+
+@router.callback_query(F.data.startswith("guild:apply:"))
+async def guild_apply(callback: CallbackQuery) -> None:
+    try:
+        guild_id = int(callback.data.rsplit(":", 1)[1])
+    except (ValueError, AttributeError):
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    ok, result = await request_membership("guild", callback.from_user.id, guild_id)
+    await _show(callback, ("✅ " if ok else "⚠️ ") + html.escape(result), guild_home_keyboard(False))
 
 
 @router.callback_query(F.data == "guild:donate")
@@ -199,14 +236,13 @@ async def guild_text_flow(message: Message) -> None:
         await message.answer(("✅ " if success else "⚠️ ") + html.escape(result), parse_mode="HTML", reply_markup=protect_keyboard(guild_home_keyboard(success, success), user_id))
         return
     if stage == "join_id":
-        try:
-            guild_id = int(value)
-        except ValueError:
-            await message.answer("⚠️ شناسه باید عدد باشد. دوباره ارسال کن.")
+        guild_id = parse_id(value, "guild")
+        if guild_id is None:
+            await message.answer("⚠️ شناسه نامعتبر است؛ نمونه: GLD-0001")
             return
         await _clear_flow(user_id)
-        success, result = await join_guild(user_id, guild_id)
-        await message.answer(("✅ " if success else "⚠️ ") + html.escape(result), parse_mode="HTML", reply_markup=protect_keyboard(guild_home_keyboard(success, False), user_id))
+        success, result = await request_membership("guild", user_id, guild_id)
+        await message.answer(("✅ " if success else "⚠️ ") + html.escape(result), parse_mode="HTML", reply_markup=protect_keyboard(guild_home_keyboard(False), user_id))
         return
     if stage == "donate_amount":
         try:
@@ -231,7 +267,7 @@ async def guild_info_panel(callback: CallbackQuery) -> None:
     await _show(callback, (
         "📜 <b>پروندهٔ گیلد</b>\n\n"
         f"🏰 {html.escape(guild['name'])} <code>[{html.escape(guild['tag'])}]</code>\n"
-        f"🆔 شناسه: <code>{guild['id']}</code>\n"
+        f"🆔 شناسه: <code>{public_id('guild', guild['id'])}</code>\n"
         f"⭐ سطح: {guild['level']}\n✨ تجربه: {guild['xp']:,}/{guild['next_level_xp']:,}\n"
         f"👥 ظرفیت: {guild['member_count']}/{guild['max_members']}\n"
         f"👑 رهبر: {'شما' if guild['role'] == 'owner' else 'رهبر گیلد'}\n"
@@ -245,7 +281,7 @@ async def guild_members_panel(callback: CallbackQuery) -> None:
     if not guild:
         await _show(callback, "هنوز عضو هیچ گیلدی نیستی.", guild_home_keyboard(False))
         return
-    lines = [f"👥 <b>اعضای {html.escape(guild['name'])}</b>", f"شناسهٔ گیلد: <code>{guild['id']}</code>", ""]
+    lines = [f"👥 <b>اعضای {html.escape(guild['name'])}</b>", f"شناسهٔ گیلد: <code>{public_id('guild', guild['id'])}</code>", ""]
     for i, member in enumerate(members, 1):
         role = "👑 رهبر" if member["role"] == "owner" else "🛡️ عضو"
         name = html.escape(str(member["name"]))
@@ -272,7 +308,7 @@ async def guild_rankings(callback: CallbackQuery) -> None:
         for i, g in enumerate(guilds, 1):
             mark = medals[i - 1] if i <= 3 else f"{i}."
             lines.append(f"{mark} <b>{html.escape(g['name'])}</b> <code>[{html.escape(g['tag'])}]</code>")
-            lines.append(f"   ⭐ سطح {g['level']} · 👥 {g['member_count']}/{g['max_members']} · ✨ {g['xp']:,} XP · 🆔 <code>{g['id']}</code>")
+            lines.append(f"   ⭐ سطح {g['level']} · 👥 {g['member_count']}/{g['max_members']} · ✨ {g['xp']:,} XP · 🆔 <code>{public_id('guild', g['id'])}</code>")
     await _show(callback, "\n".join(lines), _keyboard([[_btn("🔗 پیوستن با شناسه", "guild:join")], [_btn("🔙 بازگشت", "menu:guild")]]))
 
 
