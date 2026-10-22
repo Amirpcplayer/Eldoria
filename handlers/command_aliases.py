@@ -94,6 +94,16 @@ async def render_command_panel(message: Message, section: str) -> None:
         )
         return
 
+    # Party is stateful too: always render the player's actual membership
+    # through the same handler used by the party menu callback. Never show the
+    # generic create/join panel for a player who already belongs to a party.
+    if section == "party":
+        from handlers.party import clear_party_flow, render_party_after_input
+
+        await clear_party_flow(user_id)
+        await render_party_after_input(message, None, "")
+        return
+
     # Guild is stateful: never show the generic create/join screen blindly.
     # Resolve the caller's actual membership before rendering /guild or the
     # Persian text alias, just as the menu:guild callback does.
