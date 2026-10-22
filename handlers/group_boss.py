@@ -58,13 +58,6 @@ PRIMORDIAL_ENTRANCE_STORIES = [
     for omen in _PRIMORDIAL_OMENS for sign in _PRIMORDIAL_SIGNS
 ]
 
-def boss_hp_bar(hp: int, max_hp: int, width: int = 12) -> str:
-    maximum = max(1, int(max_hp or 1))
-    current = max(0, min(maximum, int(hp or 0)))
-    filled = round(width * current / maximum)
-    percent = int(current * 100 / maximum)
-    return f"{'🟩' * filled}{'⬛' * (width - filled)}  <b>{percent}%</b>"
-
 def boss_entrance_story(cfg: dict) -> str:
     """Return one of five entrance narratives tailored to this specific boss."""
     name = str(cfg.get("name", "سالار ناشناخته"))
@@ -1203,7 +1196,7 @@ async def group_boss_status(message: Message):
                 remaining = f"{seconds // 60} دقیقه"
             text = (f"🐉 باس فعال: <b>{html.escape(boss.name or 'باس اِلدوریا')}</b>\n"
                     f"⭐ سطح: <b>{int(getattr(boss, 'boss_level', 1) or 1)}</b>\n"
-                    f"❤️ HP: <b>{int(boss.hp or 0):,}/{int(boss.max_hp or 0):,}</b>\n"
+                    f"❤️ HP: <b>{int(boss.hp or 0):,}</b>\n"
                     f"⏳ زمان باقی‌مانده: <b>{remaining}</b>\n\n"
                     "دستورها: /ATTACK · /MAGIC · /HEAL · /USE_MANA · /REMOVE_BOSS")
         else:
