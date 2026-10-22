@@ -202,7 +202,7 @@ async def fanart_shop_manage_list(callback: CallbackQuery):
         )).all())
         has_next = len(items) > FANART_SHOP_PAGE_SIZE
         items = items[:FANART_SHOP_PAGE_SIZE]
-        total = await session.scalar(select(__import__("sqlalchemy").func.count(FanArt.id))) or 0
+        total = await session.scalar(select(func.count(FanArt.id))) or 0
     if callback.message:
         await callback.message.edit_text(
             "🎨 <b>مدیریت فن‌آرت شاپ</b>\n\n"
