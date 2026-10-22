@@ -308,9 +308,15 @@ async def fanart_cancel(
         return
 
     await state.clear()
+    is_fanart_flow = bool(current_state and current_state.startswith("FanArtStates."))
+
+    if is_fanart_flow:
+        text = "❌ فرایند افزودن فن‌آرت لغو شد.\n\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی."
+    else:
+        text = "❌ عملیات جاری لغو شد.\n\nبه پنل اصلی مدیریت برگشتی."
 
     await message.answer(
-        "❌ فرایند افزودن فن‌آرت لغو شد.\n\nهیچ اثر تازه‌ای ثبت نشد؛ هر زمان آماده بودی می‌توانی دوباره شروع کنی.",
+        text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛡 بازگشت به پنل ادمین", callback_data="admin:home")]])
     )
 
@@ -351,7 +357,7 @@ async def fanart_add_image_invalid(
         return
 
     await message.answer(
-        "📷 هنوز تصویری دریافت نکردم. لطفاً عکس فن‌آرت را به شکل Photo بفرست؛ متن به‌تنهایی کافی نیست.\\nبرای خروج از فرایند: /cancel"
+        "📷 هنوز تصویری دریافت نکردم. لطفاً عکس فن‌آرت را به شکل Photo بفرست؛ متن به‌تنهایی کافی نیست.\nبرای خروج از فرایند: /cancel"
     )
 
 
