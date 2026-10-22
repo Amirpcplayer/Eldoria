@@ -21,6 +21,7 @@ from models.fan_art import FanArt
 
 from middlewares.panel_owner import protect_keyboard
 from services.panel_image_service import replace_panel_with_photo, replace_panel_with_text
+from services.image_aspect_service import prepare_photo
 
 from services.fan_art_service import (
     clear_active_fan_art,
@@ -839,7 +840,20 @@ async def profile_command(message: Message):
     # guild, party or active-scroll details to make a profile fit a caption.
     if photo:
         if len(text) <= 1024:
-            await message.answer_photo(photo=photo, caption=text, parse_mode=ParseMode.HTML)
+            try:
+                prepared_photo = await prepare_photo(
+                    message.bot,
+                    photo,
+                    filename="eldoria-profile.jpg",
+                )
+            except Exception:
+                logger.exception("Could not normalize profile photo; sending original as fallback")
+                prepared_photo = photo
+            await message.answer_photo(
+                photo=prepared_photo,
+                caption=text,
+                parse_mode=ParseMode.HTML,
+            )
         else:
             await message.answer_photo(photo=photo)
             await message.answer(text, parse_mode=ParseMode.HTML)
