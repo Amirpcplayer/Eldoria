@@ -475,13 +475,11 @@ def boss_death_dialogue(cfg: dict) -> str:
     return random.choice(variants)
 
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
-    """Keep the image caption short so Telegram gives the boss artwork more room."""
-    weak = f"\n🜂 ضعف: <b>{ELEMENTS.get(weakness, weakness)}</b>" if weakness else ""
+    """Compact Persian caption; keep interaction instructions out of the image caption."""
+    weak = f" · 🜂 ضعف {ELEMENTS.get(weakness, weakness)}" if weakness else ""
     return (
         f"👹 <b>{html.escape(cfg['name'])}</b> · سطح {level}\n"
-        f"❤️ سلامتی: <b>{hp:,}</b>{weak}\n\n"
-        "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
-        "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای."
+        f"❤️ سلامتی <b>{hp:,}</b>{weak}"
     )
 
 def resolve_boss_image(cfg: dict) -> Path | None:
