@@ -69,10 +69,10 @@ async def request_membership(kind: str, user_id: int, target_id: int) -> tuple[b
     try:
         await bot.send_message(
             leader_id,
-            f"📨 <b>درخواست عضویت {label}</b>\\n\\n"
-            f"👤 <a href=\"tg://user?id={user_id}\">{html.escape(player_name)}</a>\\n"
-            f"🆔 بازیکن: <code>{user_id}</code>\\n"
-            f"🏷️ {html.escape(target['name'])} · <code>{public_id(kind, target_id)}</code>\\n\\n"
+            f"📨 <b>درخواست عضویت {label}</b>\n\n"
+            f"👤 <a href=\"tg://user?id={user_id}\">{html.escape(player_name)}</a>\n"
+            f"🆔 بازیکن: <code>{user_id}</code>\n"
+            f"🏷️ {html.escape(target['name'])} · <code>{public_id(kind, target_id)}</code>\n\n"
             "این درخواست تا ۲۴ ساعت معتبر است.",
             reply_markup=markup, parse_mode="HTML",
         )
