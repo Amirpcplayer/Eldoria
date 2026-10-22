@@ -1462,10 +1462,9 @@ async def admin_gold_cancel_callback(
 
     if callback.message:
         await callback.message.edit_text(
-            "❌ عملیات واریز گلد لغو شد.\n\nبه پنل اصلی مدیریت برگشتی.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🛡 بازگشت به پنل /admin", callback_data="admin:home")]
-            ]),
+            "🛡 <b>پنل مدیریت World Eldoria</b>\\n\\nعملیات واریز گلد لغو شد؛ به منوی اصلی برگشتی.",
+            parse_mode="HTML",
+            reply_markup=admin_keyboard() if is_admin(callback.from_user.id) else delegated_admin_keyboard(),
         )
 
     await callback.answer("عملیات لغو شد.")
