@@ -855,7 +855,16 @@ async def profile_command(message: Message):
                 parse_mode=ParseMode.HTML,
             )
         else:
-            await message.answer_photo(photo=photo)
+            try:
+                prepared_photo = await prepare_photo(
+                    message.bot,
+                    photo,
+                    filename="eldoria-profile.jpg",
+                )
+            except Exception:
+                logger.exception("Could not normalize profile photo; sending original as fallback")
+                prepared_photo = photo
+            await message.answer_photo(photo=prepared_photo)
             await message.answer(text, parse_mode=ParseMode.HTML)
     else:
         await message.answer(text, parse_mode=ParseMode.HTML)
