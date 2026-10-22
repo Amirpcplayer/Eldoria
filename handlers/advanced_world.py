@@ -509,6 +509,23 @@ async def mypet_command(message: Message):
                     )
                 ])
 
+    active_pet = next(((pet, cp) for pet, cp in owned if cp.active), None)
+    if active_pet:
+        active_pet_obj, active_cp = active_pet
+        phrase = (active_cp.pet_attack_phrase or "").strip()
+        lines.append(f"🗝 عبارت حمله: <code>{html.escape(phrase or 'تنظیم نشده')}</code>")
+        now = datetime.utcnow()
+        started = active_cp.pet_attack_window_started_at
+        uses = int(active_cp.pet_attack_uses or 0)
+        if started is None or now - started >= timedelta(hours=24):
+            uses = 0
+            quota_text = "سهمیه از اولین حمله شروع می‌شود"
+        elif uses >= 3:
+            seconds = max(0, int((started + timedelta(hours=24) - now).total_seconds()))
+            quota_text = f"بازگشت سهمیه تا {seconds // 3600} ساعت و {(seconds % 3600) // 60} دقیقه"
+        else:
+            quota_text = f"{3 - uses}/3 حمله باقی‌مانده"
+        lines.append(f"🐾 سهمیهٔ حمله: {quota_text}")
     rows.append([InlineKeyboardButton(text="✏️ تنظیم عبارت حملهٔ پت", callback_data="pets:phrase:set")])
     rows.append([InlineKeyboardButton(text="🛒 بازار پت‌ها", callback_data="pets:market")])
     rows.append([InlineKeyboardButton(text="✨ تمرین / تکامل پت فعال", callback_data="pets:evolve")])
@@ -542,23 +559,25 @@ async def pet_attack_phrase_start(cb: CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="♻️ بازگشت به عبارت پیش‌فرض", callback_data="pets:phrase:reset")],
         [InlineKeyboardButton(text="❌ لغو", callback_data="pets:phrase:cancel")],
     ])
-    await panel(
-        cb,
-        "✏️ <b>عبارت اختصاصی حملهٔ پت</b>\n\n"
+    await cb.answer()
+    await cb.message.answer(
+        "✏️ <b>تنظیم عبارت حملهٔ پت</b>\n\n"
         f"🐾 پت فعال: <b>{html.escape(pet.name)}</b>\n"
-        f"عبارت فعلی: <code>{html.escape(current_phrase or 'هنوز تنظیم نشده')}</code>\n\n"
-        "پیام بعدی را با عبارت دلخواهت بفرست. طول آن باید ۳ تا ۳۲ نویسه باشد. "
-        "مثلاً: «اژدها حمله کن» یا «گرگ بجنب».",
-        keyboard,
-        panel_name="pets",
+        f"عبارت فعلی: <code>{html.escape(current_phrase or 'تنظیم نشده')}</code>\n\n"
+        "عبارت جدیدت را در پیام بعدی بفرست (۳ تا ۳۲ نویسه). "
+        "مثلاً: «اژدها حمله کن» یا «گرگ بجنب».\nبرای لغو، «لغو» را بفرست.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="♻️ بازگشت به عبارت پیش‌فرض", callback_data="pets:phrase:reset")],
+            [InlineKeyboardButton(text="❌ لغو", callback_data="pets:phrase:cancel")],
+        ]),
+        parse_mode="HTML",
     )
 
 
 @router.callback_query(F.data == "pets:phrase:cancel")
 async def pet_attack_phrase_cancel(cb: CallbackQuery, state: FSMContext):
     await state.clear()
-    await cb.answer("تنظیم عبارت لغو شد.")
-    await pets_menu_for_user(cb)
+    await cb.answer("تنظیم عبارت لغو شد.", show_alert=True)
 
 
 @router.callback_query(F.data == "pets:phrase:reset")
@@ -582,8 +601,7 @@ async def pet_attack_phrase_reset(cb: CallbackQuery, state: FSMContext):
             return
         character_pet.pet_attack_phrase = None
         await session.commit()
-    await cb.answer("عبارت اختصاصی پاک شد؛ عبارت پیش‌فرض فعال شد.")
-    await pets_menu_for_user(cb)
+    await cb.answer("عبارت اختصاصی پاک شد؛ عبارت پیش‌فرض فعال شد.", show_alert=True)
 
 
 @router.message(PetAttackPhraseStates.waiting_for_phrase)
