@@ -1297,9 +1297,28 @@ async def _story_attack(message: Message) -> None:
 @router.message(Command("attack", ignore_case=True))
 @router.message(F.text.regexp(r"(?i)^\s*حمله\s*$"))
 async def group_boss_attack(message: Message):
-    if message.reply_to_message is None:
+    replied = message.reply_to_message
+
+    # The group-boss router is registered before the PvP router, so this
+    # catch-all handler must explicitly pass player replies to direct PvP.
+    # Otherwise every reply-to-player "حمله" is misrouted into boss combat.
+    if replied is not None and replied.from_user is not None:
+        target = replied.from_user
+        if (
+            message.chat.type in {"group", "supergroup"}
+            and not target.is_bot
+            and message.from_user is not None
+            and target.id != message.from_user.id
+        ):
+            from handlers.pvp import direct_attack_reply_handler
+
+            await direct_attack_reply_handler(message)
+            return
+
+    if replied is None:
         await _story_attack(message)
         return
+
     await _attack(message)
 
 
