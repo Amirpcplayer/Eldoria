@@ -248,12 +248,11 @@ async def render_titles(callback: CallbackQuery, page: int = 0) -> None:
         f"🔓 لقب‌های بازشده: {len(unlocked)}/100\n"
         "با هر سطح جدید، لقب مخصوص همان سطح باز می‌شود. یکی از لقب‌های بازشده را انتخاب کن:"
     )
-    markup = owned_keyboard(title_keyboard(unlocked, active_title, page), telegram_id)
-    if callback.message is not None:
-        try:
-            await callback.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
-        except Exception:
-            await callback.message.answer(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+    await replace_with_text_panel(
+        callback,
+        text,
+        title_keyboard(unlocked, active_title, page),
+    )
 
 
 def owned_keyboard(
