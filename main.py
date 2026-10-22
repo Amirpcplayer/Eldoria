@@ -54,6 +54,7 @@ from services.pet_training_service import pet_training_scheduler
 from services.death_service import death_revival_scheduler
 from services.dungeon_expedition_service import dungeon_scheduler
 from middlewares.group_boss_registration import GroupBossRegistrationMiddleware
+from services.scheduler_leader import run_schedulers_as_leader
 
 
 logging.basicConfig(
@@ -198,21 +199,26 @@ async def main() -> None:
         await setup_bot_commands()
         logger.info("Bot commands registered.")
 
-        boss_task = asyncio.create_task(boss_scheduler(), name="world-eldoria-group-boss-scheduler")
-        fan_art_task = asyncio.create_task(fan_art_scheduler(), name="world-eldoria-fan-art-scheduler")
-        pet_task = asyncio.create_task(pet_training_scheduler(bot), name="world-eldoria-pet-training-scheduler")
-        death_task = asyncio.create_task(death_revival_scheduler(bot), name="world-eldoria-death-revival-scheduler")
-        dungeon_task = asyncio.create_task(dungeon_scheduler(bot), name="world-eldoria-dungeon-scheduler")
+        scheduler_task = asyncio.create_task(
+            run_schedulers_as_leader(
+                (
+                    boss_scheduler,
+                    fan_art_scheduler,
+                    lambda: pet_training_scheduler(bot),
+                    lambda: death_revival_scheduler(bot),
+                    lambda: dungeon_scheduler(bot),
+                )
+            ),
+            name="world-eldoria-scheduler-leader",
+        )
         try:
             await dp.start_polling(bot)
         finally:
-            for task in (boss_task, fan_art_task, pet_task, death_task, dungeon_task):
-                task.cancel()
-            for task in (boss_task, fan_art_task, pet_task, death_task, dungeon_task):
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            scheduler_task.cancel()
+            try:
+                await scheduler_task
+            except asyncio.CancelledError:
+                pass
 
     except asyncio.CancelledError:
         logger.info("World Eldoria polling was cancelled.")
