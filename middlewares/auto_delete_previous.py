@@ -70,7 +70,32 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
     @classmethod
     def _is_protected(cls, method: Any) -> bool:
         text = cls._message_text(method)
-        return any(term in text for term in PROTECTED_TERMS)
+        if any(term in text for term in PROTECTED_TERMS):
+            return True
+
+        # Never auto-delete messages belonging to the /admin workflow.
+        # Most admin panels are identified by their callback namespace; the
+        # text markers also cover prompts that intentionally have no keyboard.
+        markup = getattr(method, "reply_markup", None)
+        for row in getattr(markup, "inline_keyboard", None) or []:
+            for button in row:
+                callback_data = getattr(button, "callback_data", None) or ""
+                if callback_data.startswith("admin:"):
+                    return True
+
+        admin_markers = (
+            "پنل مدیریت World Eldoria",
+            "پنل ادمین",
+            "مدیریت پلیرها",
+            "جست‌وجوی پلیر",
+            "جست‌وجوی بازیکن",
+            "واریز گلد",
+            "مدیریت گیفت فن‌آرت",
+            "سفارش‌های فن‌آرت",
+            "اسپان دستی باس",
+            "اسپان دستی دانجن",
+        )
+        return any(marker.casefold() in text for marker in admin_markers)
 
     async def __call__(self, make_request: Any, bot: Any, method: Any) -> Any:
         if method.__class__.__name__ not in SEND_METHODS:
