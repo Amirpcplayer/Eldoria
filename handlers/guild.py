@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from database.redis import redis
 from middlewares.panel_owner import protect_keyboard
+from services.panel_image_service import replace_panel_with_text
 from services.guild_service import (
     GUILD_DONATION_MIN,
     browse_guilds,
