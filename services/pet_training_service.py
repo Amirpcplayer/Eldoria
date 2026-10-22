@@ -20,6 +20,21 @@ TRAINING_XP = 100
 TRAINING_BATCH_SIZE = 200
 
 
+def build_training_notification_message(
+    pet_name: str, level: int, start_level: int
+) -> str:
+    level_note = (
+        f"\n🎉 پت لول‌آپ کرد: Lv.{start_level} → Lv.{level}"
+        if level > start_level
+        else ""
+    )
+    return (
+        f"🐾 آموزش پت «{pet_name}» به پایان رسید!\n"
+        f"✨ XP دریافت‌شده: +{TRAINING_XP}\n"
+        f"⭐ سطح فعلی پت: Lv.{level}{level_note}"
+    )
+
+
 async def process_completed_pet_training(bot: Bot) -> None:
     now = datetime.utcnow()
 
@@ -132,17 +147,9 @@ async def process_completed_pet_training(bot: Bot) -> None:
                 level = max(1, int(row.level or 1))
                 start_level = max(1, int(row.training_start_level or level))
 
-            level_note = (
-                f"\\n🎉 پت لول‌آپ کرد: Lv.{start_level} → Lv.{level}"
-                if level > start_level
-                else ""
+            message = build_training_notification_message(
+                str(pet_name), level, start_level
             )
-            message = (
-                f"🐾 آموزش پت «{pet_name}» به پایان رسید!\\n"
-                f"✨ XP دریافت‌شده: +{TRAINING_XP}\\n"
-                f"⭐ سطح فعلی پت: Lv.{level}{level_note}"
-            )
-
             try:
                 await bot.send_message(int(telegram_id), message)
             except asyncio.CancelledError:
