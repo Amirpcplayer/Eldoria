@@ -69,7 +69,7 @@ def guild_home_keyboard(has_guild: bool, is_owner: bool = False) -> InlineKeyboa
             [_btn("🏆 رتبه‌بندی گیلدها", "guild:rankings")],
             [_btn("💰 کمک به خزانه", "guild:donate")],
             [_btn("👑 پاداش روزانهٔ رهبر", "guild:leader_reward")],
-            ...(is_owner ? [[_btn("🗑️ حذف کامل گیلد", "guild:disband")]] : []),
+            *([[_btn("🗑️ حذف کامل گیلد", "guild:disband")]] if is_owner else []),
             [_btn("🚪 خروج از گیلد", "guild:leave")],
         ]
     else:
