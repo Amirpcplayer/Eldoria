@@ -360,7 +360,15 @@ async def direct_pet_attack(attacker_id: int, target_id: int) -> dict[str, Any]:
             pet_row.pet_attack_window_started_at = window_started
             pet_row.pet_attack_uses = uses + 1
             await session.commit()
-            return {"ok": True, "attacker_name": attacker.name, "target_name": target.name, "attacker_title": attacker_title, "target_title": target_title, "attacker_stats": attacker_stats, "target_stats": target_stats, "attacker_pet_ability": (f"افزایش {int(attacker_pet_profile['critical_bonus'])}% احتمال بحرانی" if int(attacker_pet_profile['critical_bonus']) else None), "target_pet_ability": (f"کاهش {pet_guard}% آسیب دریافتی" if pet_guard else None), "pet_name": pet.name, "pet_level": pet_level, "damage": damage, "critical": critical, "bounty_reward": bounty_reward, "target_hp": int(target.hp or 0), "target_max_hp": max(1, int(target.max_hp or 100)), "target_gold": max(0, int(target.gold or 0)), "attack_reward": attack_reward, "loot": loot, "killed": killed, "revive_at": target.dead_until, "uses_left": max(0, PET_ATTACKS_PER_WINDOW - (uses + 1))}
+            # Legacy character creation may have saved a command as the character name.
+            # Use a safe Telegram identity instead of displaying a slash command in combat.
+            attacker_display_name = str(attacker.name or "").strip()
+            target_display_name = str(target.name or "").strip()
+            if not attacker_display_name or attacker_display_name.startswith("/"):
+                attacker_display_name = f"@{attacker.telegram_username}" if attacker.telegram_username else "قهرمان اِلدوریا"
+            if not target_display_name or target_display_name.startswith("/"):
+                target_display_name = f"@{target.telegram_username}" if target.telegram_username else "قهرمان اِلدوریا"
+            return {"ok": True, "attacker_name": attacker_display_name, "target_name": target_display_name, "attacker_title": attacker_title, "target_title": target_title, "attacker_stats": attacker_stats, "target_stats": target_stats, "attacker_pet_ability": (f"افزایش {int(attacker_pet_profile['critical_bonus'])}% احتمال بحرانی" if int(attacker_pet_profile['critical_bonus']) else None), "target_pet_ability": (f"کاهش {pet_guard}% آسیب دریافتی" if pet_guard else None), "pet_name": pet.name, "pet_level": pet_level, "damage": damage, "critical": critical, "bounty_reward": bounty_reward, "target_hp": int(target.hp or 0), "target_max_hp": max(1, int(target.max_hp or 100)), "target_gold": max(0, int(target.gold or 0)), "attack_reward": attack_reward, "loot": loot, "killed": killed, "revive_at": target.dead_until, "uses_left": max(0, PET_ATTACKS_PER_WINDOW - (uses + 1))}
     except Exception:
         await redis.delete(key)
         raise
