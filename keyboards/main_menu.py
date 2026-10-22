@@ -94,12 +94,12 @@ def main_menu_keyboard(language: str = "fa") -> InlineKeyboardMarkup:
     )
 
 
-def enter_game_keyboard() -> InlineKeyboardMarkup:
+def enter_game_keyboard(language: str = "fa") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎮 ورود به بازی",
+                    text={"en": "🎮 Enter Game", "ru": "🎮 Войти в игру"}.get(language, "🎮 ورود به بازی"),
                     callback_data="menu:enter_game",
                 )
             ]
