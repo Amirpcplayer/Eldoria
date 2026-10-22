@@ -250,40 +250,22 @@ def get_player_active_battle_key(telegram_id: int) -> str:
 
 
 async def get_active_battle_for_player(telegram_id: int) -> dict[str, Any] | None:
-    """Read the indexed battle; scan only as a compatibility fallback for old keys."""
+    """Read the per-player Redis index without scanning unrelated battles."""
     index_key = get_player_active_battle_key(telegram_id)
     battle_id = await redis.get(index_key)
-    if battle_id:
-        battle = await get_battle(str(battle_id))
-        if battle is not None and int(battle.get("telegram_id", 0)) == int(telegram_id):
-            if battle.get("player_hp", 0) > 0 and battle.get("enemy_hp", 0) > 0:
-                return battle
+    if not battle_id:
+        return None
+
+    battle = await get_battle(str(battle_id))
+    if battle is not None and int(battle.get("telegram_id", 0)) == int(telegram_id):
+        if battle.get("player_hp", 0) > 0 and battle.get("enemy_hp", 0) > 0:
+            return battle
+
+    # Remove stale index entries only if they still point to the same battle.
+    current_id = await redis.get(index_key)
+    if current_id and str(current_id) == str(battle_id):
         await redis.delete(index_key)
-
-    # One-time migration path for battles created before the index was introduced.
-    async for key in redis.scan_iter(match="eldoria:battle:*"):
-        key = key.decode("utf-8") if isinstance(key, bytes) else str(key)
-        if ":battle_reward:" in key:
-            continue
-        raw = await redis.hgetall(key)
-        if not raw:
-            continue
-        owner = raw.get("telegram_id", 0)
-        try:
-            if int(owner) != int(telegram_id):
-                continue
-        except (TypeError, ValueError):
-            continue
-        candidate_id = key.rsplit(":", 1)[-1]
-        battle = await get_battle(candidate_id)
-        if battle is None:
-            continue
-        if battle.get("player_hp", 0) <= 0 or battle.get("enemy_hp", 0) <= 0:
-            continue
-        await redis.set(index_key, candidate_id, ex=BATTLE_TTL)
-        return battle
     return None
-
 
 # ============================================================
 # BATTLE STORAGE
