@@ -343,20 +343,12 @@ def build_profile_text(
     active_fan_art: FanArt | None,
     stats: dict[str, int],
 ) -> str:
-    """Render a compact, ornate fantasy profile that fits Telegram captions."""
+    """Render a compact image caption; full combat details live in the Stats panel."""
     final_hp = max(1, int(stats.get("hp", 1)))
     final_mana = max(1, int(stats.get("mana", 1)))
     current_hp = max(0, min(int(character.hp or 0), final_hp))
     current_mana = max(0, min(int(character.mana or 0), final_mana))
-
-    def bar(current: int, maximum: int, filled: str, empty: str = "▫️", width: int = 8) -> str:
-        ratio = max(0.0, min(1.0, current / max(1, maximum)))
-        count = min(width, int(ratio * width))
-        return filled * count + empty * (width - count)
-
     level = max(1, int(character.level or 1))
-    xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
-    # A readable, comparable combat rating; it is informational and doesn't alter combat math.
     combat_power = (
         int(stats.get("attack", 0))
         + int(stats.get("magic_power", 0))
@@ -366,44 +358,15 @@ def build_profile_text(
     )
     name = html.escape(str(character.name or "قهرمان بی‌نام"))
     race = html.escape(str(character.race or "نامشخص"))
-    gender_value = getattr(character, "gender", None)
-    gender = "مرد" if gender_value == "male" else "زن" if gender_value == "female" else "ثبت نشده"
     title = html.escape(str(character.active_title or title_for_level(level)))
-
-    lines = [
-        "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
-        f"  {emoji('profile_combat_power')} <b>قهرمان اِلدوریا</b> {emoji('profile_combat_power')}",
-        "",
-        f"{emoji('profile_name')} نام قهرمان: <b>{name}</b>",
-        f"{emoji('profile_title')} لقب: {title}",
-        f"{emoji('profile_level')} سطح: Lv. {level}",
-        f"{emoji('profile_race')} نژاد: {race}  ·  {emoji('profile_gender')} جنسیت: {gender}",
-        "",
-        f"━━━━━━━━ {emoji('profile_identity_heading')} هویت قهرمان {emoji('profile_identity_heading')} ━━━━━━━━",
-        "",
-        f"{emoji('profile_combat_power')} قدرت رزمی: <b>{combat_power:,}</b>",
-        f"{emoji('profile_gold')} طلا: <b>{int(character.gold or 0):,}</b>  ·  {emoji('profile_gems')} جم: <b>{int(character.gems or 0):,}</b>",
-        "",
-        f"━━━━━━━━ {emoji('profile_vitals_heading')} وضعیت حیاتی {emoji('profile_mana_label')} ━━━━━━━━",
-        "",
-        f"{emoji('profile_hp_label')} سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
-        f"{bar(current_hp, final_hp, emoji('profile_hp_fill'), empty=emoji('profile_hp_empty'))}",
-        "",
-        f"{emoji('profile_mana_label')} مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
-        f"{bar(current_mana, final_mana, emoji('profile_mana_fill'), empty=emoji('profile_mana_empty'))}",
-        "",
-        f"━━━━━━━━ {emoji('profile_combat_heading')} ویژگی‌های رزمی {emoji('profile_combat_heading')} ━━━━━━━━",
-        "",
-        f"{emoji('profile_attack')} حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  {emoji('profile_magic')} قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
-        f"{emoji('profile_defense')} دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  {emoji('profile_magic_defense')} دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
-        f"{emoji('profile_speed')} سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  {emoji('profile_accuracy')} دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
-        f"{emoji('profile_luck')} شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  {emoji('profile_critical')} ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
-        "",
-        f"━━━━━━━━ {emoji('profile_journey_heading')} مسیر قهرمانی {emoji('profile_journey_heading')} ━━━━━━━━",
-        "",
-        xp_progress,
-    ]
-    return "\n".join(lines)
+    return (
+        f"🛡️ <b>قهرمان اِلدوریا</b> · Lv.{level}\\n"
+        f"👤 <b>{name}</b> · {race}\\n"
+        f"🎖️ {title}\\n"
+        f"❤️ HP <b>{current_hp:,}</b> · 💧 MP <b>{current_mana:,}</b>\\n"
+        f"⚔️ قدرت رزمی <b>{combat_power:,}</b>\\n"
+        f"💰 {int(character.gold or 0):,} گلد · 💎 {int(character.gems or 0):,} جم"
+    )
 
 
 # ============================================================
@@ -428,7 +391,7 @@ async def replace_with_text_panel(
 # ============================================================
 
 async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
-    """Use identical social and active-scroll details for all profile entry points."""
+    """Append social links and active buffs in one compact caption line each."""
     async with AsyncSessionLocal() as session:
         guild_row = (await session.execute(
             select(Guild.name, Guild.tag)
@@ -444,12 +407,12 @@ async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
         )).first()
 
     guild_line = (
-        f"{emoji('profile_guild')} گیلد: <b>{html.escape(guild_row.name)}</b> [{html.escape(guild_row.tag)}]"
-        if guild_row else f"{emoji('profile_guild')} گیلد: بدون گیلد"
+        f"🏰 {html.escape(guild_row.name)} [{html.escape(guild_row.tag)}]"
+        if guild_row else "🏰 بدون گیلد"
     )
     party_line = (
-        f"{emoji('profile_party')} پارتی: <b>{html.escape(party_row.name)}</b> · رتبه {html.escape(party_row.rank or 'F')}"
-        if party_row else f"{emoji('profile_party')} پارتی: بدون پارتی"
+        f"👥 {html.escape(party_row.name)} · رتبه {html.escape(party_row.rank or 'F')}"
+        if party_row else "👥 بدون پارتی"
     )
     buffs = await active_buffs(telegram_id)
     if buffs:
@@ -458,11 +421,14 @@ async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
         for kind, payload in buffs:
             remaining = max(0, int(float(payload.get("expires_at", 0)) - now_ts))
             hours, minutes = divmod(remaining // 60, 60)
-            buff_lines.append(f"• {SCROLLS[kind]['title']} · باقی‌مانده {hours}س {minutes}د")
-        scroll_block = f"{emoji('profile_scrolls')} <b>اسکرول‌های فعال</b>\n" + "\n".join(buff_lines)
+            buff_lines.append(f"{SCROLLS[kind]['title']} ({hours}س {minutes}د)")
+        scroll_line = "✨ " + "، ".join(buff_lines[:3])
+        if len(buff_lines) > 3:
+            scroll_line += f" +{len(buff_lines) - 3}"
     else:
-        scroll_block = f"{emoji('profile_scrolls')} <b>اسکرول‌های فعال</b>\n{emoji('profile_no_scrolls')} هیچ اسکرولی فعال نیست."
-    return text + "\n\n━━━━━━━━ 🛡️ پیوندهای قهرمان ⚔️ ━━━━━━━━\n" + guild_line + "\n" + party_line + "\n\n" + scroll_block
+        scroll_line = "✨ اسکرول فعال ندارد"
+    return text + "\\n" + guild_line + " · " + party_line + "\\n" + scroll_line
+
 
 
 async def show_profile(
