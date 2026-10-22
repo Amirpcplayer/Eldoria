@@ -1123,7 +1123,7 @@ async def party_members_panel(callback: CallbackQuery) -> None:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [_button("🔙 بازگشت به پارتی", "menu:party")],
     ])
-    await show_party_panel(callback, "\\n".join(lines), keyboard)
+    await show_party_panel(callback, "\n".join(lines), keyboard)
 
 
 @router.callback_query(F.data == "party:manage")
