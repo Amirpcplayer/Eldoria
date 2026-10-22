@@ -25,3 +25,7 @@ async def list_delegated_admins() -> list[int]:
         except (TypeError, ValueError):
             continue
     return sorted(set(result))
+
+
+async def remove_delegated_admin(telegram_id: int) -> None:
+    await redis.srem(DELEGATED_ADMIN_SET, str(telegram_id))
