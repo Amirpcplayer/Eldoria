@@ -21,6 +21,7 @@ from services.panel_image_service import show_panel
 from services.party_service import (
     PARTY_CREATION_COSTS,
     create_party,
+    disband_party,
     get_character_by_username,
     get_character_gold,
     get_party_details,
@@ -199,6 +200,7 @@ def party_manage_keyboard(
     rows.extend(
         [
             [_button("👥 نمایش اعضا", "party:members")],
+            [_button("🗑️ حذف کامل پارتی", "party:disband")],
             [_button("🔙 بازگشت", "menu:party")],
         ]
     )
@@ -1420,33 +1422,62 @@ async def party_leave_start(callback: CallbackQuery) -> None:
         int(details["leader_telegram_id"]) == callback.from_user.id
     )
 
-    text = (
-        "⚠️ <b>خروج رهبر پارتی</b>\n\n"
-        "با خروج رهبر، پارتی بسته می‌شود و عضویت همه پایان می‌یابد.\n"
-        "آیا مطمئنی؟"
-        if is_leader
-        else "🚪 <b>خروج از پارتی</b>\n\nآیا مطمئنی؟"
-    )
-
+    if is_leader and int(details.get("member_count", 1)) > 1:
+        members = await get_party_members(int(details["id"]))
+        rows = [[_button(f"👑 {str(m.get('name') or 'بازیکن')[:30]}", f"party:leave:leader:{int(m['telegram_id'])}")]
+                for m in members if int(m["telegram_id"]) != callback.from_user.id]
+        rows.append([_button("🔙 انصراف", "menu:party")])
+        await show_party_panel(callback, "👑 <b>انتقال رهبری و خروج</b>\n\nیکی از اعضا را انتخاب کن تا رهبری به او منتقل شود و سپس از پارتی خارج شوی.", InlineKeyboardMarkup(inline_keyboard=rows))
+        return
     await show_party_panel(
         callback,
-        text,
-        party_leave_confirm_keyboard(),
+        "🚪 <b>خروج از پارتی</b>\n\nبا تأیید تو پارتی بسته می‌شود." if is_leader else "🚪 <b>خروج از پارتی</b>\n\nآیا مطمئنی؟",
+        InlineKeyboardMarkup(inline_keyboard=[
+            [_button("✅ تأیید خروج", "party:leave:yes")],
+            [_button("❌ انصراف", "menu:party")],
+        ]),
     )
 
 
 @router.callback_query(F.data == "party:leave:yes")
 async def party_leave_confirmed(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id
-
     success, result_message = await leave_party(telegram_id)
     await clear_party_flow(telegram_id)
+    details = await get_party_details(telegram_id)
+    await show_party_panel(callback, f"{'✅' if success else '⚠️'} {_safe(result_message)}", party_main_keyboard(bool(details)))
 
-    await show_party_panel(
-        callback,
-        f"{'✅' if success else '⚠️'} {_safe(result_message)}",
-        party_main_keyboard(False),
-    )
+
+@router.callback_query(F.data.startswith("party:leave:leader:"))
+async def party_leave_with_transfer(callback: CallbackQuery) -> None:
+    try:
+        successor_id = int(callback.data.rsplit(":", 1)[1])
+    except (TypeError, ValueError, AttributeError):
+        await callback.answer("عضو انتخاب‌شده معتبر نیست.", show_alert=True)
+        return
+    success, result_message = await leave_party(callback.from_user.id, successor_id)
+    await clear_party_flow(callback.from_user.id)
+    details = await get_party_details(callback.from_user.id)
+    await show_party_panel(callback, f"{'✅' if success else '⚠️'} {_safe(result_message)}", party_main_keyboard(bool(details)))
+
+
+@router.callback_query(F.data == "party:disband")
+async def party_disband_start(callback: CallbackQuery) -> None:
+    details = await get_party_details(callback.from_user.id)
+    if not details or int(details["leader_telegram_id"]) != callback.from_user.id:
+        await show_party_panel(callback, "⛔ فقط رهبر پارتی می‌تواند آن را حذف کند.", party_main_keyboard(bool(details)))
+        return
+    await show_party_panel(callback, "🗑️ <b>حذف کامل پارتی</b>\n\nاین کار پارتی را می‌بندد و همهٔ اعضا را از آن خارج می‌کند. مطمئنی؟", InlineKeyboardMarkup(inline_keyboard=[
+        [_button("🗑️ بله، حذف شود", "party:disband:yes")],
+        [_button("❌ انصراف", "menu:party")],
+    ]))
+
+
+@router.callback_query(F.data == "party:disband:yes")
+async def party_disband_confirmed(callback: CallbackQuery) -> None:
+    success, result_message = await disband_party(callback.from_user.id)
+    await clear_party_flow(callback.from_user.id)
+    await show_party_panel(callback, f"{'✅' if success else '⚠️'} {_safe(result_message)}", party_main_keyboard(False))
 
 
 # ============================================================
