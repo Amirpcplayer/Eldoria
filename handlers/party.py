@@ -41,6 +41,37 @@ from services.language_service import get_language
 router = Router(name="party")
 logger = logging.getLogger(__name__)
 
+_PARTY_LABELS = {
+    "en": {
+        "✖️ لغو": "✖️ Cancel", "👥 اعضا": "👥 Members", "⚙️ مدیریت": "⚙️ Manage",
+        "🚪 خروج": "🚪 Leave", "➕ ساخت پارتی": "➕ Create party", "🔎 پیوستن": "🔎 Join",
+        "🔄 تازه‌سازی": "🔄 Refresh", "🏠 منوی اصلی": "🏠 Main menu", "✏️ تغییر نام": "✏️ Rename",
+        "📨 دعوت عضو": "📨 Invite member", "🚫 اخراج عضو": "🚫 Kick member", "👥 نمایش اعضا": "👥 View members",
+        "🗑️ حذف پارتی": "🗑️ Disband party", "🔙 بازگشت": "🔙 Back", "❌ انصراف": "❌ Cancel",
+        "✅ قبول دعوت": "✅ Accept invitation", "❌ رد دعوت": "❌ Decline invitation", "عضو": "Member",
+        "بدون توضیحات": "No description", "شناسه نامعتبر است.": "Invalid ID.",
+        "هنوز پارتی بازی وجود ندارد.": "There are no parties yet.", "عضویت انجام شد.": "You joined the party.",
+    },
+    "ru": {
+        "✖️ لغو": "✖️ Отмена", "👥 اعضا": "👥 Участники", "⚙️ مدیریت": "⚙️ Управление",
+        "🚪 خروج": "🚪 Выйти", "➕ ساخت پارتی": "➕ Создать отряд", "🔎 پیوستن": "🔎 Вступить",
+        "🔄 تازه‌سازی": "🔄 Обновить", "🏠 منوی اصلی": "🏠 Главное меню", "✏️ تغییر نام": "✏️ Переименовать",
+        "📨 دعوت عضو": "📨 Пригласить", "🚫 اخراج عضو": "🚫 Исключить участника", "👥 نمایش اعضا": "👥 Участники",
+        "🗑️ حذف پارتی": "🗑️ Распустить отряд", "🔙 بازگشت": "🔙 Назад", "❌ انصراف": "❌ Отмена",
+        "✅ قبول دعوت": "✅ Принять приглашение", "❌ رد دعوت": "❌ Отклонить приглашение", "عضو": "Участник",
+        "بدون توضیحات": "Нет описания", "شناسه نامعتبر است.": "Неверный ID.",
+        "هنوز پارتی بازی وجود ندارد.": "Пока нет игровых отрядов.", "عضویت انجام شد.": "Вы вступили в отряд.",
+    },
+}
+
+async def _party_localize(user_id: int, text: str) -> str:
+    language = await get_language(user_id)
+    labels = _PARTY_LABELS.get(language)
+    if labels:
+        for source, translated in labels.items():
+            text = text.replace(source, translated)
+    return text
+
 PARTY_FLOW_TTL = 1800
 PARTY_FLOW_PREFIX = "eldoria:party:flow:"
 PARTY_INVITE_PREFIX = "eldoria:party:invite:"
