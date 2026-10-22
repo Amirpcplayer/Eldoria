@@ -139,6 +139,7 @@ async def replace_panel_with_photo(
     photo: Any,
     caption: str,
     reply_markup=None,
+    portrait: bool = False,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
 ) -> Message | None:
     """Replace the current player panel with an image panel (profile/Fan Art)."""
@@ -160,6 +161,7 @@ async def replace_panel_with_photo(
             message.bot,
             photo,
             filename="eldoria-panel.jpg",
+            portrait=portrait,
         )
     except Exception:
         logger.exception("Could not normalize panel image; sending original image as fallback")
