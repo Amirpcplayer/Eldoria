@@ -482,21 +482,14 @@ def boss_death_dialogue(cfg: dict) -> str:
     return random.choice(variants)
 
 def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
-    story = html.escape(boss_entrance_story(cfg))
-    weak = f"\n╟─ 🜂 <b>نقطه‌ضعف:</b> {ELEMENTS.get(weakness, weakness)}" if weakness else ""
-    return (f"╔══════ 🜲 <b>طومار بیداری باس</b> 🜲 ══════╗\n\n"
-            f"📜 <i>{story}</i>\n\n"
-            f"╟─ ⚔️ <b>{html.escape(cfg['name'])}</b> · <b>Lv.{level}</b>\n"
-            f"╟─ ❤️ <b>جانِ باس</b>  <b>{hp:,} / {hp:,}</b>\n"
-            f"╟─ {boss_hp_bar(hp, hp)}{weak}\n\n"
-            "╠═══════ ✦ <b>فرامین نبرد</b> ✦ ═══════╣\n"
-            "🗡️ برای حمله روی <b>BOSS</b> ریپلای کنید و از دستورهای زیر استفاده کنید.\n"
-            "➤ برای اتک دادن عبارت <code>&lt; حمله &gt;</code> ریپلای کنید.\n"
-            "✨ برای استفاده از جادو عبارت <code>&lt; جادو &gt;</code> ریپلای کنید.\n"
-            "💚 برای استفاده از معجون سلامتی عبارت <code>&lt; هیل &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n"
-            "🔷 برای استفاده از معجون مانا عبارت <code>&lt; ریکاوری مانا &gt;</code> تایپ کنید <i>(بدون نیاز به ریپلای)</i>.\n\n"
-            "🏆 پاداش بر اساس مشارکت محاسبه می‌شود و ضربهٔ آخر جایزهٔ ویژه دارد.\n"
-            "╚══════════════════════════════════════╝")
+    """Keep the image caption short so Telegram gives the boss artwork more room."""
+    weak = f"\\n🜂 ضعف: <b>{ELEMENTS.get(weakness, weakness)}</b>" if weakness else ""
+    return (
+        f"👹 <b>{html.escape(cfg['name'])}</b> · Lv.{level}\\n"
+        f"❤️ HP: <b>{hp:,}</b>{weak}\\n\\n"
+        "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\\n"
+        "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای."
+    )
 
 def resolve_boss_image(cfg: dict) -> Path | None:
     """Resolve boss artwork from one shared path for automatic and admin spawns."""
@@ -1158,26 +1151,15 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
     try:
         if boss.message_id:
             if boss.status == "defeated":
-                caption = (f"╔═══ 🏆 <b>پایان افسانه‌ای نبرد</b> ═══╗\n\n"
-                           f"💀 <b>{html.escape(boss.name)} شکست خورد!</b>\n"
-                           f"📜 <i>{html.escape(boss_death_dialogue(cfg))}</i>\n"
-                           f"❤️ HP: <b>0/{boss.max_hp:,}</b>\n"
-                           "⏳ باس بعدی طبق چرخهٔ ساعتی ظاهر می‌شود.\n"
-                           "╚══════ ✧ دفتر قهرمانان اِلدوریا ✧ ══════╝")
+                caption = (f"🏆 <b>{html.escape(boss.name)} شکست خورد!</b>\\n"
+                           f"❤️ HP: <b>0</b>\\n"
+                           "⏳ باس بعدی طبق چرخهٔ ساعتی ظاهر می‌شود.")
             else:
-                caption = (f"╔═══ 🜲 <b>طومار نبرد باس</b> 🜲 ═══╗\n\n"
-                           f"💀 <b>{html.escape(boss.name)}</b> · <b>Lv.{getattr(boss, 'boss_level', 1)}</b>\n"
-                           f"❤️ <b>جانِ باس</b>  {boss.hp:,} / {boss.max_hp:,}\n"
-                           f"{boss_hp_bar(boss.hp, boss.max_hp)}\n"
-                           f"🜂 <b>نقطه‌ضعف:</b> {ELEMENTS[boss_weakness(cfg)]} <i>(آسیب جادوی هم‌عنصر ×1.75)</i>\n\n"
-                           "╟────── ⚔️ <b>فرامین نبرد</b> ⚔️ ──────╢\n"
-                           "🗡️ برای حمله به <b>BOSS</b>، روی همین پیام ریپلای کنید.\n\n"
-                           "➤ برای اتک دادن، عبارت <b>「&lt; حمله &gt;」</b> را ریپلای کنید.\n"
-                           "➤ برای استفاده از جادو، عبارت <b>「&lt; جادو &gt;」</b> را ریپلای کنید.\n"
-                           "➤ برای استفاده از معجون سلامتی، عبارت <b>「&lt; هیل &gt;」</b> را تایپ کنید؛ <i>بدون نیاز به ریپلای</i>.\n"
-                           "➤ برای استفاده از معجون مانا، عبارت <b>「&lt; ریکاوری مانا &gt;」</b> را تایپ کنید؛ <i>بدون نیاز به ریپلای</i>.\n\n"
-                           "🏆 <i>غنیمت‌ها بر پایهٔ میزان مشارکت تقسیم می‌شوند و ضربهٔ آخر، پاداش ویژه دارد.</i>\n"
-                           "╚════════ ✧ اِلدوریا ✧ ════════╝")
+                caption = (f"👹 <b>{html.escape(boss.name)}</b> · Lv.{getattr(boss, 'boss_level', 1)}\\n"
+                           f"❤️ HP: <b>{boss.hp:,}</b>\\n"
+                           f"🜂 ضعف: <b>{ELEMENTS[boss_weakness(cfg)]}</b> (جادوی هم‌عنصر ×1.75)\\n\\n"
+                           "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\\n"
+                           "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای.")
             try:
                 await bot.edit_message_caption(chat_id=message.chat.id, message_id=int(boss.message_id), caption=caption, parse_mode="HTML")
             except Exception:
