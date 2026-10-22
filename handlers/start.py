@@ -10,7 +10,8 @@ from models.character import Character
 from states.character import CharacterCreation
 from services.panel_image_service import send_panel
 from services.vitals_recovery_service import recover_character_vitals
-from handlers.admin_temp import admin_keyboard, is_admin
+from handlers.admin_temp import admin_keyboard, fanart_admin_keyboard, is_admin
+from services.admin_permissions import is_fanart_admin
 
 
 router = Router()
@@ -37,13 +38,15 @@ async def start_handler(
     if command.args == "admin":
         if message.chat.type != "private":
             return
-        if not is_admin(telegram_id):
+        owner_access = is_admin(telegram_id)
+        delegated_access = await is_fanart_admin(telegram_id)
+        if not owner_access and not delegated_access:
             await message.answer("⛔ شما دسترسی ادمین ندارید.")
             return
         await state.clear()
         await message.answer(
             "🛡 پنل مدیریت World Eldoria\n\nبخش موردنظرت را انتخاب کن:",
-            reply_markup=admin_keyboard(),
+            reply_markup=admin_keyboard() if owner_access else fanart_admin_keyboard(),
         )
         return
 
