@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
+from utils.group_name_uniqueness import reserve_name_check
 from database.database import AsyncSessionLocal
 from models.character import Character
 from models.social_systems import Guild, GuildMember
@@ -104,7 +105,9 @@ async def create_guild(telegram_id: int, name: str, tag: str) -> tuple[bool, str
             return False, f"برای ساخت گیلد به {GUILD_CREATION_GOLD_COST:,} طلا نیاز داری."
         if int(character.gems or 0) < GUILD_CREATION_GEM_COST:
             return False, f"برای ساخت گیلد به {GUILD_CREATION_GEM_COST} جم نیاز داری."
-        duplicate = await session.scalar(select(Guild.id).where((func.lower(Guild.name) == name.lower()) | (func.upper(Guild.tag) == tag)).limit(1))
+        duplicate_name = await reserve_name_check(session, 714002, Guild, name)
+        duplicate_tag = await session.scalar(select(Guild.id).where(func.upper(Guild.tag) == tag).limit(1))
+        duplicate = duplicate_name or duplicate_tag
         if duplicate:
             return False, "این نام یا تگ قبلاً ثبت شده است. نام و تگ دیگری انتخاب کن."
         guild = Guild(name=name, tag=tag, owner_telegram_id=telegram_id, max_members=GUILD_START_CAPACITY, level=1, xp=0)
