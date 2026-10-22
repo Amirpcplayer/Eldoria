@@ -29,6 +29,29 @@ from models.social_systems import GuildMember
 router = Router()
 
 
+async def _quest_language(user_id: int) -> str:
+    try:
+        from services.language_service import get_language
+        return await get_language(user_id)
+    except Exception:
+        return "fa"
+
+
+def _quest_translate(text: str, language: str) -> str:
+    if language == "fa":
+        return text
+    translations = {
+        "🛡️ <b>مأموریت‌های گیلدی</b>": ("🛡️ <b>Guild Quests</b>", "🛡️ <b>Задания гильдии</b>"),
+        "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.": ("You must be in a guild to access quests.", "Чтобы получить доступ к заданиям, нужно вступить в гильдию."),
+        "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن.": ("Join a guild from the Guilds section, then try again.", "Вступите в гильдию в разделе гильдий и попробуйте снова."),
+        "ابتدا باید عضو گیلد شوی.": ("Join a guild first.", "Сначала вступите в гильдию."),
+    }
+    index = 0 if language == "en" else 1
+    for source, options in translations.items():
+        text = text.replace(source, options[index])
+    return text
+
+
 async def _require_guild(callback: CallbackQuery) -> bool:
     """Server-side guild membership gate for every quest callback."""
     async with AsyncSessionLocal() as session:
@@ -39,17 +62,19 @@ async def _require_guild(callback: CallbackQuery) -> bool:
         )
     if member is not None:
         return True
+    language = await _quest_language(callback.from_user.id)
+    gate_text = (
+        "🛡️ <b>مأموریت‌های گیلدی</b>\n\n"
+        "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.\n"
+        "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن."
+    )
     await show_panel(
         callback=callback,
         panel_name="quest",
-        text=(
-            "🛡️ <b>مأموریت‌های گیلدی</b>\n\n"
-            "برای دسترسی به مأموریت‌ها باید عضو یک گیلد باشی.\n"
-            "از بخش گیلدها به یک گیلد بپیوند و دوباره تلاش کن."
-        ),
+        text=_quest_translate(gate_text, language),
         reply_markup=quest_main_keyboard(),
     )
-    await callback.answer("ابتدا باید عضو گیلد شوی.", show_alert=True)
+    await callback.answer(_quest_translate("ابتدا باید عضو گیلد شوی.", language), show_alert=True)
     return False
 
 
