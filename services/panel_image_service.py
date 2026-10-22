@@ -68,6 +68,7 @@ async def replace_panel_with_text(
     text: str,
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
+    protect_owner: bool = True,
 ) -> Message | None:
     """Keep a player menu in one bot message; replace media messages when text is needed."""
     message = callback.message
@@ -75,7 +76,7 @@ async def replace_panel_with_text(
         return None
 
     owner_id = callback.from_user.id
-    keyboard = protect_keyboard(reply_markup, owner_id)
+    keyboard = protect_keyboard(reply_markup, owner_id) if protect_owner else reply_markup
 
     if not _is_media_message(message):
         try:
