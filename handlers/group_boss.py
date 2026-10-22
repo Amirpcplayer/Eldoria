@@ -475,16 +475,18 @@ def boss_death_dialogue(cfg: dict) -> str:
     ]
     return random.choice(variants)
 
-def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None) -> str:
+def boss_spawn_caption(cfg: dict, level: int, hp: int, weakness: str | None = None, max_hp: int | None = None) -> str:
     """Original story-style boss template, sent as a text reply to the separate artwork."""
     story = html.escape(boss_entrance_story(cfg))
+    maximum = max(1, int(max_hp or hp))
+    current = max(0, min(maximum, int(hp)))
     weak = f"\n╟─ 🜂 <b>نقطه‌ضعف:</b> {ELEMENTS.get(weakness, weakness)}" if weakness else ""
     return (
         f"╔══════ 🜲 <b>طومار بیداری باس</b> 🜲 ══════╗\n\n"
         f"📜 <i>{story}</i>\n\n"
         f"╟─ ⚔️ <b>{html.escape(cfg['name'])}</b> · <b>Lv.{level}</b>\n"
-        f"╟─ ❤️ <b>جانِ باس</b>  <b>{hp:,} / {hp:,}</b>\n"
-        f"╟─ {boss_hp_bar(hp, hp)}{weak}\n\n"
+        f"╟─ ❤️ <b>جانِ باس</b>  <b>{current:,} / {maximum:,}</b>\n"
+        f"╟─ {boss_hp_bar(current, maximum)}{weak}\n\n"
         "╠═══════ ✦ <b>فرامین نبرد</b> ✦ ═══════╣\n"
         "🗡️ برای حمله روی <b>پیام متنی باس</b> ریپلای کن.\n"
         "➤ برای اتک دادن عبارت <code>&lt; حمله &gt;</code> را بفرست.\n"
@@ -1179,11 +1181,13 @@ async def _attack(message: Message, skill_id: int | None = None, actor_id: int |
                            f"❤️ سلامتی: <b>0</b>\n"
                            "⏳ باس بعدی طبق چرخهٔ ساعتی ظاهر می‌شود.")
             else:
-                caption = (f"👹 <b>{html.escape(boss.name)}</b> · سطح {getattr(boss, 'boss_level', 1)}\n"
-                           f"❤️ سلامتی: <b>{boss.hp:,}</b>\n"
-                           f"🜂 ضعف: <b>{ELEMENTS[boss_weakness(cfg)]}</b> (جادوی هم‌عنصر ×1.75)\n\n"
-                           "⚔️ حمله  ·  ✨ جادو  ·  💚 هیل  ·  🔷 ریکاوری مانا\n"
-                           "برای حمله یا جادو روی همین پیام ریپلای کن؛ هیل و ریکاوری مانا بدون ریپلای.")
+                caption = boss_spawn_caption(
+                    cfg,
+                    int(getattr(boss, "boss_level", 1) or 1),
+                    int(boss.hp or 0),
+                    boss_weakness(cfg),
+                    int(boss.max_hp or boss.hp or 1),
+                )
             try:
                 await bot.edit_message_caption(chat_id=message.chat.id, message_id=int(boss.message_id), caption=caption, parse_mode="HTML")
             except Exception:
