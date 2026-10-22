@@ -80,6 +80,20 @@ def keyboard(*rows: list[InlineKeyboardButton]) -> InlineKeyboardMarkup:
 async def render_command_panel(message: Message, section: str) -> None:
     user_id = message.from_user.id
 
+    # Settings are private-chat only. In groups, show a direct link to the bot's DM.
+    if section == "settings" and message.chat.type != "private":
+        await send_panel(
+            message=message,
+            panel_name="settings",
+            text="⚙️ <b>تنظیمات اِلدوریا</b>\\n\\nبرای مدیریت تنظیمات قهرمان، از دکمهٔ زیر وارد پی‌وی ربات شو.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")]
+                ]
+            ),
+        )
+        return
+
     # Guild is stateful: never show the generic create/join screen blindly.
     # Resolve the caller's actual membership before rendering /guild or the
     # Persian text alias, just as the menu:guild callback does.
@@ -130,7 +144,7 @@ async def render_command_panel(message: Message, section: str) -> None:
         "forge": ("⚒️ <b>آهنگری اِلدوریا</b>\n\nتجهیزاتت را انتخاب و با گلد و مواد اولیه ارتقا بده.", keyboard([button("⚒️ باز کردن آهنگری", "menu:forge")], [button("🛡️ تجهیزات", "menu:equipment")], [button("🔙 منوی اصلی", "menu:back")]), "forge"),
         "guide": ("📖 <b>کتاب راهنمای اِلدوریا</b>\\n\\nیکی از دو مسیر زیر را انتخاب کن تا سفر خود را آسان‌تر آغاز کنی.", guide_keyboard(), "guide"),
         "exchange": ("💱 <b>صرافی اِلدوریا</b>\n\nنرخ تبدیل: ۱۰٬۰۰۰ گلد = ۱ جم. مقدار موردنظر را انتخاب کن؛ موجودی هنگام تأیید دوباره بررسی می‌شود.", keyboard([button("💱 تبدیل ۱ جم", "exchange:confirm:1")], [button("💱 تبدیل ۵ جم", "exchange:confirm:5")], [button("💱 تبدیل ۱۰ جم", "exchange:confirm:10")], [button("🔙 منوی اصلی", "menu:back")]), "exchange"),
-        "settings": ("⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.", InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")], [button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")], [button("🔙 منوی اصلی", "menu:back")]]), "settings"),
+        "settings": ("⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.", keyboard([button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")], [button("🔙 منوی اصلی", "menu:back")]), "settings"),
     }
     text, markup, panel_name = texts[section]
     # Send the actual section panel on the command itself; no extra "open" button.
@@ -197,6 +211,40 @@ def guide_keyboard() -> InlineKeyboardMarkup:
         [button("📚 راهنمای جامع", "guide:full")],
         [button("🔙 منوی اصلی", "menu:back")],
     )
+
+@router.callback_query(F.data == "menu:settings")
+async def settings_menu_callback(callback: CallbackQuery) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+
+    if callback.message.chat.type != "private":
+        await show_panel(
+            callback=callback,
+            panel_name="settings",
+            text="⚙️ <b>تنظیمات اِلدوریا</b>\\n\\nتنظیمات فقط در پی‌وی قابل استفاده است. برای ادامه، روی دکمهٔ زیر بزن.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="📩 رفتن به پی‌وی ربات", url="https://t.me/WorldEldoriaBot")]
+                ]
+            ),
+        )
+        await callback.answer()
+        return
+
+    await show_panel(
+        callback=callback,
+        panel_name="settings",
+        text="⚙️ <b>تنظیمات اِلدوریا</b>\\n\\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")],
+                [button("🔙 منوی اصلی", "menu:back")],
+            ]
+        ),
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data == "menu:guide")
 async def guide_menu_callback(callback: CallbackQuery) -> None:
