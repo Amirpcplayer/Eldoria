@@ -27,13 +27,15 @@ from services.party_service import (
     get_party_details,
     get_party_members,
     party_has_active_dungeon,
-    join_party,
+    browse_parties,
     join_party_from_invitation,
     kick_party_member,
     leave_party,
     rename_party,
     upgrade_party,
 )
+
+from handlers.membership_requests import parse_id, public_id, request_membership
 
 router = Router(name="party")
 logger = logging.getLogger(__name__)
@@ -414,7 +416,7 @@ def _party_summary_lines(details: dict[str, Any], is_leader: bool) -> list[str]:
         f"✨ عنوان: {_safe(details.get('title'))}",
         f"📝 توضیحات: {_safe(details.get('description') or 'بدون توضیحات')}",
         f"👥 ظرفیت: {details['member_count']}/{details['max_members']}",
-        f"🆔 شناسه: <code>{details['id']}</code>",
+        f"🆔 شناسه: <code>{public_id('party', details['id'])}</code>",
         f"👑 نقش شما: {'رهبر' if is_leader else 'عضو'}",
         "",
         "برای دیدن فهرست بازیکنان، «👥 نمایش اعضا» را بزن.",
@@ -538,24 +540,45 @@ async def party_create_start(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "party:join")
 async def party_join_start(callback: CallbackQuery) -> None:
-    details = await get_party_details(callback.from_user.id)
-
-    if details:
-        await show_party_panel(
-            callback,
-            "⚠️ تو هم‌اکنون عضو یک پارتی هستی.",
-            party_main_keyboard(True),
-        )
+    if await get_party_details(callback.from_user.id):
+        await show_party_panel(callback, "⚠️ هم‌اکنون عضو یک پارتی هستی.", party_main_keyboard(True))
         return
+    await show_party_panel(callback, "🔎 <b>پیوستن به پارتی</b>\n\nروش پیوستن را انتخاب کن.", InlineKeyboardMarkup(inline_keyboard=[
+        [_button("🔗 پیوستن با شناسه", "party:join:id")],
+        [_button("📜 لیست پارتی‌ها", "party:browse")],
+        [_button("🔙 بازگشت", "menu:party")],
+    ]))
 
-    await show_input_prompt(
-        callback,
-        (
-            "🔎 <b>پیوستن به پارتی</b>\n\n"
-            "شناسهٔ پارتی موردنظر را ارسال کن."
-        ),
-        "join_party_id",
-    )
+
+@router.callback_query(F.data == "party:join:id")
+async def party_join_by_id(callback: CallbackQuery) -> None:
+    await show_input_prompt(callback, "🔗 شناسه پارتی را بفرست؛ نمونه: <code>PTY-0002</code>", "join_party_id")
+
+
+@router.callback_query(F.data == "party:browse")
+async def party_browse(callback: CallbackQuery) -> None:
+    parties = await browse_parties(10)
+    lines = ["📜 <b>پارتی‌های اِلدوریا</b>", ""]
+    rows = []
+    for p in parties:
+        lines.append(f"⚔️ <b>{_safe(p['name'])}</b> · 👥 {p['member_count']}/{p['max_members']} · <code>{public_id('party', p['id'])}</code>")
+        if p["member_count"] < p["max_members"]:
+            rows.append([_button(f"➕ پیوستن · {str(p['name'])[:22]}", f"party:apply:{p['id']}")])
+    if not parties:
+        lines.append("هنوز پارتی بازی وجود ندارد.")
+    rows.append([_button("🔙 بازگشت", "party:join")])
+    await show_party_panel(callback, "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("party:apply:"))
+async def party_apply(callback: CallbackQuery) -> None:
+    try:
+        party_id = int(callback.data.rsplit(":", 1)[1])
+    except (ValueError, AttributeError):
+        await callback.answer("شناسه نامعتبر است.", show_alert=True)
+        return
+    ok, result = await request_membership("party", callback.from_user.id, party_id)
+    await show_party_panel(callback, ("✅ " if ok else "⚠️ ") + _safe(result), party_main_keyboard(False))
 
 
 # ============================================================
@@ -671,7 +694,7 @@ async def send_party_invitation(
                 "📨 <b>دعوت به پارتی اِلدوریا</b>\n\n"
                 f"👑 دعوت‌کننده: <code>@{html.escape(username)}</code>\n"
                 f"🏷️ نام پارتی: <b>{_safe(details['name'])}</b>\n"
-                f"🆔 شناسهٔ پارتی: <code>{details['id']}</code>\n\n"
+                f"🆔 شناسهٔ پارتی: <code>{public_id('party', details['id'])}</code>\n\n"
                 "این دعوت تا ۱۵ دقیقه اعتبار دارد. "
                 "اگر می‌خواهی عضو شوی، قبول دعوت را بزن."
             ),
@@ -896,32 +919,13 @@ async def party_text_input(message: Message) -> None:
         return
 
     if stage == "join_party_id":
-        try:
-            party_id = int(text)
-        except ValueError:
-            await show_input_prompt_from_message(
-                message,
-                "⚠️ شناسه باید عددی باشد.",
-                "join_party_id",
-            )
+        party_id = parse_id(text, "party")
+        if party_id is None:
+            await show_input_prompt_from_message(message, "⚠️ شناسه نامعتبر است؛ مانند <code>PTY-0002</code> وارد کن.", "join_party_id")
             return
-
-        if party_id <= 0:
-            await show_input_prompt_from_message(
-                message,
-                "⚠️ شناسهٔ پارتی نامعتبر است.",
-                "join_party_id",
-            )
-            return
-
         await clear_party_flow(telegram_id)
-        success, result_message = await join_party(telegram_id, party_id)
-
-        await show_party_message(
-            message,
-            f"{'✅' if success else '⚠️'} {_safe(result_message)}",
-            party_main_keyboard(bool(await get_party_details(telegram_id))),
-        )
+        success, result_message = await request_membership("party", telegram_id, party_id)
+        await render_party_after_input(message, panel_message_id, ("✅ " if success else "⚠️ ") + _safe(result_message))
         return
 
     if stage == "rename_party":
