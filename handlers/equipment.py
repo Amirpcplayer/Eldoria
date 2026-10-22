@@ -20,6 +20,8 @@ from keyboards.main_menu import main_menu_keyboard
 from services.panel_image_service import show_panel
 from middlewares.panel_owner import protect_keyboard
 
+from services.language_service import get_language
+
 from services.equipment_service import (
     get_character,
     get_equipment,
@@ -34,6 +36,37 @@ from services.equipment_service import (
 
 router = Router(name="equipment")
 logger = logging.getLogger(__name__)
+
+_EQUIPMENT_TEXT = {
+"en": [
+("منوی اصلی World Eldoria","World Eldoria Main Menu"),("ماجراجویی تو در اِلدوریا ادامه دارد...","Your adventure in Eldoria continues..."),("تجهیزات قهرمان","Hero Equipment"),("از بخش‌های زیر نوع تجهیزات موردنظر را انتخاب کن:","Choose an equipment category below:"),
+("سلاح‌ها","Weapons"),("کلاه‌ها","Helmets"),("زره‌ها","Armor"),("کفش‌ها","Boots"),("انگشترها","Rings"),("گردنبندها","Necklaces"),("معمولی","Common"),("غیرمعمولی","Uncommon"),("کمیاب","Rare"),("حماسی","Epic"),("افسانه‌ای","Legendary"),("اسطوره‌ای","Mythic"),("الهی","Divine"),
+("مجهز است","Equipped"),("در صندوقچه است","In Chest"),("قابل استفاده","Usable"),("سطح کافی نیست","Level too low"),("نوع:","Type:"),("کمیابی:","Rarity:"),("سطح موردنیاز:","Required level:"),("سطح قهرمان:","Hero level:"),("وضعیت سطح:","Level status:"),("تعداد:","Quantity:"),("وضعیت:","Status:"),("ویژگی‌های تجهیز","Equipment Stats"),("حمله:","Attack:"),("قدرت جادو:","Magic power:"),("دفاع جادویی:","Magic defense:"),("دفاع:","Defense:"),("سلامتی:","Health:"),("مانا:","Mana:"),("سرعت:","Speed:"),("دقت:","Accuracy:"),("ضربه بحرانی:","Critical hit:"),("بدون توضیحات","No description"),("در حال حاضر هیچ تجهیزی از این نوع در صندوقچه تو وجود ندارد.","You have no equipment of this type in your chest yet."),("تعداد تجهیزات:","Equipment count:"),("برای مشاهده جزئیات، یک تجهیز را انتخاب کن.","Select an item to view its details."),("آمار تجهیزات","Equipment Stats"),("تجهیزات مجهز:","Equipped items:"),("افزایش آمار از تجهیزات","Stats gained from equipment"),("این مقادیر، پاداش آمار تجهیزات مجهز را نشان می‌دهند.","These values show stat bonuses from equipped items."),
+("❌ پیام قبلی در دسترس نیست.","❌ Previous message is unavailable."),("❌ حذف پنل قبلی ناموفق بود. لطفاً دوباره تلاش کن.","❌ Could not delete the previous panel. Please try again."),("❌ خطا هنگام حذف پنل قبلی.","❌ Error while deleting the previous panel."),("❌ ارسال پنل تجهیزات ناموفق بود. ترمینال را بررسی کن.","❌ Could not send equipment panel. Check the terminal."),("❌ پیام پنل در دسترس نیست.","❌ Panel message is unavailable."),("❌ اجازه ویرایش این پیام وجود ندارد.","❌ You are not allowed to edit this message."),("❌ خطای غیرمنتظره هنگام ویرایش پنل.","❌ Unexpected error while editing the panel."),("❌ قهرمان پیدا نشد.","❌ Hero not found."),("❌ تجهیز پیدا نشد.","❌ Equipment not found."),("❌ این تجهیز در صندوقچه تو وجود ندارد.","❌ This item is not in your chest."),("❌ قهرمان پیدا نشد. ابتدا شخصیتت را بساز.","❌ Hero not found. Create your character first."),("❌ درخواست نامعتبر است.","❌ Invalid request."),("❌ نوع تجهیزات نامعتبر است.","❌ Invalid equipment type."),("❌ شناسه تجهیز نامعتبر است.","❌ Invalid equipment ID.")
+],
+"ru": [
+("منوی اصلی World Eldoria","Главное меню World Eldoria"),("ماجراجویی تو در اِلدوریا ادامه دارد...","Твоё приключение в Эльдории продолжается..."),("تجهیزات قهرمان","Снаряжение героя"),("از بخش‌های زیر نوع تجهیزات موردنظر را انتخاب کن:","Выбери категорию снаряжения:"),
+("سلاح‌ها","Оружие"),("کلاه‌ها","Шлемы"),("زره‌ها","Броня"),("کفش‌ها","Обувь"),("انگشترها","Кольца"),("گردنبندها","Ожерелья"),("معمولی","Обычный"),("غیرمعمولی","Необычный"),("کمیاب","Редкий"),("حماسی","Эпический"),("افسانه‌ای","Легендарный"),("اسطوره‌ای","Мифический"),("الهی","Божественный"),
+("مجهز است","Надето"),("در صندوقچه است","В сундуке"),("قابل استفاده","Можно использовать"),("سطح کافی نیست","Недостаточный уровень"),("نوع:","Тип:"),("کمیابی:","Редкость:"),("سطح موردنیاز:","Требуемый уровень:"),("سطح قهرمان:","Уровень героя:"),("وضعیت سطح:","Статус уровня:"),("تعداد:","Количество:"),("وضعیت:","Статус:"),("ویژگی‌های تجهیز","Характеристики снаряжения"),("حمله:","Атака:"),("قدرت جادو:","Сила магии:"),("دفاع جادویی:","Магическая защита:"),("دفاع:","Защита:"),("سلامتی:","Здоровье:"),("مانا:","Мана:"),("سرعت:","Скорость:"),("دقت:","Точность:"),("ضربه بحرانی:","Критический удар:"),("بدون توضیحات","Нет описания"),("در حال حاضر هیچ تجهیزی از این نوع در صندوقچه تو وجود ندارد.","В сундуке пока нет снаряжения этого типа."),("تعداد تجهیزات:","Количество предметов:"),("برای مشاهده جزئیات، یک تجهیز را انتخاب کن.","Выбери предмет, чтобы посмотреть подробности."),("آمار تجهیزات","Характеристики снаряжения"),("تجهیزات مجهز:","Надето предметов:"),("افزایش آمار از تجهیزات","Бонусы от снаряжения"),("این مقادیر، پاداش آمار تجهیزات مجهز را نشان می‌دهند.","Эти значения показывают бонусы от надетого снаряжения."),
+("❌ پیام قبلی در دسترس نیست.","❌ Предыдущее сообщение недоступно."),("❌ حذف پنل قبلی ناموفق بود. لطفاً دوباره تلاش کن.","❌ Не удалось удалить предыдущую панель. Попробуй ещё раз."),("❌ خطا هنگام حذف پنل قبلی.","❌ Ошибка при удалении предыдущей панели."),("❌ ارسال پنل تجهیزات ناموفق بود. ترمینال را بررسی کن.","❌ Не удалось отправить панель снаряжения. Проверь терминал."),("❌ پیام پنل در دسترس نیست.","❌ Сообщение панели недоступно."),("❌ اجازه ویرایش این پیام وجود ندارد.","❌ Нет разрешения на редактирование этого сообщения."),("❌ خطای غیرمنتظره هنگام ویرایش پنل.","❌ Непредвиденная ошибка при редактировании панели."),("❌ قهرمان پیدا نشد.","❌ Герой не найден."),("❌ تجهیز پیدا نشد.","❌ Предмет снаряжения не найден."),("❌ این تجهیز در صندوقچه تو وجود ندارد.","❌ Этого предмета нет в сундуке."),("❌ قهرمان پیدا نشد. ابتدا شخصیتت را بساز.","❌ Герой не найден. Сначала создай персонажа."),("❌ درخواست نامعتبر است.","❌ Некорректный запрос."),("❌ نوع تجهیزات نامعتبر است.","❌ Некорректный тип снаряжения."),("❌ شناسه تجهیز نامعتبر است.","❌ Некорректный ID предмета.")
+]
+}
+def _localize_equipment_text(text: str, language: str) -> str:
+    if language not in ("en", "ru"): return text
+    for source, translated in _EQUIPMENT_TEXT[language]: text = text.replace(source, translated)
+    return text
+
+def _localize_equipment_markup(markup, language: str):
+    if language not in ("en", "ru") or markup is None: return markup
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    rows = []
+    for row in markup.inline_keyboard:
+        new_row = []
+        for b in row:
+            new_row.append(InlineKeyboardButton(text=_localize_equipment_text(b.text, language), callback_data=b.callback_data, url=b.url, web_app=b.web_app, login_url=b.login_url, switch_inline_query=b.switch_inline_query, switch_inline_query_current_chat=b.switch_inline_query_current_chat, callback_game=b.callback_game, pay=b.pay, icon_custom_emoji_id=b.icon_custom_emoji_id, style=b.style))
+        rows.append(new_row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
 
 
 EQUIPMENT_TYPE_NAMES = {
@@ -88,6 +121,9 @@ async def send_new_panel(
     پیام قبلی را حذف و پنل جدید ارسال می‌کند.
     برای ورود به پنل تجهیزات استفاده می‌شود.
     """
+    language = await get_language(callback.from_user.id)
+    text = _localize_equipment_text(text, language)
+    reply_markup = _localize_equipment_markup(reply_markup, language)
     message = callback.message
 
     if message is None:
@@ -159,6 +195,9 @@ async def edit_panel(
     در صورت ناموفق بودن ویرایش، برای جلوگیری از پنل تکراری
     ابتدا پیام قبلی حذف می‌شود و سپس پنل جایگزین ارسال می‌شود.
     """
+    language = await get_language(callback.from_user.id)
+    text = _localize_equipment_text(text, language)
+    reply_markup = _localize_equipment_markup(reply_markup, language)
     message = callback.message
 
     if message is None:
