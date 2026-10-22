@@ -15,6 +15,7 @@ from services.guild_service import (
     claim_guild_leader_reward,
     create_guild,
     donate_guild_gold,
+    disband_guild,
     get_guild_for_player,
     guild_members,
     join_guild,
@@ -68,6 +69,7 @@ def guild_home_keyboard(has_guild: bool, is_owner: bool = False) -> InlineKeyboa
             [_btn("🏆 رتبه‌بندی گیلدها", "guild:rankings")],
             [_btn("💰 کمک به خزانه", "guild:donate")],
             [_btn("👑 پاداش روزانهٔ رهبر", "guild:leader_reward")],
+            ...(is_owner ? [[_btn("🗑️ حذف کامل گیلد", "guild:disband")]] : []),
             [_btn("🚪 خروج از گیلد", "guild:leave")],
         ]
     else:
@@ -282,20 +284,52 @@ async def guild_leader_reward(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "guild:leave")
 async def guild_leave_confirm(callback: CallbackQuery) -> None:
-    guild = await get_guild_for_player(callback.from_user.id)
+    user_id = callback.from_user.id
+    guild = await get_guild_for_player(user_id)
     if not guild:
         await _show(callback, "عضو هیچ گیلدی نیستی.", guild_home_keyboard(False))
         return
     if guild["role"] == "owner" and guild["member_count"] > 1:
-        warning = "با خروج تو، رهبری به قدیمی‌ترین عضو باقی‌مانده منتقل می‌شود."
-    elif guild["role"] == "owner":
-        warning = "چون تنها عضو گیلد هستی، خود گیلد نیز حذف خواهد شد."
-    else:
-        warning = "از گیلد خارج خواهی شد؛ این عمل قابل بازگشت خودکار نیست."
+        _, members = await guild_members(user_id)
+        rows = [[_btn(f"👑 {str(m['name'])[:28]}", f"guild:leave:leader:{int(m['telegram_id'])}")]
+                for m in members if int(m["telegram_id"]) != user_id]
+        rows.append([_btn("🔙 انصراف", "menu:guild")])
+        await _show(callback, "👑 <b>انتقال رهبری و خروج</b>\n\nیکی از اعضا را انتخاب کن؛ رهبری گیلد به او منتقل می‌شود و سپس از گیلد خارج می‌شوی.", _keyboard(rows))
+        return
+    warning = "چون تنها عضو گیلد هستی، با خروج گیلد نیز حذف می‌شود." if guild["role"] == "owner" else "از گیلد خارج خواهی شد؛ این عمل قابل بازگشت خودکار نیست."
     await _show(callback, f"🚪 <b>خروج از گیلد</b>\n\n{warning}\n\nآیا مطمئنی؟", _keyboard([[_btn("✅ تأیید خروج", "guild:leave:confirm")], [_btn("❌ انصراف", "menu:guild")]]))
 
 
 @router.callback_query(F.data == "guild:leave:confirm")
 async def guild_leave_do(callback: CallbackQuery) -> None:
     success, result = await leave_guild(callback.from_user.id)
+    await _home(callback, ("✅ " if success else "⚠️ ") + html.escape(result))
+
+
+@router.callback_query(F.data.startswith("guild:leave:leader:"))
+async def guild_leave_with_transfer(callback: CallbackQuery) -> None:
+    try:
+        successor_id = int(callback.data.rsplit(":", 1)[1])
+    except (TypeError, ValueError, AttributeError):
+        await callback.answer("عضو انتخاب‌شده معتبر نیست.", show_alert=True)
+        return
+    success, result = await leave_guild(callback.from_user.id, successor_id)
+    await _home(callback, ("✅ " if success else "⚠️ ") + html.escape(result))
+
+
+@router.callback_query(F.data == "guild:disband")
+async def guild_disband_start(callback: CallbackQuery) -> None:
+    guild = await get_guild_for_player(callback.from_user.id)
+    if not guild or guild["role"] != "owner":
+        await _show(callback, "⛔ فقط رهبر گیلد می‌تواند آن را حذف کند.", guild_home_keyboard(bool(guild), False))
+        return
+    await _show(callback, "🗑️ <b>حذف کامل گیلد</b>\n\nاین کار گیلد و عضویت تمام اعضا را حذف می‌کند و قابل بازگشت نیست. مطمئنی؟", _keyboard([
+        [_btn("🗑️ بله، گیلد حذف شود", "guild:disband:confirm")],
+        [_btn("❌ انصراف", "menu:guild")],
+    ]))
+
+
+@router.callback_query(F.data == "guild:disband:confirm")
+async def guild_disband_do(callback: CallbackQuery) -> None:
+    success, result = await disband_guild(callback.from_user.id)
     await _home(callback, ("✅ " if success else "⚠️ ") + html.escape(result))
