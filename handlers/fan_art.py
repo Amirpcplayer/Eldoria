@@ -803,14 +803,14 @@ async def fan_art_sell(callback: CallbackQuery):
 
 
 @router.message(Command("arts", ignore_case=True))
-@router.message(F.text.regexp(r"(?i)^\\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\\s*$"))
+@router.message(F.text.regexp(r"(?i)^\s*(ارت ها|ارت‌ها|فن.?آرت|فن.?آرت ها|فن.?آرت‌ها)\s*$"))
 async def fan_art_text_entry(message: Message):
     """Open Fan Art as the player's current panel, replacing the previous menu."""
     await send_panel(
         message=message,
         panel_name="fan_art",
         text=(
-            "🎨 <b>تالار فن‌آرت اِلدوریا</b>\\n\\n"
+            "🎨 <b>تالار فن‌آرت اِلدوریا</b>\n\n"
             "از این بخش می‌توانی فن‌آرت‌ها را مرور کنی؛ فن‌آرت‌های خودت را از صندوقچهٔ قهرمان ببین."
         ),
         reply_markup=fan_art_main_keyboard(),
