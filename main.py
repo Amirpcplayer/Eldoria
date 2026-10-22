@@ -17,6 +17,7 @@ from middlewares.performance_monitor import UpdateTimingMiddleware
 
 from middlewares.username_sync import UsernameSyncMiddleware
 from middlewares.panel_owner import PanelOwnerMiddleware
+from middlewares.delete_main_menu_on_click import DeleteMainMenuOnClickMiddleware
 from middlewares.character_required import CharacterRequiredMiddleware
 from middlewares.adventure_fight_lock import AdventureFightLockMiddleware
 
@@ -96,6 +97,7 @@ panel_owner = PanelOwnerMiddleware()
 
 dp.message.outer_middleware(CharacterRequiredMiddleware())
 dp.callback_query.outer_middleware(CharacterRequiredMiddleware())
+dp.callback_query.outer_middleware(DeleteMainMenuOnClickMiddleware())
 dp.callback_query.outer_middleware(AdventureFightLockMiddleware())
 dp.message.outer_middleware(GuardianMiddleware())
 dp.message.middleware(username_sync)
