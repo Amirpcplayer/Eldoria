@@ -20,6 +20,25 @@ from models.character import Character
 
 router = Router(name="command_aliases")
 
+
+def _is_profile_text(text: str | None) -> bool:
+    if not text:
+        return False
+    import unicodedata
+    normalized = "".join(
+        char for char in text
+        if unicodedata.category(char) != "Cf" and char != "\u0640"
+    ).strip().casefold()
+    return normalized == "پروفایل"
+
+
+@router.message(Command("profile", ignore_case=True))
+@router.message(F.text.func(_is_profile_text))
+async def route_profile_command(message: Message) -> None:
+    """Route profile requests before generic menu routers, preserving reply targets."""
+    from handlers.profile import compact_profile_command
+    await compact_profile_command(message)
+
 ALIASES = {
     "sandoghche": "inventory",
     "skills": "skills",
