@@ -1308,21 +1308,22 @@ async def _story_attack(message: Message) -> None:
 
 
 def _is_plain_story_attack(text: str | None) -> bool:
-    """Match Persian attack text even if Telegram/client inserts invisible Unicode marks."""
+    """Match the Persian attack alias despite invisible Unicode formatting marks."""
     if not text:
         return False
-    normalized = (
-        text.replace("\\u200b", "")
-        .replace("\\u200c", "")
-        .replace("\\u200d", "")
-        .replace("\\ufeff", "")
-        .strip()
-        .casefold()
-    )
+    import unicodedata
+
+    normalized = "".join(
+        char for char in text
+        if unicodedata.category(char) != "Cf" and char != "\u0640"
+    ).strip().casefold()
+    # Normalize common Arabic/Persian keyboard variants.
+    normalized = normalized.replace("ي", "ی").replace("ك", "ک")
     return normalized == "حمله"
 
 
 @router.message(Command("attack", ignore_case=True))
+@router.message(F.text == "حمله")
 @router.message(F.text.func(_is_plain_story_attack))
 @router.message(F.text.regexp(r"(?i)^\\s*حمله\\s*$"))
 async def group_boss_attack(message: Message):
