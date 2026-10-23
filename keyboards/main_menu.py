@@ -78,9 +78,6 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📖 راهنما", callback_data="menu:guide"),
             ],
             [
-                InlineKeyboardButton(text="🌟 پیشرفت سریع", callback_data="guide:progress"),
-            ],
-            [
                 InlineKeyboardButton(
                     text="🛒 فروشگاه",
                     callback_data="menu:shop",
