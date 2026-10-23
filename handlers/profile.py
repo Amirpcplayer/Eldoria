@@ -66,7 +66,7 @@ def build_xp_progress_bar(
 
     # قهرمان به حداکثر سطح رسیده است.
     if level >= MAX_CHARACTER_LEVEL:
-        bar = 🟩 * 10
+        bar = "🟩" * 10
 
         return (
             f"{bar}\n"
@@ -100,8 +100,8 @@ def build_xp_progress_bar(
     empty_blocks = 10 - filled_blocks
 
     bar = (
-        🟩 * filled_blocks
-        + ⬜️ * empty_blocks
+        "🟩" * filled_blocks
+        + "⬜️" * empty_blocks
     )
 
     return (
@@ -372,34 +372,34 @@ def build_profile_text(
 
     lines = [
         "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
-        f"  {⚔️} <b>قهرمان اِلدوریا</b> {⚔️}",
+        f"  ⚔️ <b>قهرمان اِلدوریا</b> ⚔️",
         "",
-        f"{🧙} نام قهرمان: <b>{name}</b>",
-        f"{🎖️} لقب: {title}",
-        f"{🏅} سطح: Lv. {level}",
-        f"{🧬} نژاد: {race}  ·  {⚧️} جنسیت: {gender}",
+        f"🧙 نام قهرمان: <b>{name}</b>",
+        f"🎖️ لقب: {title}",
+        f"🏅 سطح: Lv. {level}",
+        f"🧬 نژاد: {race}  ·  ⚧️ جنسیت: {gender}",
         "",
-        f"━━━━━━━━ {⚜️} هویت قهرمان {⚜️} ━━━━━━━━",
+        f"━━━━━━━━ ⚜️ هویت قهرمان ⚜️ ━━━━━━━━",
         "",
-        f"{⚔️} قدرت رزمی: <b>{combat_power:,}</b>",
-        f"{💰} طلا: <b>{int(character.gold or 0):,}</b>  ·  {💎} جم: <b>{int(character.gems or 0):,}</b>",
+        f"⚔️ قدرت رزمی: <b>{combat_power:,}</b>",
+        f"💰 طلا: <b>{int(character.gold or 0):,}</b>  ·  💎 جم: <b>{int(character.gems or 0):,}</b>",
         "",
-        f"━━━━━━━━ {💧} وضعیت حیاتی {💧} ━━━━━━━━",
+        f"━━━━━━━━ 💧 وضعیت حیاتی 💧 ━━━━━━━━",
         "",
-        f"{❤️} سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
-        f"{bar(current_hp, final_hp, 🟥, empty=⬜️)}",
+        f"❤️ سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
+        f"{bar(current_hp, final_hp, "🟥", empty="⬜️")}",
         "",
-        f"{💧} مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
-        f"{bar(current_mana, final_mana, 🟦, empty=⬜️)}",
+        f"💧 مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
+        f"{bar(current_mana, final_mana, "🟦", empty="⬜️")}",
         "",
-        f"━━━━━━━━ {⚔️} ویژگی‌های رزمی {⚔️} ━━━━━━━━",
+        f"━━━━━━━━ ⚔️ ویژگی‌های رزمی ⚔️ ━━━━━━━━",
         "",
-        f"{⚔️} حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  {🔮} قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
-        f"{🛡️} دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  {✨} دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
-        f"{💨} سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  {🎯} دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
-        f"{🍀} شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  {💥} ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
+        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
+        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  ✨ دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
+        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
+        f"🍀 شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  💥 ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
         "",
-        f"━━━━━━━━ {🌟} مسیر قهرمانی {🌟} ━━━━━━━━",
+        f"━━━━━━━━ 🌟 مسیر قهرمانی 🌟 ━━━━━━━━",
         "",
         xp_progress,
     ]
@@ -474,12 +474,12 @@ async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
         )).first()
 
     guild_line = (
-        f"{🛡️} گیلد: <b>{html.escape(guild_row.name)}</b> [{html.escape(guild_row.tag)}]"
-        if guild_row else f"{🛡️} گیلد: بدون گیلد"
+        f"🛡️ گیلد: <b>{html.escape(guild_row.name)}</b> [{html.escape(guild_row.tag)}]"
+        if guild_row else f"🛡️ گیلد: بدون گیلد"
     )
     party_line = (
-        f"{👥} پارتی: <b>{html.escape(party_row.name)}</b> · رتبه {html.escape(party_row.rank or 'F')}"
-        if party_row else f"{👥} پارتی: بدون پارتی"
+        f"👥 پارتی: <b>{html.escape(party_row.name)}</b> · رتبه {html.escape(party_row.rank or 'F')}"
+        if party_row else f"👥 پارتی: بدون پارتی"
     )
     buffs = await active_buffs(telegram_id)
     if buffs:
@@ -489,9 +489,9 @@ async def append_profile_social_and_scrolls(text: str, telegram_id: int) -> str:
             remaining = max(0, int(float(payload.get("expires_at", 0)) - now_ts))
             hours, minutes = divmod(remaining // 60, 60)
             buff_lines.append(f"• {SCROLLS[kind]['title']} · باقی‌مانده {hours}س {minutes}د")
-        scroll_block = f"{📜} <b>اسکرول‌های فعال</b>\n" + "\n".join(buff_lines)
+        scroll_block = f"📜 <b>اسکرول‌های فعال</b>\n" + "\n".join(buff_lines)
     else:
-        scroll_block = f"{📜} <b>اسکرول‌های فعال</b>\n{•} هیچ اسکرولی فعال نیست."
+        scroll_block = f"📜 <b>اسکرول‌های فعال</b>\n• هیچ اسکرولی فعال نیست."
     return text + "\n\n━━━━━━━━ 🛡️ پیوندهای قهرمان ⚔️ ━━━━━━━━\n" + guild_line + "\n" + party_line + "\n\n" + scroll_block
 
 
