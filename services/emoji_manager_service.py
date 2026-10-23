@@ -52,6 +52,7 @@ INTERNAL_BUTTONS: dict[str, tuple[str, str]] = {
 }
 ALL_BUTTONS = {**MAIN_BUTTONS, **INTERNAL_BUTTONS}
 DEFAULTS = {key: value[1] for key, value in ALL_BUTTONS.items()}
+_RUNTIME_CONFIG: dict[str, Any] | None = None
 
 
 def load_config() -> dict[str, Any]:
@@ -78,7 +79,11 @@ def save_config(config: dict[str, Any]) -> None:
 
 
 def get_emoji(callback_data: str) -> str | None:
-    config = load_config()
+    # Cache once: this middleware may process dozens of buttons per message.
+    global _RUNTIME_CONFIG
+    if _RUNTIME_CONFIG is None:
+        _RUNTIME_CONFIG = load_config()
+    config = _RUNTIME_CONFIG
     if not config["enabled"]:
         return None
     return config["overrides"].get(callback_data, DEFAULTS.get(callback_data))
@@ -93,13 +98,20 @@ def set_emoji(callback_data: str, emoji: str) -> None:
     config = load_config()
     config["overrides"][callback_data] = value
     save_config(config)
+    global _RUNTIME_CONFIG
+    _RUNTIME_CONFIG = config
 
 
 def reset_emoji(callback_data: str) -> None:
     config = load_config()
     config["overrides"].pop(callback_data, None)
     save_config(config)
+    global _RUNTIME_CONFIG
+    _RUNTIME_CONFIG = config
 
 
 def reset_all() -> None:
-    save_config({"version": 1, "enabled": True, "overrides": {}})
+    config = {"version": 1, "enabled": True, "overrides": {}}
+    save_config(config)
+    global _RUNTIME_CONFIG
+    _RUNTIME_CONFIG = config
