@@ -266,10 +266,18 @@ def apply_keyboard_icons(markup: Any, data: dict[str, Any] | None = None,
                     callback_key = raw_callback.split(":")[-1]
                     # Main-menu buttons use menu:<section>, while the emoji
                     # registry intentionally stores independent menu_* keys.
-                    if raw_callback.startswith("menu:") and f"menu_{callback_key}" in DEFAULTS:
-                        key = f"menu_{callback_key}"
+                    if raw_callback == "menu:exchange":
+                        # The admin archive historically exposed this item as
+                        # menu_gold_gems; prefer that ID when configured.
+                        key = (
+                            "menu_gold_gems"
+                            if str(ids.get("menu_gold_gems", "")).isdigit()
+                            else "menu_exchange"
+                        )
                     elif raw_callback == "guide:progress":
                         key = "menu_quick_progress"
+                    elif raw_callback.startswith("menu:") and f"menu_{callback_key}" in DEFAULTS:
+                        key = f"menu_{callback_key}"
                     elif callback_key in DEFAULTS:
                         key = callback_key
                     elif callback_key in {"ranking", "leaderboard"}:
