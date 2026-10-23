@@ -134,23 +134,23 @@ def profile_keyboard(language: str = "fa") -> InlineKeyboardMarkup:
                     callback_data="menu:skills",
                 ),
                 InlineKeyboardButton(
-                    text=tr(language, "profile_stats"),
+                    text="آمار کامل پروفایل",
                     callback_data="profile:stats",
                 ),
             ],
             [
-                InlineKeyboardButton(text=tr(language, "hp_recovery"), callback_data="potion:choose:hp"),
-                InlineKeyboardButton(text=tr(language, "mana_recovery"), callback_data="potion:choose:mana"),
+                InlineKeyboardButton(text="بازیابی سلامت", callback_data="potion:choose:hp"),
+                InlineKeyboardButton(text="بازیابی مانا", callback_data="potion:choose:mana"),
             ],
             [
                 InlineKeyboardButton(
-                    text=tr(language, "titles"),
+                    text="لقب‌ها",
                     callback_data="profile:titles",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text=tr(language, "choose_fanart"),
+                    text="انتخاب فن‌آرت",
                     callback_data="profile:fanart",
                 ),
             ],
