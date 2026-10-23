@@ -15,3 +15,16 @@ def test_collapses_whitespace_and_casefolds():
 
 def test_empty_text_normalizes_to_empty_string():
     assert normalize_filter_text("   ") == ""
+
+
+def test_filter_matching_normalizes_both_message_and_filter_term():
+    from utils.text_normalization import contains_filtered_word
+
+    assert contains_filtered_word("این پیام تبلیغی نیست", {"تبليغ"})
+    assert contains_filtered_word("كِتابـي", {"کتابی"})
+
+
+def test_filter_matching_does_not_match_empty_terms():
+    from utils.text_normalization import contains_filtered_word
+
+    assert not contains_filtered_word("یک پیام معمولی", {""})

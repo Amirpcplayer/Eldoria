@@ -16,7 +16,7 @@ from aiogram.exceptions import TelegramAPIError
 from datetime import datetime, timedelta, timezone
 from database.redis import redis
 from config.settings import settings as app_settings
-from utils.text_normalization import normalize_filter_text
+from utils.text_normalization import contains_filtered_word, normalize_filter_text
 from sqlalchemy import func, select
 from database.database import AsyncSessionLocal
 from models.character import Character
@@ -653,7 +653,7 @@ class GuardianMiddleware(BaseMiddleware):
             violation = True
         if values["words"]:
             words = await redis.smembers(f"guardian:{chat_id}:words")
-            if any(word and word in content.casefold() for word in words):
+            if contains_filtered_word(content, words):
                 violation = True
         if values["spam"]:
             key = (chat_id, event.from_user.id)
