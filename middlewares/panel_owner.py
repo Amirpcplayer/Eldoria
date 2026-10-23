@@ -3,6 +3,8 @@ from __future__ import annotations
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery
 
+from services.premium_emoji_service import apply_keyboard_icons
+
 
 OWNER_PREFIX = "eo:"
 
@@ -10,6 +12,10 @@ OWNER_PREFIX = "eo:"
 def protect_keyboard(reply_markup, owner_id: int):
     if reply_markup is None:
         return None
+
+    # Apply configured Telegram custom-emoji icons before owner-protecting
+    # callback data, so the emoji resolver sees the original callback names.
+    reply_markup = apply_keyboard_icons(reply_markup)
 
     rows = []
 
