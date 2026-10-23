@@ -1139,10 +1139,19 @@ async def delete_player_confirm(callback: CallbackQuery):
     try:
         await bot.send_message(
             telegram_id,
-            "༺ ✦ اِلدوریا ✦ ༻\n\n"
-            "حساب شما از طرف ادمین با موفقیت حذف شد.\n"
-            "برای شروع دوباره /start بزنید.\n\n"
-            "پشتیبانی : @P_ERSIAN19",
+            "╭─── ✦ ⚔️ ✦ ───╮\n"
+            "   <b>پیامی از دنیای اِلدوریا</b>\n"
+            "╰─── ✦ ⚔️ ✦ ───╯\n\n"
+            "قهرمان عزیز، شخصیت و حساب بازی شما توسط مدیریت حذف شده است.\n\n"
+            "🌱 اگر می‌خواهید ماجراجویی تازه‌ای آغاز کنید، دکمهٔ «شروع دوباره» را بزنید تا شخصیت جدیدتان را بسازید.\n\n"
+            "📨 اگر فکر می‌کنید حساب شما به اشتباه حذف شده، برای بررسی موضوع با پشتیبانی در ارتباط باشید:\n"
+            "👤 @P_ERSIAN19\n\n"
+            "✨ دروازه‌های اِلدوریا برای آغاز دوباره باز هستند.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⚔️ شروع دوباره و ساخت شخصیت", url="https://t.me/WorldEldoriaBot?start=restart")],
+                [InlineKeyboardButton(text="📨 ارتباط با پشتیبانی", url="https://t.me/P_ERSIAN19")],
+            ]),
         )
     except Exception:
         # A blocked bot or a player who never opened the bot must not undo deletion.
