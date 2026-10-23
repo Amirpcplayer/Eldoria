@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 import time
 from collections import defaultdict, deque
@@ -20,6 +21,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # مالک ثابت پنل نگهبان در تمام گروه‌ها
 GLOBAL_GUARDIAN_OWNER_ID = 8537258392
