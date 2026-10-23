@@ -211,7 +211,6 @@ def guide_keyboard() -> InlineKeyboardMarkup:
     return keyboard(
         [button("⚡ راهنمای پیشرفت سریع", "guide:quick")],
         [button("📚 راهنمای جامع", "guide:full")],
-        [button("🌟 پیشرفت سریع", "guide:progress")],
         [button("🔙 منوی اصلی", "menu:back")],
     )
 
