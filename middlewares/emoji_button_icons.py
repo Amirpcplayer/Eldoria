@@ -45,9 +45,18 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
             for button in row:
                 text = button.text or ""
                 callback_data = getattr(button, "callback_data", None)
-                # Owner-protected keyboards use eo:<owner_id>:<original_callback>.\n                # Resolve the original callback for emoji lookup without changing protection.\n                lookup_data = callback_data\n                if lookup_data and lookup_data.startswith("eo:"):\n                    parts = lookup_data.split(":", 2)\n                    if len(parts) == 3 and parts[1].isdigit():\n                        lookup_data = parts[2]\n                key = lookup_data if lookup_data in ALL_BUTTONS else None
-                if key is None and callback_data:
-                    key = next((candidate for candidate in ALL_BUTTONS if candidate.endswith(":") and callback_data.startswith(candidate)), None)
+                # Unwrap owner protection only for matching; keep the real callback unchanged.
+                lookup_data = callback_data
+                if lookup_data and lookup_data.startswith("eo:"):
+                    parts = lookup_data.split(":", 2)
+                    if len(parts) == 3 and parts[1].isdigit():
+                        lookup_data = parts[2]
+                key = lookup_data if lookup_data in ALL_BUTTONS else None
+                if key is None and lookup_data:
+                    key = next((
+                        candidate for candidate in ALL_BUTTONS
+                        if candidate.endswith(":") and lookup_data.startswith(candidate)
+                    ), None)
                 normalized = _normalize_label(text)
                 exact_label_match = normalized in _LABEL_ONLY_TO_KEY
 
