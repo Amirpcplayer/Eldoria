@@ -46,7 +46,6 @@ class AdminPlayerStates(StatesGroup):
     waiting_gold_search = State()
     waiting_gold_amount = State()
     waiting_admin_username = State()
-    waiting_emoji_id = State()
 
 
 # مالک ثابت ربات، مستقل از عضویت در گروه‌ها
@@ -107,7 +106,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
             ],
             [
-                InlineKeyboardButton(text="🎨 مدیریت ایموجی", callback_data="admin:emoji:home"),
+                InlineKeyboardButton(text="📚 منوهای داخلی", callback_data="admin:internal_menu"),
             ],
             [
                 InlineKeyboardButton(
