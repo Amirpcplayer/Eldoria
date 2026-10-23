@@ -95,7 +95,22 @@ async def gap(message: Message):
     if not group(message.chat):
         await message.answer("🛡️ دستور /gap را در گروه اجرا کنید.")
         return
-    if not await guardian_admin(message.bot, message.chat.id, message.from_user.id):
+
+    # پنل مدیریت گروه فقط زمانی باز شود که خود ربات ادمین گروه باشد.
+    try:
+        bot_user = await message.bot.get_me()
+        bot_member = await message.bot.get_chat_member(message.chat.id, bot_user.id)
+    except TelegramAPIError:
+        bot_member = None
+
+    if bot_member is None or bot_member.status not in {"administrator", "creator"}:
+        await message.answer(
+            "🔒 برای استفاده از بخش مدیریتی ربات، باید ربات را ادمین گروه کنید.\n"
+            "پس از ادمین کردن ربات، دوباره دستور /gap را بفرستید."
+        )
+        return
+
+    if not message.from_user or not await guardian_admin(message.bot, message.chat.id, message.from_user.id):
         await message.answer("⛔ دسترسی فقط برای مدیران گروه و مالک کل ربات مجاز است.")
         return
     values = await settings(message.chat.id)
