@@ -25,7 +25,7 @@ EXACT: dict[str, str] = {
     "menu:fanart": "menu_fanart", "menu:enter_game": "menu_enter_game",
     "menu:blacksmith": "menu_blacksmith", "menu:gold_gems": "menu_gold_gems",
     "menu:market": "menu_marketplace",
-    "profile:stats": "profile_stats", "profile:fanart": "menu_fanart",
+    "profile:stats": "profile_stats", "profile:fanart": "profile_fanart_select",
     "profile:titles": "profile_titles",
     "potion:choose:hp": "profile_hp_recovery", "potion:choose:mana": "profile_mana_recovery",
     "party:members": "party_members", "party:kick:list": "party_members",
@@ -99,7 +99,7 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
                             "menu:equipment": "profile_equipment",
                             "menu:skills": "profile_skills",
                             "profile:stats": "profile_stats",
-                            "profile:fanart": "menu_fanart",
+                            "profile:fanart": "profile_fanart_select",
                             "menu:back": "profile_back",
                             "profile:back": "profile_back",
                         }
