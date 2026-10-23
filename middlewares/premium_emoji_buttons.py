@@ -24,7 +24,7 @@ EXACT: dict[str, str] = {
     "menu:shop": "menu_shop", "menu:settings": "menu_settings",
     "menu:fanart": "menu_fanart", "menu:enter_game": "menu_enter_game",
     "menu:blacksmith": "menu_blacksmith", "menu:gold_gems": "menu_gold_gems",
-    "menu:market": "menu_market",
+    "menu:market": "menu_marketplace",
     "profile:stats": "profile_stats", "profile:fanart": "profile_fanart_select",
     "profile:titles": "profile_titles",
     "potion:choose:hp": "profile_hp_recovery", "potion:choose:mana": "profile_mana_recovery",
