@@ -63,8 +63,8 @@ def build_xp_progress_bar(
 
     if level >= MAX_CHARACTER_LEVEL:
         return (
-            f"└ تجربه فعلی: {xp:,} XP\\n"
-            "└ وضعیت: حداکثر سطح اِلدوریا 👑\\n"
+            f"└ تجربه فعلی: {xp:,} XP\n"
+            "└ وضعیت: حداکثر سطح اِلدوریا 👑\n"
             + "▰" * width
             + " 100٪"
         )
@@ -72,8 +72,8 @@ def build_xp_progress_bar(
     required_xp = max(0, int(get_required_xp(level) or 0))
     if required_xp <= 0:
         return (
-            f"└ تجربه فعلی: {xp:,} XP\\n"
-            "└ XP موردنیاز سطح بعدی: ۰\\n"
+            f"└ تجربه فعلی: {xp:,} XP\n"
+            "└ XP موردنیاز سطح بعدی: ۰\n"
             + "▰" * width
             + " 100٪"
         )
@@ -85,9 +85,9 @@ def build_xp_progress_bar(
     remaining = max(0, required_xp - current_xp)
 
     return (
-        f"└ تجربه فعلی: {xp:,} XP\\n"
-        f"└ سطح بعدی: {required_xp:,} XP\\n"
-        f"└ باقی‌مانده: {remaining:,} XP\\n"
+        f"└ تجربه فعلی: {xp:,} XP\n"
+        f"└ سطح بعدی: {required_xp:,} XP\n"
+        f"└ باقی‌مانده: {remaining:,} XP\n"
         f"{bar} {percentage}٪"
     )
 
@@ -380,7 +380,7 @@ def build_profile_text(
         f"💎 جم: {int(character.gems or 0):,}",
         "",
     ]
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
