@@ -592,6 +592,20 @@ class GuardianMiddleware(BaseMiddleware):
         content = event.text or event.caption or ""
         if not content or content.startswith("/"):
             return await handler(event, data)
+
+        # Game action aliases must reach their own routers even if a group
+        # moderator has configured a matching word filter or flood protection.
+        # Otherwise a plain "حمله" can be deleted here before the combat handler
+        # sees it, while "/attack" still works because slash commands bypass filters.
+        normalized_content = "".join(
+            char for char in content
+            if __import__("unicodedata").category(char) != "Cf" and char != "\u0640"
+        ).strip().casefold()
+        normalized_content = normalized_content.replace("ي", "ی").replace("ك", "ک")
+        game_actions = {"حمله", "جادو", "هیل", "ریکاوری مانا"}
+        if normalized_content in game_actions:
+            return await handler(event, data)
+
         if await authorized(event.bot, chat_id, event.from_user.id):
             return await handler(event, data)
         violation = False
