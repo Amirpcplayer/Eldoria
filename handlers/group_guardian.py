@@ -590,6 +590,18 @@ class GuardianMiddleware(BaseMiddleware):
         if event.from_user.id == GLOBAL_GUARDIAN_OWNER_ID or await guardian_admin(event.bot, chat_id, event.from_user.id):
             return await handler(event, data)
         content = event.text or event.caption or ""
+        # Diagnostic: confirms whether Telegram delivered the Persian alias to middleware.
+        normalized_for_diagnostic = "".join(
+            char for char in content
+            if __import__("unicodedata").category(char) != "Cf" and char != "\u0640"
+        ).strip().casefold().replace("ي", "ی").replace("ك", "ک")
+        if normalized_for_diagnostic == "حمله":
+            logger.warning(
+                "PERSIAN_ATTACK_DIAGNOSTIC: received in GuardianMiddleware chat_id=%s user_id=%s text=%r",
+                event.chat.id,
+                event.from_user.id if event.from_user else None,
+                content,
+            )
         if not content or content.startswith("/"):
             return await handler(event, data)
 
