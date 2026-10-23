@@ -63,6 +63,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
+                    text="🎨 مدیریت ایموجی",
+                    callback_data="admin:emoji:home",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="➕ اضافه کردن ادمین",
                     callback_data="admin:admins:add",
                 )
@@ -71,12 +77,6 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="➖ برکناری ادمین",
                     callback_data="admin:admins:remove",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🎨 مدیریت ایموجی",
-                    callback_data="admin:emoji:home",
                 )
             ],
             [
@@ -112,8 +112,6 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
-            ],
-            [
             ],
             [
                 InlineKeyboardButton(
