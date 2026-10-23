@@ -106,7 +106,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
             ],
             [
-                InlineKeyboardButton(text="✨ مدیریت ایموجی‌های پرمیوم", callback_data="admin:emoji:home"),
+                InlineKeyboardButton(text="📚 منوهای داخلی", callback_data="admin:internal_menu"),
             ],
             [
                 InlineKeyboardButton(
@@ -137,7 +137,6 @@ def delegated_admin_keyboard() -> InlineKeyboardMarkup:
         "admin:fanart:add",
         "admin:fanart:orders",
         "admin:fanart:spawn",
-        "admin:emoji:home",
     }
     rows = []
     for row in keyboard.inline_keyboard:
@@ -435,6 +434,67 @@ async def admin_panel(
         "بخش موردنظرت را انتخاب کن:",
         reply_markup=admin_keyboard() if owner_access else delegated_admin_keyboard(),
     )
+
+
+INTERNAL_MENU_SECTIONS = [
+    ("ادمین /admin", "internal:admin"),
+    ("پروفایل", "internal:profile"),
+    ("صندوقچه", "internal:inventory"),
+    ("مهارت‌ها", "internal:skills"),
+    ("تجهیزات", "internal:equipment"),
+    ("ماموریت‌ها", "internal:quest"),
+    ("ماجراجویی", "internal:adventure"),
+    ("کرفتینگ", "internal:crafting"),
+    ("پت", "internal:pets"),
+    ("ایونت", "internal:events"),
+    ("پارتی", "internal:party"),
+    ("گیلد", "internal:guild"),
+    ("رتبه‌بندی", "internal:ranking"),
+    ("آهنگری", "internal:forge"),
+    ("بازار بازیکنان", "internal:marketplace"),
+    ("دفترچه هیولا", "internal:bestiary"),
+    ("راهنما", "internal:guide"),
+    ("تبدیل گلد به جم", "internal:gold_gems"),
+    ("فروشگاه", "internal:shop"),
+    ("تنظیمات", "internal:settings"),
+]
+
+
+def internal_menu_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=label, callback_data=callback_data)]
+        for label, callback_data in INTERNAL_MENU_SECTIONS
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data == "admin:internal_menu")
+async def internal_menu_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.edit_text(
+            "📚 <b>منوهای داخلی World Eldoria</b>\\n\\n"
+            "بخش موردنظر را انتخاب کن. زیرساخت هر بخش در مراحل بعدی جداگانه ساخته می‌شود.",
+            reply_markup=internal_menu_keyboard(),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("internal:"))
+async def internal_menu_section_placeholder(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    selected = (callback.data or "").split(":", 1)[1]
+    labels = dict((key.split(":", 1)[1], label) for label, key in INTERNAL_MENU_SECTIONS)
+    if selected not in labels:
+        await callback.answer("بخش نامعتبر است.", show_alert=True)
+        return
+    await callback.answer(f"«{labels[selected]}» هنوز ساخته نشده؛ مرحله‌به‌مرحله می‌سازیم.", show_alert=True)
 
 
 @router.callback_query(F.data == "admin:fanart:close")
