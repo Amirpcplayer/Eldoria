@@ -150,7 +150,7 @@ def profile_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 button(
-                    "profile_fanart_select",
+                    "menu_fanart",
                     "🎨",
                     "انتخاب Fan Art پروفایل",
                     "profile:fanart",
