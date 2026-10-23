@@ -555,6 +555,84 @@ async def show_profile(
 
 
 # ============================================================
+# COMPACT PROFILE COMMAND (self / replied-to player)
+# ============================================================
+
+@router.message(F.text.regexp(r"^(?:/profile(?:@\\w+)?|پروفایل)$"))
+async def compact_profile_command(message: Message) -> None:
+    """Show only the requested essentials for /profile or پروفایل."""
+    if message.from_user is None or not message.text:
+        return
+
+    replied_user = (
+        message.reply_to_message.from_user
+        if message.reply_to_message is not None
+        else None
+    )
+    target_user = replied_user or message.from_user
+    target_id = target_user.id
+
+    character = await get_character(target_id)
+    if character is None:
+        await message.answer(
+            "این بازیکن هنوز قهرمانی در اِلدوریا نساخته است."
+            if replied_user
+            else "ابتدا قهرمانت را از طریق /start بساز."
+        )
+        return
+
+    stats = await get_profile_stats(target_id, character)
+    max_hp = max(1, int(stats.get("hp", 1)))
+    max_mana = max(1, int(stats.get("mana", 1)))
+    hp = max(0, min(int(character.hp or 0), max_hp))
+    mana = max(0, min(int(character.mana or 0), max_mana))
+    level = max(1, int(character.level or 1))
+    name = html.escape(str(character.name or "قهرمان بی‌نام"))
+    title = html.escape(str(character.active_title or title_for_level(level)))
+
+    async with AsyncSessionLocal() as session:
+        guild_row = (await session.execute(
+            select(Guild.name, Guild.tag)
+            .join(GuildMember, GuildMember.guild_id == Guild.id)
+            .where(GuildMember.telegram_id == target_id)
+            .limit(1)
+        )).first()
+        party_row = (await session.execute(
+            select(Party.name, Party.rank)
+            .join(PartyMember, PartyMember.party_id == Party.id)
+            .where(
+                PartyMember.telegram_id == target_id,
+                Party.status == "open",
+            )
+            .limit(1)
+        )).first()
+
+    guild = (
+        f"{html.escape(guild_row.name)} [{html.escape(guild_row.tag or '')}]"
+        if guild_row else "بدون گیلد"
+    )
+    party = (
+        f"{html.escape(party_row.name)} · رتبه {html.escape(party_row.rank or 'F')}"
+        if party_row else "بدون پارتی"
+    )
+
+    text = (
+        "✦ <b>پروفایل قهرمان</b> ✦\n\n"
+        f"👤 نام: <b>{name}</b>\n"
+        f"♛ لقب: <b>{title}</b>\n"
+        f"✧ سطح: <b>{level}</b>\n"
+        f"🪙 طلا: <b>{int(character.gold or 0):,}</b>\n"
+        f"💎 جم: <b>{int(character.gems or 0):,}</b>\n"
+        f"❤️ سلامتی: <b>{hp:,} / {max_hp:,}</b>\n"
+        f"💧 مانا: <b>{mana:,} / {max_mana:,}</b>\n"
+        f"🛡️ گیلد: <b>{guild}</b>\n"
+        f"👥 پارتی: <b>{party}</b>"
+    )
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+
+# ============================================================
 # OPEN PROFILE
 # ============================================================
 
