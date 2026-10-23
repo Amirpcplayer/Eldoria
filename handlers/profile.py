@@ -56,58 +56,39 @@ def build_xp_progress_bar(
     level: int,
     xp: int,
 ) -> str:
-    """
-    ساخت نوار پیشرفت XP تا سطح بعدی با استفاده از
-    فرمول اصلی services/xp_service.py.
-    """
-
+    """ساخت نوار XP با نمادهای متنی ساده و فرمول اصلی سیستم تجربه."""
     level = max(1, int(level or 1))
     xp = max(0, int(xp or 0))
+    width = 10
 
-    # قهرمان به حداکثر سطح رسیده است.
     if level >= MAX_CHARACTER_LEVEL:
-        bar = "🟩" * 10
-
         return (
-            f"{bar}\n"
-            "📈 پیشرفت سطح: ۱۰۰٪ (حداکثر سطح)\n"
-            "🏆 به حداکثر سطح رسیده‌ای!"
+            f"└ تجربه فعلی: {xp:,} XP\\n"
+            "└ وضعیت: حداکثر سطح اِلدوریا 👑\\n"
+            + "▰" * width
+            + " 100٪"
         )
 
-    required_xp = get_required_xp(level)
-
-    # محافظت در برابر مقدار نامعتبر یا صفر
+    required_xp = max(0, int(get_required_xp(level) or 0))
     if required_xp <= 0:
-        bar = "🟩" * 10
-
         return (
-            f"{bar}\n"
-            "📈 پیشرفت تا سطح بعدی: ۱۰۰٪\n"
-            "✨ XP موردنیاز: ۰"
+            f"└ تجربه فعلی: {xp:,} XP\\n"
+            "└ XP موردنیاز سطح بعدی: ۰\\n"
+            + "▰" * width
+            + " 100٪"
         )
 
     current_xp = min(xp, required_xp)
-    percentage = min(
-        100,
-        int(current_xp * 100 / required_xp),
-    )
-
-    filled_blocks = min(
-        10,
-        int(current_xp * 10 / required_xp),
-    )
-
-    empty_blocks = 10 - filled_blocks
-
-    bar = (
-        "🟩" * filled_blocks
-        + "⬜️" * empty_blocks
-    )
+    percentage = min(100, int(current_xp * 100 / required_xp))
+    filled = min(width, int(current_xp * width / required_xp))
+    bar = "▰" * filled + "□" * (width - filled)
+    remaining = max(0, required_xp - current_xp)
 
     return (
-        f"{bar}\n"
-        f"📈 پیشرفت تا سطح بعدی: {percentage}٪\n"
-        f"✨ XP: {xp:,} / {required_xp:,}"
+        f"└ تجربه فعلی: {xp:,} XP\\n"
+        f"└ سطح بعدی: {required_xp:,} XP\\n"
+        f"└ باقی‌مانده: {remaining:,} XP\\n"
+        f"{bar} {percentage}٪"
     )
 
 
@@ -343,20 +324,19 @@ def build_profile_text(
     active_fan_art: FanArt | None,
     stats: dict[str, int],
 ) -> str:
-    """Render a compact, ornate fantasy profile that fits Telegram captions."""
+    """نمایش پروفایل فارسی با قالب مینیمال و نوارهای متنی."""
     final_hp = max(1, int(stats.get("hp", 1)))
     final_mana = max(1, int(stats.get("mana", 1)))
     current_hp = max(0, min(int(character.hp or 0), final_hp))
     current_mana = max(0, min(int(character.mana or 0), final_mana))
 
-    def bar(current: int, maximum: int, filled: str, empty: str = "▫️", width: int = 8) -> str:
+    def bar(current: int, maximum: int, width: int = 10) -> str:
         ratio = max(0.0, min(1.0, current / max(1, maximum)))
         count = min(width, int(ratio * width))
-        return filled * count + empty * (width - count)
+        return "▰" * count + "□" * (width - count)
 
     level = max(1, int(character.level or 1))
     xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
-    # A readable, comparable combat rating; it is informational and doesn't alter combat math.
     combat_power = (
         int(stats.get("attack", 0))
         + int(stats.get("magic_power", 0))
@@ -366,44 +346,41 @@ def build_profile_text(
     )
     name = html.escape(str(character.name or "قهرمان بی‌نام"))
     race = html.escape(str(character.race or "نامشخص"))
-    gender_value = getattr(character, "gender", None)
-    gender = "مرد" if gender_value == "male" else "زن" if gender_value == "female" else "ثبت نشده"
     title = html.escape(str(character.active_title or title_for_level(level)))
 
     lines = [
-        "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
-        f"  ⚔️ <b>قهرمان اِلدوریا</b> ⚔️",
+        "✦ 𓂃 <b>قهرمان اِلدوریا</b> 𓂃 ✦",
         "",
-        f"🧙 نام قهرمان: <b>{name}</b>",
-        f"🎖️ لقب: {title}",
-        f"🏅 سطح: Lv. {level}",
-        f"🧬 نژاد: {race}  ·  ⚧️ جنسیت: {gender}",
+        f"👤 {name}",
+        f"♛ لقب: {title}",
+        f"✧ سطح: {level}",
+        f"✧ نژاد: {race}",
         "",
-        f"━━━━━━━━ ⚜️ هویت قهرمان ⚜️ ━━━━━━━━",
+        "━━━━━━━━━━━━━━",
         "",
-        f"⚔️ قدرت رزمی: <b>{combat_power:,}</b>",
-        f"💰 طلا: <b>{int(character.gold or 0):,}</b>  ·  💎 جم: <b>{int(character.gems or 0):,}</b>",
+        f"⚔️ <b>قدرت مبارزه</b>",
+        f"└ {combat_power:,}",
         "",
-        f"━━━━━━━━ 💧 وضعیت حیاتی 💧 ━━━━━━━━",
+        "❤️ <b>سلامت</b>",
+        f"└ {current_hp:,} / {final_hp:,}",
+        f"{bar(current_hp, final_hp)} {int(current_hp * 100 / final_hp)}٪",
         "",
-        f"❤️ سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
-        f"{bar(current_hp, final_hp, "🟥", empty="⬜️")}",
+        "✧ <b>مانا</b>",
+        f"└ {current_mana:,} / {final_mana:,}",
+        f"{bar(current_mana, final_mana)} {int(current_mana * 100 / final_mana)}٪",
         "",
-        f"💧 مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
-        f"{bar(current_mana, final_mana, "🟦", empty="⬜️")}",
+        "━━━━━━━━━━━━━━",
         "",
-        f"━━━━━━━━ ⚔️ ویژگی‌های رزمی ⚔️ ━━━━━━━━",
-        "",
-        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
-        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  ✨ دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
-        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
-        f"🍀 شانس: <b>{int(getattr(character, 'luck', 0) or stats.get('luck', 0)):,}</b>  ·  💥 ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
-        "",
-        f"━━━━━━━━ 🌟 مسیر قهرمانی 🌟 ━━━━━━━━",
-        "",
+        "✧ <b>تجربه قهرمان</b>",
         xp_progress,
+        "",
+        "━━━━━━━━━━━━━━",
+        "",
+        f"🪙 طلا: {int(character.gold or 0):,}",
+        f"💎 جم: {int(character.gems or 0):,}",
+        "",
     ]
-    return "\n".join(lines)
+    return "\\n".join(lines)
 
 
 # ============================================================
