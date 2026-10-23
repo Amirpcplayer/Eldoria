@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # These bot messages are part of gameplay history and must never be cleaned up.
 PROTECTED_TERMS = (
     "combat", "battle", "boss", "dungeon", "pvp", "loot", "reward",
+    "پنل مدیریت world eldoria", "پنل ادمین", "مدیریت فن‌آرت شاپ",
     "مبارزه", "نبرد", "کامبت", "باس", "دانجن", "سیاهچال", "حمله",
     "جادو", "ضربه", "آسیب", "غنیمت", "جایزه", "پاداش", "دریافت پاداش",
     "هیل", "شفا داد", "ریکاوری", "معجون",
@@ -70,7 +71,19 @@ class AutoDeletePreviousMessageMiddleware(BaseRequestMiddleware):
     @classmethod
     def _is_protected(cls, method: Any) -> bool:
         text = cls._message_text(method)
-        return any(term in text for term in PROTECTED_TERMS)
+        if any(term in text for term in PROTECTED_TERMS):
+            return True
+        # Admin and dungeon flows must never share the ordinary-menu cleanup
+        # slot, even when their message is a short generic prompt.
+        markup = getattr(method, "reply_markup", None)
+        for row in getattr(markup, "inline_keyboard", None) or []:
+            for button in row:
+                data = (getattr(button, "callback_data", None) or "").casefold()
+                if data.startswith(("admin:", "fanartadmin:", "fanartshop:")):
+                    return True
+                if "dungeon" in data or "دانجن" in data:
+                    return True
+        return False
 
     async def __call__(self, make_request: Any, bot: Any, method: Any) -> Any:
         if method.__class__.__name__ not in SEND_METHODS:
