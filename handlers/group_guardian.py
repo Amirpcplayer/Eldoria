@@ -15,6 +15,8 @@ from aiogram.types import CallbackQuery, ChatPermissions, InlineKeyboardButton, 
 from aiogram.exceptions import TelegramAPIError
 from datetime import datetime, timedelta, timezone
 from database.redis import redis
+from config.settings import settings as app_settings
+from utils.text_normalization import normalize_filter_text
 from sqlalchemy import func, select
 from database.database import AsyncSessionLocal
 from models.character import Character
@@ -22,7 +24,7 @@ from models.character import Character
 router = Router()
 
 # مالک ثابت پنل نگهبان در تمام گروه‌ها
-GLOBAL_GUARDIAN_OWNER_ID = 8537258392
+GLOBAL_GUARDIAN_OWNER_ID = int(app_settings.admin_id)
 
 class WelcomeWizard(StatesGroup):
     media = State()
@@ -224,11 +226,21 @@ async def manage_action(
             await message.answer("❌ واژه یا عبارت باید حداکثر ۶۰ نویسه باشد.")
             return
         key = f"guardian:{chat_id}:words"
+        normalized_word = normalize_filter_text(arg)
+        if not normalized_word:
+            await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+            return
         if command == "filteradd":
-            await redis.sadd(key, arg.casefold())
-            await message.answer(f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد.")
+            added = await redis.sadd(key, normalized_word)
+            await message.answer(
+                f"✅ واژهٔ «{html.escape(arg)}» به فیلتر گروه اضافه شد."
+                if added else f"ℹ️ واژهٔ «{html.escape(arg)}» از قبل در فیلتر بود."
+            )
         else:
-            removed = await redis.srem(key, arg.casefold())
+            # Also remove legacy entries saved before Persian normalization.
+            stored_words = await redis.smembers(key)
+            matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+            removed = await redis.srem(key, *matches) if matches else 0
             await message.answer(
                 f"✅ واژهٔ «{html.escape(arg)}» از فیلتر گروه حذف شد."
                 if removed else f"ℹ️ واژهٔ «{html.escape(arg)}» در فهرست فیلتر نبود."
@@ -640,6 +652,8 @@ def _welcome_text(template, title, member_name):
     import random
     now = datetime.now(ZoneInfo("Asia/Tehran"))
     values = {"اسم_گروه": title, "ایموجی": random.choice(["✨","🌟","⚔️","🌿","🦋","🔥","🌙","💎"]), "تاریخ": _jalali_date(now), "ساعت": now.strftime("%H:%M:%S"), "اسم_عضو": member_name}
+    # Treat user-supplied template and inserted values as plain text for Telegram HTML.
+    template = html.escape(template or "")
     # پشتیبانی از کلمات ساده؛ نوشتن آکولاد یا تگ لازم نیست. قالب‌های قدیمی آکولاددار هم کار می‌کنند.
     for key, value in values.items():
         safe_value = html.escape(str(value))
@@ -748,14 +762,21 @@ async def receive_filter_word(message: Message, state: FSMContext):
         await message.answer("❌ واژه یا عبارت باید بین ۱ تا ۶۰ نویسه باشد. دوباره بفرست یا «لغو» بنویس.")
         return
     key = f"guardian:{chat_id}:words"
+    normalized_word = normalize_filter_text(word)
+    if not normalized_word:
+        await message.answer("❌ واژه یا عبارت معتبر وارد کن.")
+        await state.clear()
+        return
     if command == "filteradd":
-        added = await redis.sadd(key, word.casefold())
+        added = await redis.sadd(key, normalized_word)
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» به فیلتر گروه اضافه شد."
             if added else f"ℹ️ واژهٔ «{html.escape(word)}» از قبل در فیلتر بود."
         )
     elif command == "filterdel":
-        removed = await redis.srem(key, word.casefold())
+        stored_words = await redis.smembers(key)
+        matches = [item for item in stored_words if normalize_filter_text(item) == normalized_word]
+        removed = await redis.srem(key, *matches) if matches else 0
         await message.answer(
             f"✅ واژهٔ «{html.escape(word)}» از فیلتر گروه حذف شد."
             if removed else f"ℹ️ واژهٔ «{html.escape(word)}» در فهرست فیلتر نبود."
