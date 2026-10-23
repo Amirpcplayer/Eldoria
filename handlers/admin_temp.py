@@ -32,7 +32,6 @@ from models.fan_art import FanArt
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
 from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins, remove_delegated_admin
-from services import premium_emoji_service
 
 
 router = Router()
@@ -47,7 +46,6 @@ class AdminPlayerStates(StatesGroup):
     waiting_gold_search = State()
     waiting_gold_amount = State()
     waiting_admin_username = State()
-    waiting_emoji_id = State()
 
 
 # مالک ثابت ربات، مستقل از عضویت در گروه‌ها
@@ -61,12 +59,6 @@ def is_admin(telegram_id: int) -> bool:
 def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🎨 مدیریت ایموجی",
-                    callback_data="admin:emoji:home",
-                )
-            ],
             [
                 InlineKeyboardButton(
                     text="➕ اضافه کردن ادمین",
@@ -441,155 +433,6 @@ async def admin_panel(
     )
 
 
-
-# ---------------------------------------------------------------------
-# مدیریت مرحله‌به‌مرحله ایموجی‌ها
-# ---------------------------------------------------------------------
-MAIN_EMOJI_ITEMS = [
-    ("پروفایل", "menu_profile"), ("صندوقچه", "menu_inventory"),
-    ("مهارت‌ها", "menu_skills"), ("تجهیزات", "menu_equipment"),
-    ("ماموریت‌ها", "menu_quest"), ("ماجراجویی", "menu_adventure"),
-    ("کرفتینگ", "menu_crafting"), ("پت", "menu_pets"), ("ایونت", "menu_events"),
-    ("پارتی", "menu_party"), ("رتبه‌بندی", "menu_ranking"), ("گیلد", "menu_guild"),
-    ("بازار بازیکنان", "menu_marketplace"), ("آهنگری", "menu_forge"),
-    ("دفترچه هیولا", "menu_bestiary"), ("راهنما", "menu_guide"),
-    ("تبدیل گلد به جم", "menu_exchange"), ("فروشگاه", "menu_shop"),
-    ("تنظیمات", "menu_settings"),
-]
-PROFILE_EMOJI_ITEMS = [
-    ("دکمه صندوقچه در پروفایل", "profile_inventory"),
-    ("دکمه تجهیزات در پروفایل", "profile_equipment"),
-    ("دکمه مهارت‌ها در پروفایل", "profile_skills"),
-    ("دکمه آمار در پروفایل", "profile_stats"),
-    ("دکمه بازیابی سلامت", "profile_hp_recovery"),
-    ("دکمه بازیابی مانا", "profile_mana_recovery"),
-    ("دکمه لقب‌ها", "profile_titles"),
-    ("دکمه انتخاب فن‌آرت", "profile_fanart_select"),
-    ("دکمه بازگشت", "profile_back"),
-]
-TEMPLATE_EMOJI_ITEMS = [
-    (premium_emoji_service.KEY_TITLES.get(key, key), key)
-    for key in premium_emoji_service.DEFAULTS
-    if key.startswith("profile_") and key not in {"profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_hp_recovery", "profile_mana_recovery", "profile_titles", "profile_fanart_select", "profile_back"}
-]
-
-def _emoji_admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎮 منوی اصلی", callback_data="admin:emoji:main")],
-        [InlineKeyboardButton(text="👤 پروفایل", callback_data="admin:emoji:profile")],
-        [InlineKeyboardButton(text="🧩 منوهای داخلی", callback_data="admin:emoji:internal")],
-        [InlineKeyboardButton(text="🔙 بازگشت به مدیریت", callback_data="admin:home")],
-    ])
-
-def _emoji_list_keyboard(items, page: str) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(
-        text=f"{premium_emoji_service.DEFAULTS.get(key, '✨')} {label}",
-        callback_data=f"admin:emoji:pick:{page}:{key}",
-    )] for label, key in items]
-    rows.append([InlineKeyboardButton(text="🔙 بازگشت به مدیریت ایموجی", callback_data="admin:emoji:home")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-@router.callback_query(F.data == "admin:emoji:home")
-async def emoji_admin_home(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ فقط مالک ربات دسترسی دارد.", show_alert=True)
-        return
-    await state.clear()
-    if callback.message:
-        await callback.message.edit_text("🎨 <b>مدیریت ایموجی</b>\n\nابتدا بخش موردنظر را انتخاب کن؛ ایموجی‌ها با ارسال مستقیم از پنل ایموجی تلگرام ثبت می‌شوند.", reply_markup=_emoji_admin_keyboard(), parse_mode="HTML")
-    await callback.answer()
-
-@router.callback_query(F.data == "admin:emoji:main")
-async def emoji_admin_main(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
-        return
-    if callback.message:
-        await callback.message.edit_text("🎮 <b>منوی اصلی</b>\n\nهر دکمه را انتخاب کن تا ایموجی آن را مستقیم بفرستی.", reply_markup=_emoji_list_keyboard(MAIN_EMOJI_ITEMS, "main"), parse_mode="HTML")
-    await callback.answer()
-
-@router.callback_query(F.data == "admin:emoji:profile")
-async def emoji_admin_profile(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
-        return
-    if callback.message:
-        await callback.message.edit_text("👤 <b>دکمه‌های پروفایل</b>\n\nیکی را انتخاب کن؛ پس از ثبت ایموجی، مورد بعدی را از همین فهرست انتخاب کن.", reply_markup=_emoji_list_keyboard(PROFILE_EMOJI_ITEMS, "profile"), parse_mode="HTML")
-    await callback.answer()
-
-@router.callback_query(F.data == "admin:emoji:internal")
-async def emoji_admin_internal(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
-        return
-    items = [(premium_emoji_service.KEY_TITLES.get(k, k), k) for k in premium_emoji_service.DEFAULTS if not k.startswith("menu_")]
-    if callback.message:
-        await callback.message.edit_text("🧩 <b>منوهای داخلی و قالب‌ها</b>\n\nموردی را انتخاب کن تا ایموجی آن را تغییر دهی.", reply_markup=_emoji_list_keyboard(items, "internal"), parse_mode="HTML")
-    await callback.answer()
-
-@router.callback_query(F.data.startswith("admin:emoji:pick:"))
-async def emoji_admin_pick(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
-        return
-    parts = (callback.data or "").split(":", 4)
-    if len(parts) != 5:
-        await callback.answer("گزینه نامعتبر است.", show_alert=True)
-        return
-    page, key = parts[3], parts[4]
-    allowed = {k for _, k in MAIN_EMOJI_ITEMS + PROFILE_EMOJI_ITEMS}
-    allowed |= set(premium_emoji_service.DEFAULTS)
-    if key not in allowed:
-        await callback.answer("گزینه نامعتبر است.", show_alert=True)
-        return
-    await state.clear()
-    await state.set_state(AdminPlayerStates.waiting_emoji_id)
-    await state.update_data(emoji_key=key, emoji_page=page)
-    if callback.message:
-        await callback.message.answer(
-            f"🎨 حالا ایموجی موردنظر برای «{premium_emoji_service.KEY_TITLES.get(key, key)}» را مستقیماً از پنل ایموجی تلگرام بفرست.\n\n"
-            "نیازی به شناسه یا عدد نیست؛ خود ایموجی را بفرست. برای لغو /cancel را ارسال کن."
-        )
-    await callback.answer()
-
-@router.message(AdminPlayerStates.waiting_emoji_id)
-async def emoji_admin_receive(message: Message, state: FSMContext):
-    if message.from_user is None or not is_admin(message.from_user.id):
-        await state.clear()
-        return
-    raw = message.text or message.caption or ""
-    if raw.strip().casefold() in {"/cancel", "لغو"}:
-        await state.clear()
-        await message.answer("عملیات لغو شد.", reply_markup=_emoji_admin_keyboard())
-        return
-    custom_id = None
-    for entity in (message.entities or []) + (message.caption_entities or []):
-        if getattr(entity, "type", None) == "custom_emoji" and getattr(entity, "custom_emoji_id", None):
-            custom_id = str(entity.custom_emoji_id)
-            break
-    glyphs = premium_emoji_service.extract_emojis(raw)
-    if not custom_id and not glyphs:
-        await message.answer("❌ ایموجی دریافت نشد. یک ایموجی را مستقیماً از پنل ایموجی‌ها انتخاب و ارسال کن.")
-        return
-    data = premium_emoji_service.load()
-    key = str((await state.get_data()).get("emoji_key", ""))
-    if custom_id:
-        data.setdefault("ids", {})[key] = custom_id
-    else:
-        glyph = glyphs[0]
-        data.setdefault("aliases", {})[key] = [glyph]
-        # Keep ordinary emoji as the permanent fallback shown in buttons/templates.
-        data.setdefault("catalog", {})[key] = glyph
-        data.setdefault("ids", {}).pop(key, None)
-    data["enabled"] = True
-    premium_emoji_service.save(data)
-    page = str((await state.get_data()).get("emoji_page", "main"))
-    await state.clear()
-    await message.answer(
-        f"✅ ایموجی «{premium_emoji_service.KEY_TITLES.get(key, key)}» ثبت و به‌صورت دائمی ذخیره شد.\n\n"
-        "می‌توانی گزینه بعدی را انتخاب کنی یا به مدیریت برگردی.",
-        reply_markup=_emoji_list_keyboard(MAIN_EMOJI_ITEMS if page == "main" else PROFILE_EMOJI_ITEMS if page == "profile" else [(premium_emoji_service.KEY_TITLES.get(k, k), k) for k in premium_emoji_service.DEFAULTS if not k.startswith("menu_")], page),
-    )
 
 @router.callback_query(F.data == "admin:fanart:close")
 async def fanart_admin_close(callback: CallbackQuery, state: FSMContext):
