@@ -12,8 +12,10 @@ session = AiohttpSession(
 
 
 from middlewares.auto_delete_previous import AutoDeletePreviousMessageMiddleware
+from middlewares.emoji_button_icons import EmojiButtonIconsMiddleware
 
 session.middleware(AutoDeletePreviousMessageMiddleware())
+session.middleware(EmojiButtonIconsMiddleware())
 
 bot = Bot(
     token=settings.bot_token,
