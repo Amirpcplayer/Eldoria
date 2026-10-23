@@ -618,56 +618,90 @@ async def show_profile(
 # COMPACT PROFILE COMMAND (self / replied-to player)
 # ============================================================
 
-@router.message(F.text.regexp(r"^(?:/profile(?:@\w+)?|پروفایل)$"))
+@router.message(F.text.regexp(r"^(?:/profile(?:@\w+)?(?:\s+.*)?|پروفایل(?:\s+.*)?)$"))
 async def compact_profile_command(message: Message) -> None:
-    """نمایش پروفایل جمع‌وجور همراه با تصویر Fan Art بازیکن."""
+    """نمایش پروفایل خود بازیکن، صاحب پیام ریپلای‌شده، یا شناسه/یوزرنیم صریح."""
     if message.from_user is None or not message.text:
         return
 
+    parts = message.text.strip().split(maxsplit=1)
+    argument = parts[1].strip() if len(parts) > 1 else ""
     replied_message = message.reply_to_message
     replied_user = replied_message.from_user if replied_message is not None else None
 
-    # Replies to forwarded posts can have no direct from_user; use the original
-    # sender when Telegram exposes it. Never silently fall back to the caller's
-    # profile when the command itself is a reply.
     if replied_user is None and replied_message is not None:
         origin = getattr(replied_message, "forward_origin", None)
         replied_user = getattr(origin, "sender_user", None) if origin is not None else None
 
-    if replied_message is not None and replied_user is None:
-        logger.warning(
-            "Profile command replied to message without resolvable user: "
-            "chat_id=%s caller_id=%s replied_message_id=%s sender_chat=%s",
-            message.chat.id,
-            message.from_user.id,
-            replied_message.message_id,
-            getattr(replied_message, "sender_chat", None),
-        )
-        await message.answer(
-            "❌ نمی‌توان صاحب این پیام را شناسایی کرد. روی پیام مستقیم همان بازیکن ریپلای کن."
-        )
-        return
+    target_id: int | None = None
+    target_username: str | None = None
+    target_is_other = False
 
-    target_user = replied_user if replied_message is not None else message.from_user
-    if target_user is None:
-        return
-    if target_user.is_bot:
-        await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
-        return
-    target_id = target_user.id
+    # A real Telegram reply takes priority over an optional argument.
+    if replied_message is not None:
+        if replied_user is None:
+            logger.warning(
+                "Profile reply has no resolvable sender: chat_id=%s caller_id=%s "
+                "reply_message_id=%s sender_chat=%s",
+                message.chat.id, message.from_user.id, replied_message.message_id,
+                getattr(replied_message, "sender_chat", None),
+            )
+            await message.answer(
+                "❌ صاحب این پیام از طرف تلگرام قابل شناسایی نیست. "
+                "روی پیام مستقیم بازیکن ریپلای کن یا از /profile @username استفاده کن."
+            )
+            return
+        if replied_user.is_bot:
+            await message.answer(
+                "❌ این پیام متعلق به ربات است. برای دیدن پروفایل بازیکن، "
+                "روی پیام خودِ بازیکن ریپلای کن."
+            )
+            return
+        target_id = replied_user.id
+        target_username = replied_user.username
+        target_is_other = target_id != message.from_user.id
+    elif argument:
+        query = argument.strip()
+        if query.isdigit():
+            target_id = int(query)
+        else:
+            target_username = query.lstrip("@").strip()
+            if not target_username or any(ch.isspace() for ch in target_username):
+                await message.answer(
+                    "❌ شناسه یا یوزرنیم معتبر نیست. نمونه: /profile @username یا /profile 123456789"
+                )
+                return
+            async with AsyncSessionLocal() as session:
+                target_id = await session.scalar(
+                    select(Character.telegram_id).where(
+                        Character.telegram_username.ilike(target_username)
+                    ).limit(1)
+                )
+            if target_id is None:
+                await message.answer(
+                    "❌ این یوزرنیم در اطلاعات بازیکنان پیدا نشد. "
+                    "بازیکن باید حداقل یک‌بار با ربات تعامل کرده باشد؛ "
+                    "یا شناسهٔ عددی او را بفرست."
+                )
+                return
+        target_is_other = target_id != message.from_user.id
+    else:
+        target_id = message.from_user.id
+        target_username = message.from_user.username
+
     logger.info(
-        "Profile command target resolved: chat_id=%s caller_id=%s target_id=%s replied=%s",
-        message.chat.id,
-        message.from_user.id,
-        target_id,
+        "Profile target resolved: chat_id=%s caller_id=%s target_id=%s "
+        "target_username=%s replied_message_id=%s explicit_argument=%s",
+        message.chat.id, message.from_user.id, target_id, target_username,
         replied_message.message_id if replied_message is not None else None,
+        bool(argument),
     )
 
     character = await get_character(target_id)
     if character is None:
         await message.answer(
             "این بازیکن هنوز قهرمانی در اِلدوریا نساخته است."
-            if replied_user
+            if target_is_other
             else "ابتدا قهرمانت را از طریق /start بساز."
         )
         return
