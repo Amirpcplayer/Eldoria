@@ -49,7 +49,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
              "menu_adventure", "menu_pvp", "menu_crafting", "menu_pets", "menu_events",
              "menu_party", "menu_guild", "menu_ranking", "menu_forge", "menu_marketplace",
              "menu_bestiary", "menu_guide", "menu_shop", "menu_settings",
-             "menu_fanart", "menu_enter_game", "menu_gold_gems", "menu_market"),
+             "menu_fanart", "menu_enter_game", "menu_gold_gems"),
     "profile": ("profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_hp_recovery", "profile_mana_recovery", "profile_titles", "profile_fanart_select", "profile_back"),
     "inventory": ("menu_inventory", "menu_equipment", "equipment", "potion", "health", "mana", "scroll", "material"),
     "guild": ("menu_guild", "guild_members", "guild_missions", "guild_vault", "guild_buy_adventure_items"),
@@ -121,9 +121,11 @@ def load() -> dict[str, Any]:
     ids = data.setdefault("ids", {})
     if not str(ids.get("menu_gold_gems", "")).isdigit() and str(ids.get("menu_exchange", "")).isdigit():
         ids["menu_gold_gems"] = str(ids["menu_exchange"])
-    # Fold the old duplicate blacksmith setting into the canonical forge button.
+    # Fold old duplicate settings into the canonical main-menu keys.
     if not str(ids.get("menu_forge", "")).isdigit() and str(ids.get("menu_blacksmith", "")).isdigit():
         ids["menu_forge"] = str(ids["menu_blacksmith"])
+    if not str(ids.get("menu_marketplace", "")).isdigit() and str(ids.get("menu_market", "")).isdigit():
+        ids["menu_marketplace"] = str(ids["menu_market"])
     return data
 
 def save(data: dict[str, Any]) -> None:
