@@ -261,8 +261,11 @@ def apply_keyboard_icons(markup: Any, data: dict[str, Any] | None = None,
                 callback_data = getattr(button, "callback_data", None)
                 key = category_resolver(callback_data, text) if category_resolver else None
                 if not key and callback_data:
-                    callback_key = str(callback_data).lower().split(":")[-1]
-                    if callback_key in DEFAULTS:
+                    callback_value = str(callback_data).lower()
+                    callback_key = callback_value.split(":")[-1]
+                    if callback_value.startswith("menu:") and f"menu_{callback_key}" in DEFAULTS:
+                        key = f"menu_{callback_key}"
+                    elif callback_key in DEFAULTS:
                         key = callback_key
                     elif callback_key in {"ranking", "leaderboard"}:
                         key = "rank"
