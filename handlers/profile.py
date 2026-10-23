@@ -81,7 +81,7 @@ def build_xp_progress_bar(
     current_xp = min(xp, required_xp)
     percentage = min(100, int(current_xp * 100 / required_xp))
     filled = min(width, int(current_xp * width / required_xp))
-    bar = "▰" * filled + "□" * (width - filled)
+    bar = "▰" * filled + "▱" * (width - filled)
     remaining = max(0, required_xp - current_xp)
 
     return (
@@ -333,7 +333,7 @@ def build_profile_text(
     def bar(current: int, maximum: int, width: int = 10) -> str:
         ratio = max(0.0, min(1.0, current / max(1, maximum)))
         count = min(width, int(ratio * width))
-        return "▰" * count + "□" * (width - count)
+        return "▰" * count + "▱" * (width - count)
 
     level = max(1, int(character.level or 1))
     xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
