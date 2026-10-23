@@ -558,7 +558,7 @@ async def show_profile(
 # COMPACT PROFILE COMMAND (self / replied-to player)
 # ============================================================
 
-@router.message(F.text.regexp(r"^(?:/profile(?:@\\w+)?|پروفایل)$"))
+@router.message(F.text.regexp(r"^(?:/profile(?:@\w+)?|پروفایل)$"))
 async def compact_profile_command(message: Message) -> None:
     """Show only the requested essentials for /profile or پروفایل."""
     if message.from_user is None or not message.text:
