@@ -560,7 +560,7 @@ async def show_profile(
 
 @router.message(F.text.regexp(r"^(?:/profile(?:@\w+)?|پروفایل)$"))
 async def compact_profile_command(message: Message) -> None:
-    """Show only the requested essentials for /profile or پروفایل."""
+    """نمایش پروفایل جمع‌وجور همراه با تصویر Fan Art بازیکن."""
     if message.from_user is None or not message.text:
         return
 
@@ -570,6 +570,9 @@ async def compact_profile_command(message: Message) -> None:
         else None
     )
     target_user = replied_user or message.from_user
+    if target_user.is_bot:
+        await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
+        return
     target_id = target_user.id
 
     character = await get_character(target_id)
@@ -581,55 +584,87 @@ async def compact_profile_command(message: Message) -> None:
         )
         return
 
-    stats = await get_profile_stats(target_id, character)
-    max_hp = max(1, int(stats.get("hp", 1)))
-    max_mana = max(1, int(stats.get("mana", 1)))
-    hp = max(0, min(int(character.hp or 0), max_hp))
-    mana = max(0, min(int(character.mana or 0), max_mana))
-    level = max(1, int(character.level or 1))
-    name = html.escape(str(character.name or "قهرمان بی‌نام"))
-    title = html.escape(str(character.active_title or title_for_level(level)))
+    try:
+        stats = await get_profile_stats(target_id, character)
+        max_hp = max(1, int(stats.get("hp", 1) or 1))
+        max_mana = max(1, int(stats.get("mana", 1) or 1))
+        hp = max(0, min(int(character.hp or 0), max_hp))
+        mana = max(0, min(int(character.mana or 0), max_mana))
+        level = max(1, int(character.level or 1))
+        name = html.escape(str(character.name or "قهرمان بی‌نام"))
+        title = html.escape(str(character.active_title or title_for_level(level)))
 
-    async with AsyncSessionLocal() as session:
-        guild_row = (await session.execute(
-            select(Guild.name, Guild.tag)
-            .join(GuildMember, GuildMember.guild_id == Guild.id)
-            .where(GuildMember.telegram_id == target_id)
-            .limit(1)
-        )).first()
-        party_row = (await session.execute(
-            select(Party.name, Party.rank)
-            .join(PartyMember, PartyMember.party_id == Party.id)
-            .where(
-                PartyMember.telegram_id == target_id,
-                Party.status == "open",
-            )
-            .limit(1)
-        )).first()
+        async with AsyncSessionLocal() as session:
+            guild_row = (await session.execute(
+                select(Guild.name, Guild.tag)
+                .join(GuildMember, GuildMember.guild_id == Guild.id)
+                .where(GuildMember.telegram_id == target_id)
+                .limit(1)
+            )).first()
+            party_row = (await session.execute(
+                select(Party.name, Party.rank)
+                .join(PartyMember, PartyMember.party_id == Party.id)
+                .where(
+                    PartyMember.telegram_id == target_id,
+                    Party.status == "open",
+                )
+                .limit(1)
+            )).first()
 
-    guild = (
-        f"{html.escape(guild_row.name)} [{html.escape(guild_row.tag or '')}]"
-        if guild_row else "بدون گیلد"
-    )
-    party = (
-        f"{html.escape(party_row.name)} · رتبه {html.escape(party_row.rank or 'F')}"
-        if party_row else "بدون پارتی"
-    )
+        guild = (
+            f"{html.escape(guild_row.name)} [{html.escape(guild_row.tag or '')}]"
+            if guild_row else "بدون گیلد"
+        )
+        party = (
+            f"{html.escape(party_row.name)} · رتبه {html.escape(party_row.rank or 'F')}"
+            if party_row else "بدون پارتی"
+        )
 
-    text = (
-        "✦ <b>پروفایل قهرمان</b> ✦\n\n"
-        f"👤 نام: <b>{name}</b>\n"
-        f"♛ لقب: <b>{title}</b>\n"
-        f"✧ سطح: <b>{level}</b>\n"
-        f"🪙 طلا: <b>{int(character.gold or 0):,}</b>\n"
-        f"💎 جم: <b>{int(character.gems or 0):,}</b>\n"
-        f"❤️ سلامتی: <b>{hp:,} / {max_hp:,}</b>\n"
-        f"💧 مانا: <b>{mana:,} / {max_mana:,}</b>\n"
-        f"🛡️ گیلد: <b>{guild}</b>\n"
-        f"👥 پارتی: <b>{party}</b>"
-    )
-    await message.answer(text, parse_mode=ParseMode.HTML)
+        text = (
+            "✦ <b>پروفایل قهرمان</b> ✦\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"👤 نام  ·  <b>{name}</b>\n"
+            f"♛ لقب  ·  <b>{title}</b>\n"
+            f"✧ سطح  ·  <b>{level:,}</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🪙 طلا  ·  <b>{int(character.gold or 0):,}</b>\n"
+            f"💎 جم  ·  <b>{int(character.gems or 0):,}</b>\n"
+            f"❤️ سلامتی  ·  <b>{hp:,} / {max_hp:,}</b>\n"
+            f"💧 مانا  ·  <b>{mana:,} / {max_mana:,}</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ گیلد  ·  <b>{guild}</b>\n"
+            f"👥 پارتی  ·  <b>{party}</b>"
+        )
 
+        active_fan_art = await get_active_fan_art(target_id)
+        photo = (
+            active_fan_art.image_file_id
+            if active_fan_art and active_fan_art.image_file_id
+            else None
+        )
+        if photo is None:
+            try:
+                photos = await message.bot.get_user_profile_photos(target_id, limit=1)
+                if photos.total_count and photos.photos:
+                    photo = photos.photos[0][-1].file_id
+            except Exception:
+                photo = None
+
+        if photo:
+            if len(text) <= 1024:
+                await message.answer_photo(
+                    photo=photo, caption=text, parse_mode=ParseMode.HTML
+                )
+            else:
+                await message.answer_photo(photo=photo)
+                await message.answer(text, parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(text, parse_mode=ParseMode.HTML)
+    except Exception:
+        logger.exception("Failed to render compact profile for telegram_id=%s", target_id)
+        await message.answer(
+            "❌ نمایش پروفایل با خطای داخلی روبه‌رو شد. جزئیات در ترمینال ربات ثبت شد."
+        )
 
 
 # ============================================================
@@ -921,90 +956,3 @@ async def clear_profile_fan_art_handler(
     await show_profile(callback)
     await callback.answer("🚫 Fan Art فعال حذف شد.")
 
-@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() == "\u067e\u0631\u0648\u0641\u0627\u06cc\u0644"))
-@router.message(Command("profile", ignore_case=True))
-async def profile_command(message: Message):
-    """نمایش پروفایل جمع‌وجور خود یا بازیکن ریپلای‌شده، همراه با Fan Art."""
-    if not message.from_user:
-        return
-
-    target_user = (
-        message.reply_to_message.from_user
-        if message.reply_to_message
-        else message.from_user
-    )
-    if target_user is None or target_user.is_bot:
-        await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
-        return
-
-    async with AsyncSessionLocal() as session:
-        character = await session.scalar(
-            select(Character).where(Character.telegram_id == target_user.id)
-        )
-    if character is None:
-        await message.answer("این بازیکن هنوز حساب World Eldoria نساخته است.")
-        return
-
-    try:
-        stats = await get_profile_stats(target_user.id, character)
-        active_fan_art = await get_active_fan_art(target_user.id)
-
-        name = html.escape(str(character.name or "قهرمان"))
-        title = html.escape(str(character.active_title or "بدون لقب"))
-        level = int(character.level or 1)
-        gold = int(character.gold or 0)
-        gems = int(character.gems or 0)
-        max_hp = int(stats.get("hp", 0) or 0)
-        max_mana = int(stats.get("mana", 0) or 0)
-        hp = min(int(character.hp or 0), max_hp)
-        mana = min(int(character.mana or 0), max_mana)
-
-        text = (
-            "✦ <b>پروفایل قهرمان</b> ✦\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"👤 نام  ·  <b>{name}</b>\n"
-            f"♛ لقب  ·  <b>{title}</b>\n"
-            f"✧ سطح  ·  <b>{level:,}</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"🪙 طلا  ·  <b>{gold:,}</b>\n"
-            f"💎 جم  ·  <b>{gems:,}</b>\n"
-            f"❤️ سلامتی  ·  <b>{hp:,} / {max_hp:,}</b>\n"
-            f"💧 مانا  ·  <b>{mana:,} / {max_mana:,}</b>"
-        )
-        social = await append_profile_social_and_scrolls("", target_user.id)
-        social = social.split("\n\n📜 <b>اسکرول‌های فعال</b>", 1)[0]
-        text += social
-    except Exception:
-        logger.exception(
-            "Failed to render /profile for telegram_id=%s",
-            target_user.id,
-        )
-        await message.answer(
-            "❌ نمایش پروفایل با خطای داخلی روبه‌رو شد. جزئیات در ترمینال ربات ثبت شد."
-        )
-        return
-
-    # Fan Art انتخاب‌شده اولویت دارد؛ در نبود آن از عکس پروفایل تلگرام استفاده می‌شود.
-    photo = (
-        active_fan_art.image_file_id
-        if active_fan_art and active_fan_art.image_file_id
-        else None
-    )
-    if photo is None:
-        try:
-            photos = await message.bot.get_user_profile_photos(target_user.id, limit=1)
-            if photos.total_count and photos.photos:
-                photo = photos.photos[0][-1].file_id
-        except Exception:
-            photo = None
-
-    if photo:
-        if len(text) <= 1024:
-            await message.answer_photo(
-                photo=photo, caption=text, parse_mode=ParseMode.HTML
-            )
-        else:
-            await message.answer_photo(photo=photo)
-            await message.answer(text, parse_mode=ParseMode.HTML)
-    else:
-        await message.answer(text, parse_mode=ParseMode.HTML)
