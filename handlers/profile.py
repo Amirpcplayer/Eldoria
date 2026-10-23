@@ -833,7 +833,8 @@ async def clear_profile_fan_art_handler(
     await show_profile(callback)
     await callback.answer("🚫 Fan Art فعال حذف شد.")
 
-@router.message(F.text.regexp(r"^(?:/profile(?:@\\w+)?(?:\\s+.*)?|پروفایل(?:\\s+.*)?)$"))
+@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold().startswith("پروفایل")))
+@router.message(Command("profile", ignore_case=True))
 async def profile_command(message: Message):
     """نمایش پروفایل خود، صاحب پیام ریپلای‌شده یا هدف صریح."""
     if not message.from_user or not message.text:
