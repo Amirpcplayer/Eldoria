@@ -7,11 +7,11 @@ from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.methods import TelegramMethod
 from aiogram.types import InlineKeyboardMarkup
 
-from services.emoji_manager_service import ALL_BUTTONS, get_emoji
+from services.emoji_manager_service import ALL_BUTTONS, get_custom_emoji_id, get_emoji
 
 
 def _normalize_label(text: str) -> str:
-    return re.sub(r"\s+", " ", (text or "").strip()).casefold()
+    return re.sub(r"\\s+", " ", (text or "").strip()).casefold()
 
 
 _LABEL_ONLY_TO_KEY: dict[str, str] = {}
@@ -24,7 +24,7 @@ for _key, (_label, _default_emoji) in ALL_BUTTONS.items():
 
 
 class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
-    """Apply emoji overrides to supported outgoing inline keyboard buttons."""
+    """Apply standard or Telegram custom-emoji icons to outgoing inline keyboard buttons."""
 
     async def __call__(self, make_request, bot, method: TelegramMethod[Any]) -> Any:
         markup = getattr(method, "reply_markup", None)
@@ -44,7 +44,6 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
 
                 if key is None:
                     key = _LABEL_TO_KEY.get(normalized)
-                    # Support a current icon that differs from the default icon.
                     if key is None and " " in normalized:
                         key = _LABEL_TO_KEY.get(normalized.split(" ", 1)[1])
 
@@ -52,6 +51,7 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                     new_row.append(button)
                     continue
 
+                custom_emoji_id = get_custom_emoji_id(key)
                 emoji = get_emoji(key)
                 if not emoji:
                     new_row.append(button)
@@ -59,17 +59,25 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
 
                 stripped = text.lstrip()
                 if exact_label_match:
-                    # This button had no leading icon; keep the complete label.
-                    new_text = emoji + " " + stripped
+                    label = stripped
                 else:
                     first_space = stripped.find(" ")
-                    if first_space >= 0:
-                        new_text = emoji + " " + stripped[first_space + 1:].lstrip()
-                    else:
-                        new_text = emoji + " " + stripped
-                if new_text != text:
-                    button = button.model_copy(update={"text": new_text})
+                    label = stripped[first_space + 1:].lstrip() if first_space >= 0 else stripped
+
+                if custom_emoji_id:
+                    # Bot API supports icon_custom_emoji_id on inline keyboard buttons.
+                    # model_copy(update=...) keeps compatibility with aiogram versions
+                    # whose local model schema has not yet added this Bot API field.
+                    button = button.model_copy(update={
+                        "text": label,
+                        "icon_custom_emoji_id": custom_emoji_id,
+                    })
                     changed = True
+                else:
+                    new_text = emoji + " " + label
+                    if new_text != text:
+                        button = button.model_copy(update={"text": new_text})
+                        changed = True
                 new_row.append(button)
             rows.append(new_row)
 
