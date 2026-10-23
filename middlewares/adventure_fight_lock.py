@@ -5,7 +5,7 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, TelegramObject
 
-from database.redis import redis
+from services.combat_service import get_active_battle_for_player
 
 
 COMBAT_CALLBACK_PREFIXES = ("combat:", "adventure:fight:")
@@ -33,43 +33,10 @@ class AdventureFightLockMiddleware(BaseMiddleware):
 
         telegram_id = event.from_user.id
         try:
-            async for key in redis.scan_iter(match="eldoria:battle:*"):
-                if isinstance(key, bytes):
-                    key = key.decode("utf-8")
-
-                if ":battle_reward:" in key:
-                    continue
-
-                battle_data = await redis.hgetall(key)
-                if not battle_data:
-                    continue
-
-                owner = battle_data.get("telegram_id", 0)
-                if isinstance(owner, bytes):
-                    owner = owner.decode("utf-8")
-
-                try:
-                    if int(owner) != telegram_id:
-                        continue
-                except (TypeError, ValueError):
-                    continue
-
-                battle_id = key.rsplit(":", 1)[-1]
-                from services.combat_service import get_battle
-
-                battle = await get_battle(battle_id)
-                if battle is None:
-                    continue
-
-                try:
-                    player_hp = int(battle.get("player_hp", 0))
-                    enemy_hp = int(battle.get("enemy_hp", 0))
-                except (TypeError, ValueError):
-                    continue
-
-                if player_hp > 0 and enemy_hp > 0:
-                    await event.answer(NOTICE, show_alert=True)
-                    return None
+            battle = await get_active_battle_for_player(telegram_id)
+            if battle is not None:
+                await event.answer(NOTICE, show_alert=True)
+                return None
         except Exception:
             # Fail open if Redis is temporarily unavailable; do not lock the bot UI.
             import logging
