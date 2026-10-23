@@ -50,4 +50,5 @@ async def menu_command(message: Message):
         panel_name="main_menu",
         text=MAIN_MENU_TEXT,
         reply_markup=main_menu_keyboard(),
+        force_new=True,
     )
