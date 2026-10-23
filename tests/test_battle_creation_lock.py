@@ -44,3 +44,5 @@ async def test_create_battle_releases_only_its_own_lock(monkeypatch):
     assert args[1] == 1
     assert args[2] == "eldoria:battle_create_lock:123"
     assert args[3]
+
+# CI trigger: keep this focused regression suite attached to the integration PR.
