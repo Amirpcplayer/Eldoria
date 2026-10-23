@@ -50,6 +50,41 @@ INTERNAL_BUTTONS: dict[str, tuple[str, str]] = {
     "worldboss:attack": ("حمله به باس", "⚔️"),
     "menu:worldboss": ("وضعیت باس", "🐉"),
 }
+# Categorized internal archive. Keys are real callback_data values.
+INTERNAL_CATEGORIES = {
+    "profile": ("👤 پروفایل", ["profile:stats", "profile:fanart", "profile:titles"]),
+    "inventory": ("🗃️ صندوقچه", ["inventory:equipment", "inventory:scrolls", "inventory:potions", "inventory:materials", "inventory:all", "inventory:fanart"]),
+    "quest": ("📜 مأموریت‌ها", ["quest:list:story", "quest:list:daily", "quest:list:achievement", "quest:current_list", "quest:menu"]),
+    "skills": ("✨ مهارت‌ها", ["skills:list", "skills:learn", "skills:upgrade"]),
+    "equipment": ("🛡️ تجهیزات", ["equipment:list:weapon", "equipment:list:helmet", "equipment:list:armor", "equipment:list:boots", "equipment:list:ring", "equipment:list:necklace", "equipment:stats", "equipment:menu", "equipment:back"]),
+    "shop": ("🛒 فروشگاه", ["shop:equipment", "shop:potion", "shop:material", "shop:scroll", "shop:gems", "shop:itemlist"]),
+    "combat": ("⚔️ مبارزه", ["combat:attack:", "combat:skills:", "combat:potions:", "combat:flee:", "combat:back:", "combat:skill:", "combat:potion:"]),
+    "social": ("👥 اجتماعی", ["party:members", "guild:members", "guild:missions", "guild:vault"]),
+    "market": ("🏪 بازار", ["market:browse", "market:mine", "market:help"]),
+    "guide": ("📖 راهنما", ["guide:quick", "guide:full"]),
+    "other": ("⚙️ سایر", ["potion:choose:hp", "potion:choose:mana", "menu:back", "worldboss:attack", "menu:worldboss"]),
+}
+INTERNAL_BUTTONS.update({
+    "inventory:potions": ("معجون‌ها", "🧪"), "inventory:materials": ("متریال‌ها", "🗃️"),
+    "inventory:all": ("همه آیتم‌ها", "📦"), "inventory:fanart": ("فن‌آرت‌های من", "🎨"),
+    "quest:list:story": ("داستانی", "📖"), "quest:list:daily": ("روزانه", "📅"),
+    "quest:list:achievement": ("دستاوردها", "🏆"), "quest:current_list": ("مأموریت‌های من", "📌"),
+    "quest:menu": ("بازگشت به مأموریت‌ها", "🔙"),
+    "skills:list": ("مهارت‌های من", "📚"), "skills:learn": ("یادگیری مهارت", "✨"),
+    "skills:upgrade": ("ارتقای مهارت", "⬆️"),
+    "equipment:list:weapon": ("سلاح‌ها", "⚔️"), "equipment:list:helmet": ("کلاه‌ها", "🪖"),
+    "equipment:list:armor": ("زره‌ها", "🛡️"), "equipment:list:boots": ("کفش‌ها", "👢"),
+    "equipment:list:ring": ("انگشترها", "💍"), "equipment:list:necklace": ("گردنبندها", "📿"),
+    "equipment:stats": ("آمار تجهیزات", "📊"), "equipment:menu": ("بازگشت به تجهیزات", "🔙"),
+    "equipment:back": ("بازگشت به منوی اصلی", "🔙"),
+    "shop:equipment": ("تجهیزات فروشگاه", "⚔️"), "shop:potion": ("معجون‌های فروشگاه", "🧪"),
+    "shop:material": ("متریال فروشگاه", "🗃️"), "shop:scroll": ("اسکرول‌های فروشگاه", "📜"),
+    "shop:gems": ("فروشگاه ویژه جم", "💎"), "shop:itemlist": ("بازگشت به لیست فروشگاه", "🔙"),
+    "combat:attack:": ("حمله", "⚔️"), "combat:skills:": ("مهارت‌های مبارزه", "🔮"),
+    "combat:potions:": ("معجون مبارزه", "🧪"), "combat:flee:": ("فرار", "🏃"),
+    "combat:back:": ("بازگشت به مبارزه", "🔙"), "combat:skill:": ("استفاده از مهارت", "✨"),
+    "combat:potion:": ("استفاده از معجون", "🧪"),
+})
 ALL_BUTTONS = {**MAIN_BUTTONS, **INTERNAL_BUTTONS}
 DEFAULTS = {key: value[1] for key, value in ALL_BUTTONS.items()}
 _RUNTIME_CONFIG: dict[str, Any] | None = None
