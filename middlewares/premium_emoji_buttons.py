@@ -107,6 +107,22 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
                             return profile_exact[callback]
                     return _category(callback_data, text)
                 apply_keyboard_icons(markup, data, category_resolver=resolve)
+                # Force the profile Fan Art button to use its own registry key.
+                # The generic text-based resolver can otherwise inherit an icon
+                # from another Fan Art/profile entry when keyboard labels change.
+                if is_profile_panel:
+                    profile_fanart_id = str(data.get("ids", {}).get("profile_fanart_select", "") or "")
+                    if profile_fanart_id.isdigit():
+                        for row_index, row in enumerate(list(markup.inline_keyboard or [])):
+                            for button_index, button in enumerate(list(row)):
+                                if str(getattr(button, "callback_data", "") or "").lower() == "profile:fanart":
+                                    try:
+                                        row[button_index] = button.model_copy(update={"icon_custom_emoji_id": profile_fanart_id})
+                                    except Exception:
+                                        try:
+                                            button.icon_custom_emoji_id = profile_fanart_id
+                                        except Exception:
+                                            pass
                 try:
                     method = method.model_copy(update={
                         "reply_markup": markup.model_copy(update={"inline_keyboard": markup.inline_keyboard})
