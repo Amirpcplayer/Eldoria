@@ -32,7 +32,6 @@ from models.fan_art import FanArt
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
 from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins, remove_delegated_admin
-from services import premium_emoji_service
 
 
 router = Router()
