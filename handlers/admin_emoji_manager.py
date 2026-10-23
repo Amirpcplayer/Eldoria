@@ -51,7 +51,7 @@ def _category_keys(category: str, data: dict) -> list[str]:
             if group_name not in {"menu", "templates"}:
                 main_keys.update(group_keys)
         known = set(emoji_service.DEFAULTS) | set(data.get("catalog", {})) | set(data.get("ids", {}))
-        keys.extend(k for k in known if k not in main_keys and not k.startswith("menu_"))
+        keys.extend(k for k in sorted(known) if k not in main_keys and not k.startswith("menu_"))
     # Keep all saved/known template settings discoverable, including legacy keys.
     if category == "templates":
         keys.extend(k for k in data.get("ids", {}) if k not in keys and not k.startswith("menu_"))
@@ -176,10 +176,9 @@ async def emoji_category(callback: CallbackQuery, state: FSMContext):
     parts = (callback.data or "").split(":")
     category = parts[2]
     page = int(parts[3]) if len(parts) > 3 else 0
-    if category not in emoji_service.GROUPS:
+    if category not in {key for key, _ in _categories()}:
         await callback.answer("دسته‌بندی نامعتبر است.", show_alert=True)
         return
-    if callback.message:
         await callback.message.edit_text(
             f"🎨 مدیریت ایموجی‌ها  /  {_dict_category(category)}\n\n"
             "یک کلید را انتخاب کن. علامت وضعیت نشان می‌دهد ایموجی ویژه ثبت شده یا خیر.",
