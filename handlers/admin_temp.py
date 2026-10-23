@@ -106,7 +106,6 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
             ],
             [
-                InlineKeyboardButton(text="📚 منوهای داخلی", callback_data="admin:internal_menu"),
             ],
             [
                 InlineKeyboardButton(
