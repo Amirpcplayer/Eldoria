@@ -25,7 +25,7 @@ EXACT: dict[str, str] = {
     "menu:fanart": "menu_fanart", "menu:enter_game": "menu_enter_game",
     "menu:blacksmith": "menu_blacksmith", "menu:gold_gems": "menu_gold_gems",
     "menu:market": "menu_marketplace",
-    "profile:stats": "profile_stats", "profile:fanart": "profile_fanart_select",
+    "profile:stats": "profile_stats", "profile:fanart": "menu_fanart",
     "profile:titles": "profile_titles",
     "potion:choose:hp": "profile_hp_recovery", "potion:choose:mana": "profile_mana_recovery",
     "party:members": "party_members", "party:kick:list": "party_members",
@@ -99,7 +99,7 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
                             "menu:equipment": "profile_equipment",
                             "menu:skills": "profile_skills",
                             "profile:stats": "profile_stats",
-                            "profile:fanart": "profile_fanart_select",
+                            "profile:fanart": "menu_fanart",
                             "menu:back": "profile_back",
                             "profile:back": "profile_back",
                         }
@@ -107,22 +107,20 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
                             return profile_exact[callback]
                     return _category(callback_data, text)
                 apply_keyboard_icons(markup, data, category_resolver=resolve)
-                # Force the profile Fan Art button to use its own registry key.
-                # The generic text-based resolver can otherwise inherit an icon
-                # from another Fan Art/profile entry when keyboard labels change.
+                # Bind the profile Fan Art button to the Fan Art icon setting,
+                # not to the profile-specific icon.
                 if is_profile_panel:
-                    profile_fanart_id = str(data.get("ids", {}).get("profile_fanart_select", "") or "")
-                    if profile_fanart_id.isdigit():
-                        for row_index, row in enumerate(list(markup.inline_keyboard or [])):
-                            for button_index, button in enumerate(list(row)):
-                                if str(getattr(button, "callback_data", "") or "").lower() == "profile:fanart":
+                    fanart_id = str(data.get("ids", {}).get("menu_fanart", "") or "")
+                    for row_index, row in enumerate(list(markup.inline_keyboard or [])):
+                        for button_index, button in enumerate(list(row)):
+                            if str(getattr(button, "callback_data", "") or "").lower() == "profile:fanart":
+                                try:
+                                    row[button_index] = button.model_copy(update={"icon_custom_emoji_id": fanart_id if fanart_id.isdigit() else None})
+                                except Exception:
                                     try:
-                                        row[button_index] = button.model_copy(update={"icon_custom_emoji_id": profile_fanart_id})
+                                        button.icon_custom_emoji_id = fanart_id if fanart_id.isdigit() else None
                                     except Exception:
-                                        try:
-                                            button.icon_custom_emoji_id = profile_fanart_id
-                                        except Exception:
-                                            pass
+                                        pass
                 try:
                     method = method.model_copy(update={
                         "reply_markup": markup.model_copy(update={"inline_keyboard": markup.inline_keyboard})
