@@ -179,6 +179,7 @@ async def emoji_category(callback: CallbackQuery, state: FSMContext):
     if category not in {key for key, _ in _categories()}:
         await callback.answer("دسته‌بندی نامعتبر است.", show_alert=True)
         return
+    if callback.message:
         await callback.message.edit_text(
             f"🎨 مدیریت ایموجی‌ها  /  {_dict_category(category)}\n\n"
             "یک کلید را انتخاب کن. علامت وضعیت نشان می‌دهد ایموجی ویژه ثبت شده یا خیر.",
