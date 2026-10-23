@@ -624,16 +624,44 @@ async def compact_profile_command(message: Message) -> None:
     if message.from_user is None or not message.text:
         return
 
-    replied_user = (
-        message.reply_to_message.from_user
-        if message.reply_to_message is not None
-        else None
-    )
-    target_user = replied_user or message.from_user
+    replied_message = message.reply_to_message
+    replied_user = replied_message.from_user if replied_message is not None else None
+
+    # Replies to forwarded posts can have no direct from_user; use the original
+    # sender when Telegram exposes it. Never silently fall back to the caller's
+    # profile when the command itself is a reply.
+    if replied_user is None and replied_message is not None:
+        origin = getattr(replied_message, "forward_origin", None)
+        replied_user = getattr(origin, "sender_user", None) if origin is not None else None
+
+    if replied_message is not None and replied_user is None:
+        logger.warning(
+            "Profile command replied to message without resolvable user: "
+            "chat_id=%s caller_id=%s replied_message_id=%s sender_chat=%s",
+            message.chat.id,
+            message.from_user.id,
+            replied_message.message_id,
+            getattr(replied_message, "sender_chat", None),
+        )
+        await message.answer(
+            "❌ نمی‌توان صاحب این پیام را شناسایی کرد. روی پیام مستقیم همان بازیکن ریپلای کن."
+        )
+        return
+
+    target_user = replied_user if replied_message is not None else message.from_user
+    if target_user is None:
+        return
     if target_user.is_bot:
         await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
         return
     target_id = target_user.id
+    logger.info(
+        "Profile command target resolved: chat_id=%s caller_id=%s target_id=%s replied=%s",
+        message.chat.id,
+        message.from_user.id,
+        target_id,
+        replied_message.message_id if replied_message is not None else None,
+    )
 
     character = await get_character(target_id)
     if character is None:
