@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from config.settings import settings
 from services.emoji_manager_service import (
-    ALL_BUTTONS, MAIN_BUTTONS, INTERNAL_BUTTONS, DEFAULTS,
+    ALL_BUTTONS, MAIN_BUTTONS, INTERNAL_BUTTONS, INTERNAL_CATEGORIES, DEFAULTS,
     load_config, reset_all, reset_emoji, set_emoji,
 )
 
@@ -40,7 +40,7 @@ def home_keyboard() -> InlineKeyboardMarkup:
 
 
 def section_keyboard(section: str) -> InlineKeyboardMarkup:
-    entries = MAIN_BUTTONS if section == "main" else INTERNAL_BUTTONS
+    entries = MAIN_BUTTONS if section == "main" else {}
     rows = [[_button(f"{DEFAULTS[key]} {label}", f"admin:emoji:button:{key}")]
             for key, (label, _) in entries.items()]
     rows.append([_button("🔙 بازگشت", "admin:emoji:open")])
@@ -107,6 +107,23 @@ async def emoji_manager_section(callback: CallbackQuery):
         await callback.message.edit_text(
             f"🎨 <b>مدیریت ایموجی {title}</b>\n\nدکمه‌ای را انتخاب کن:",
             reply_markup=section_keyboard(section), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:emoji:archive:"))
+async def emoji_manager_archive(callback: CallbackQuery):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    category = callback.data.removeprefix("admin:emoji:archive:")
+    if category not in INTERNAL_CATEGORIES:
+        await callback.answer("دسته پیدا نشد.", show_alert=True)
+        return
+    title, keys = INTERNAL_CATEGORIES[category]
+    rows = [[_button(f"{DEFAULTS[key]} {ALL_BUTTONS[key][0]}", f"admin:emoji:button:{key}")] for key in keys]
+    rows.append([_button("🔙 آرشیو منوهای داخلی", "admin:emoji:section:internal")])
+    if callback.message:
+        await callback.message.edit_text(f"🎨 <b>{title}</b>\\n\\nدکمه موردنظر را انتخاب کن:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
     await callback.answer()
 
 
