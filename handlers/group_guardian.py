@@ -750,6 +750,26 @@ async def welcome_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer("ذخیره شد.")
     await callback.message.answer("✅ خوشامدگویی ذخیره و فعال شد.")
 
+def _is_plain_attack_alias(text: str | None) -> bool:
+    if not text:
+        return False
+    import unicodedata
+    normalized = "".join(
+        char for char in text
+        if unicodedata.category(char) != "Cf" and char != "\u0640"
+    ).strip().casefold()
+    normalized = normalized.replace("ي", "ی").replace("ك", "ک")
+    return normalized == "حمله"
+
+
+# This router is included before the RPG routers. Forward the attack alias
+# explicitly so an active group-moderation FSM cannot consume it as wizard input.
+@router.message(F.text.func(_is_plain_attack_alias))
+async def forward_plain_attack_alias(message: Message):
+    from handlers.group_boss import group_boss_attack
+    await group_boss_attack(message)
+
+
 @router.message(FilterWizard.word, F.text)
 async def receive_filter_word(message: Message, state: FSMContext):
     data = await state.get_data()
