@@ -232,15 +232,8 @@ async def section(c: CallbackQuery):
     name = c.data.rsplit(":", 1)[-1]
     if name not in SECTION_GROUPS:
         await c.answer("بخش نامعتبر", show_alert=True); return
-    if name == "fanart":
-        rows = [
-            [_btn("🎨 ایموجی دکمه فن‌آرت", "admin:emoji:set:menu_fanart")],
+    rows = [[_btn("ایموجی دکمه‌های داخل بخش", "admin:emoji:group:"+SECTION_GROUPS[name])],
             [_btn("ایموجی‌های قالب متنی بخش", "admin:emoji:group:templates")],
-            [_btn("⬅️ بخش‌های منو", "admin:emoji:sections")],
-        ]
-    else:
-        rows = [[_btn("ایموجی دکمه‌های داخل بخش", "admin:emoji:group:"+SECTION_GROUPS[name])],
-                [_btn("ایموجی‌های قالب متنی بخش", "admin:emoji:group:templates")],
-                [_btn("⬅️ بخش‌های منو", "admin:emoji:sections")]]
+            [_btn("⬅️ بخش‌های منو", "admin:emoji:sections")]]
     await c.message.edit_text("<b>"+KEY_TITLES.get("menu_"+name,name)+"</b>\nآرشیو موردنظر را انتخاب کن.", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
     await c.answer()
