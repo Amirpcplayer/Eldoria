@@ -96,7 +96,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
             ],
             [
-                InlineKeyboardButton(text="✨ مدیریت ایموجی‌های پرمیوم", callback_data="admin:emoji:home"),
+                InlineKeyboardButton(text="📚 منوهای داخلی", callback_data="admin:internal_menu"),
             ],
             [
                 InlineKeyboardButton(text="🔎 جست‌وجوی بازیکن با یوزرنیم", callback_data="admin:players:search"),
@@ -121,6 +121,56 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+
+# Internal menu skeletons, to be implemented step by step.
+INTERNAL_MENU_SECTIONS = [
+    ("ادمین /admin", "internal:admin"), ("پروفایل", "internal:profile"),
+    ("صندوقچه", "internal:inventory"), ("مهارت‌ها", "internal:skills"),
+    ("تجهیزات", "internal:equipment"), ("ماموریت‌ها", "internal:quest"),
+    ("ماجراجویی", "internal:adventure"), ("کرفتینگ", "internal:crafting"),
+    ("پت", "internal:pets"), ("ایونت", "internal:events"),
+    ("پارتی", "internal:party"), ("گیلد", "internal:guild"),
+    ("رتبه‌بندی", "internal:ranking"), ("آهنگری", "internal:forge"),
+    ("بازار بازیکنان", "internal:marketplace"), ("دفترچه هیولا", "internal:bestiary"),
+    ("راهنما", "internal:guide"), ("تبدیل گلد به جم", "internal:gold_gems"),
+    ("فروشگاه", "internal:shop"), ("تنظیمات", "internal:settings"),
+]
+
+
+def internal_menu_keyboard() -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=label, callback_data=callback)]
+            for label, callback in INTERNAL_MENU_SECTIONS]
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data == "admin:internal_menu")
+async def internal_menu_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.edit_text(
+            "📚 <b>منوهای داخلی World Eldoria</b>\\n\\n"
+            "بخش موردنظر را انتخاب کن. زیرساخت هر بخش را مرحله‌به‌مرحله می‌سازیم.",
+            reply_markup=internal_menu_keyboard(), parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("internal:"))
+async def internal_menu_section_placeholder(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    selected = (callback.data or "").split(":", 1)[1]
+    labels = {key.split(":", 1)[1]: label for label, key in INTERNAL_MENU_SECTIONS}
+    if selected not in labels:
+        await callback.answer("بخش نامعتبر است.", show_alert=True)
+        return
+    await callback.answer(f"«{labels[selected]}» هنوز ساخته نشده؛ مرحله‌به‌مرحله می‌سازیم.", show_alert=True)
 
 
 def player_management_keyboard() -> InlineKeyboardMarkup:
