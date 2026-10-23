@@ -29,7 +29,7 @@ def _is_profile_text(text: str | None) -> bool:
         char for char in text
         if unicodedata.category(char) != "Cf" and char != "\u0640"
     ).strip().casefold()
-    return normalized == "پروفایل"
+    return normalized == "پروفایل" or normalized.startswith("پروفایل ")
 
 
 @router.message(Command("profile", ignore_case=True))
