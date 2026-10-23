@@ -121,15 +121,6 @@ def load() -> dict[str, Any]:
     ids = data.setdefault("ids", {})
     if not str(ids.get("menu_gold_gems", "")).isdigit() and str(ids.get("menu_exchange", "")).isdigit():
         ids["menu_gold_gems"] = str(ids["menu_exchange"])
-    # Fan Art has one canonical button icon shared by the main menu and profile.
-    # Prefer the main-menu key when present, then migrate older profile-only data.
-    fanart_id = ids.get("menu_fanart")
-    if not str(fanart_id or "").isdigit():
-        fanart_id = ids.get("profile_fanart_select")
-    if str(fanart_id or "").isdigit():
-        ids["menu_fanart"] = str(fanart_id)
-        ids["profile_fanart_select"] = str(fanart_id)
-
     # Fold old duplicate settings into the canonical main-menu keys.
     if not str(ids.get("menu_forge", "")).isdigit() and str(ids.get("menu_blacksmith", "")).isdigit():
         ids["menu_forge"] = str(ids["menu_blacksmith"])
