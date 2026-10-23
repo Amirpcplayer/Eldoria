@@ -212,7 +212,7 @@ SECTION_GROUPS = {
     "events": "adventure", "skills": "adventure", "quest": "adventure", "bestiary": "adventure",
     "shop": "economy", "exchange": "economy", "marketplace": "economy", "forge": "economy",
     "ranking": "economy", "equipment": "inventory", "guide": "templates", "settings": "templates",
-    "fanart": "profile", "enter_game": "templates", "blacksmith": "economy",
+    "fanart": "profile", "enter_game": "templates",
     "gold_gems": "economy", "market": "economy",
 }
 
