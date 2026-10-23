@@ -79,7 +79,7 @@ def _category_keyboard(category: str, page: int, data: dict) -> InlineKeyboardMa
         status = "✅" if emoji_id.isdigit() else "▫️"
         rows.append([InlineKeyboardButton(
             text=f"{_glyph(key)}  {_title(key)}  {status}",
-            callback_data=f"emoji:key:{key}:{page}",
+            callback_data=f"emoji:key:{key}:{page}:{category}",
         )])
     nav = []
     if page > 0:
@@ -95,11 +95,11 @@ def _category_keyboard(category: str, page: int, data: dict) -> InlineKeyboardMa
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _detail_keyboard(key: str, page: int) -> InlineKeyboardMarkup:
+def _detail_keyboard(key: str, page: int, category: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 ثبت ایموجی ویژه", callback_data=f"emoji:set:{key}:{page}")],
-        [InlineKeyboardButton(text="♻️ بازگشت به ایموجی پیش‌فرض", callback_data=f"emoji:reset:{key}:{page}")],
-        [InlineKeyboardButton(text="🔙 بازگشت به فهرست", callback_data=f"emoji:cat:{_category_for(key)}:{page}")],
+        [InlineKeyboardButton(text="🎨 ثبت ایموجی ویژه", callback_data=f"emoji:set:{key}:{page}:{category}")],
+        [InlineKeyboardButton(text="♻️ بازگشت به ایموجی پیش‌فرض", callback_data=f"emoji:reset:{key}:{page}:{category}")],
+        [InlineKeyboardButton(text="🔙 بازگشت به فهرست", callback_data=f"emoji:cat:{category}:{page}")],
         [InlineKeyboardButton(text="🏠 مرکز مدیریت ایموجی", callback_data="emoji:home")],
     ])
 
@@ -215,7 +215,9 @@ async def emoji_key_detail(callback: CallbackQuery, state: FSMContext):
     if not await _authorized(callback):
         return
     await state.clear()
-    _, _, key, page = (callback.data or "").split(":")
+    parts = (callback.data or "").split(":")
+    _, _, key, page = parts[:4]
+    category = parts[4] if len(parts) > 4 else _category_for(key)
     data = _data()
     if key not in emoji_service.DEFAULTS and key not in data.get("catalog", {}) and key not in data.get("ids", {}):
         await callback.answer("کلید پیدا نشد.", show_alert=True)
@@ -231,7 +233,7 @@ async def emoji_key_detail(callback: CallbackQuery, state: FSMContext):
             f"🆔 شناسهٔ ثبت‌شده: {emoji_id if emoji_id.isdigit() else 'ثبت نشده'}\n"
             f"📡 وضعیت: {'ایموجی ویژه فعال است' if emoji_id.isdigit() else 'استفاده از حالت پیش‌فرض'}\n\n"
             "برای ثبت، روی «ثبت ایموجی ویژه» بزن و سپس یک ایموجی ویژهٔ تلگرام را در همین گفت‌وگو بفرست.",
-            reply_markup=_detail_keyboard(key, int(page)),
+            reply_markup=_detail_keyboard(key, int(page), category),
         )
     await callback.answer()
 
@@ -240,9 +242,11 @@ async def emoji_key_detail(callback: CallbackQuery, state: FSMContext):
 async def emoji_set_start(callback: CallbackQuery, state: FSMContext):
     if not await _authorized(callback):
         return
-    _, _, key, page = (callback.data or "").split(":")
+    parts = (callback.data or "").split(":")
+    _, _, key, page = parts[:4]
+    category = parts[4] if len(parts) > 4 else _category_for(key)
     await state.clear()
-    await state.update_data(emoji_key=key, emoji_page=int(page))
+    await state.update_data(emoji_key=key, emoji_page=int(page), emoji_category=category)
     await state.set_state(EmojiManagerState.waiting_custom_emoji)
     if callback.message:
         await callback.message.answer(
@@ -272,6 +276,7 @@ async def emoji_set_finish(message: Message, state: FSMContext):
     payload = await state.get_data()
     key = str(payload.get("emoji_key", ""))
     page = int(payload.get("emoji_page", 0))
+    category = str(payload.get("emoji_category", _category_for(key)))
     data = _data()
     ids = data.setdefault("ids", {})
     ids[key] = str(custom.custom_emoji_id)
@@ -290,7 +295,9 @@ async def emoji_set_finish(message: Message, state: FSMContext):
 async def emoji_reset(callback: CallbackQuery, state: FSMContext):
     if not await _authorized(callback):
         return
-    _, _, key, page = (callback.data or "").split(":")
+    parts = (callback.data or "").split(":")
+    _, _, key, page = parts[:4]
+    category = parts[4] if len(parts) > 4 else _category_for(key)
     data = _data()
     data.setdefault("ids", {}).pop(key, None)
     emoji_service.save(data)
@@ -299,7 +306,7 @@ async def emoji_reset(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f"♻️ تنظیم ایموجی «{_title(key)}» حذف شد و به حالت پیش‌فرض برگشت.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 بازگشت به فهرست", callback_data=f"emoji:cat:{_category_for(key)}:{int(page)}")],
+                [InlineKeyboardButton(text="🔙 بازگشت به فهرست", callback_data=f"emoji:cat:{category}:{int(page)}")],
                 [InlineKeyboardButton(text="🏠 مرکز مدیریت ایموجی", callback_data="emoji:home")],
             ]),
         )
