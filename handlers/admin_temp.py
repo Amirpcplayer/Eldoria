@@ -73,6 +73,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="🎨 مدیریت ایموجی",
+                    callback_data="admin:emoji:open",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎨 مدیریت فن‌آرت شاپ",
                     callback_data="admin:fanart:manage",
                 )
