@@ -183,6 +183,7 @@ async def send_panel(
     text: str,
     reply_markup=None,
     parse_mode: ParseMode | str | None = ParseMode.HTML,
+    force_new: bool = False,
 ) -> Message | None:
     """Edit this player's previous panel when available; otherwise send the first one."""
     if message.from_user is None:
@@ -197,7 +198,7 @@ async def send_panel(
     # legacy keys that previously pointed at the user's /menu command.
     previous_id = await _get_reference(chat_id, owner_id)
     if previous_id is not None:
-        if image_path is None:
+        if image_path is None and not force_new:
             try:
                 edited = await message.bot.edit_message_text(
                     chat_id=chat_id,
