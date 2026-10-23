@@ -46,6 +46,8 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                 text = button.text or ""
                 callback_data = getattr(button, "callback_data", None)
                 key = callback_data if callback_data in ALL_BUTTONS else None
+                if key is None and callback_data:
+                    key = next((candidate for candidate in ALL_BUTTONS if candidate.endswith(":") and callback_data.startswith(candidate)), None)
                 normalized = _normalize_label(text)
                 exact_label_match = normalized in _LABEL_ONLY_TO_KEY
 
