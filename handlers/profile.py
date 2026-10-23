@@ -149,7 +149,12 @@ def profile_keyboard() -> InlineKeyboardMarkup:
                 button("profile_stats", "📊", "آمار کامل", "profile:stats"),
             ],
             [
-                button("profile_fanart_select", "🎨", "انتخاب Fan Art پروفایل", "profile:fanart"),
+                button(
+                    "profile_fanart_select" if str(ids.get("profile_fanart_select", "") or "").isdigit() else "menu_fanart",
+                    "🎨",
+                    "انتخاب Fan Art پروفایل",
+                    "profile:fanart",
+                ),
             ],
             [
                 button("profile_back", "🔙", "بازگشت", "menu:back"),
