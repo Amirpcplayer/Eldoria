@@ -688,12 +688,6 @@ async def compact_profile_command(message: Message) -> None:
         target_id = message.from_user.id
         target_username = message.from_user.username
 
-    if replied_message is None and not argument and message.chat.type != "private":
-        await message.answer(
-            "⚠️ تلگرام این دستور را به‌صورت ریپلای به من نرسانده؛ برای اینکه پروفایل اشتباهی نمایش داده نشود، دستور متوقف شد. روی پیام خودِ بازیکن Reply بزن و دستور /profile را داخل همان کادر پاسخ، دستی تایپ و ارسال کن؛ یا از /profile @username استفاده کن."
-        )
-        return
-
     logger.info(
         "Profile target resolved: chat_id=%s caller_id=%s target_id=%s "
         "target_username=%s replied_message_id=%s explicit_argument=%s",
