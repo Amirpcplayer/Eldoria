@@ -213,7 +213,7 @@ SECTION_GROUPS = {
     "shop": "economy", "exchange": "economy", "marketplace": "economy", "forge": "economy",
     "ranking": "economy", "equipment": "inventory", "guide": "templates", "settings": "templates",
     "fanart": "profile", "enter_game": "templates",
-    "gold_gems": "economy", "market": "economy",
+    "gold_gems": "economy",
 }
 
 @router.callback_query(F.data == "admin:emoji:sections")
