@@ -70,7 +70,7 @@ INTERNAL_BUTTONS.update({
     "profile:settitle:": ("انتخاب لقب از فهرست", "🎖️"),
     "profile:titlepage:": ("صفحه‌بندی لقب‌ها", "➡️"),
     "inventory:potions": ("معجون‌ها", "🧪"), "inventory:materials": ("متریال‌ها", "🗃️"),
-    "inventory:all": ("همه آیتم‌ها", "📦"), "inventory:fanart": ("فن‌آرت‌های من", "🎨"),
+    "inventory:all": ("همه آیتم‌های موجود", "📦"), "inventory:fanart": ("فن‌آرت‌های من", "🎨"),
     "quest:list:story": ("داستانی", "📖"), "quest:list:daily": ("روزانه", "📅"),
     "quest:list:achievement": ("دستاوردها", "🏆"), "quest:current_list": ("مأموریت‌های من", "📌"),
     "quest:menu": ("بازگشت به مأموریت‌ها", "🔙"),
