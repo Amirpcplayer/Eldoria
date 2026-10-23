@@ -100,6 +100,8 @@ dp.callback_query.middleware(username_sync)
 
 dp.include_router(guardian_router)
 dp.include_router(start_router)
+# Menu commands must take priority over a stale character-creation FSM state.
+dp.include_router(main_menu_router)
 dp.include_router(character_creation_router)
 dp.include_router(race_router)
 dp.include_router(element_router)
@@ -116,7 +118,6 @@ dp.include_router(group_link_router)
 # active market input always reaches its state-specific handler.
 dp.include_router(advanced_world_router)
 dp.include_router(command_aliases_router)
-dp.include_router(main_menu_router)
 dp.include_router(shop_router)
 dp.include_router(inventory_router)
 dp.include_router(profile_router)
