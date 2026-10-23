@@ -197,7 +197,21 @@ async def capture(message: Message, state: FSMContext):
         await message.answer("دسته‌بندی منقضی شده؛ دوباره پنل ایموجی را باز کن.")
         return
     data = load()
-    data.setdefault("ids", {})[key] = value
+    ids = data.setdefault("ids", {})
+    # The profile Fan Art button and the main-menu Fan Art button are separate
+    # settings. Reject an accidental duplicate so the admin cannot think one
+    # setting changed independently when both buttons still share the same ID.
+    paired_key = {
+        "profile_fanart_select": "menu_fanart",
+        "menu_fanart": "profile_fanart_select",
+    }.get(key)
+    if paired_key and str(ids.get(paired_key, "")).isdigit() and str(ids[paired_key]) == value:
+        await message.answer(
+            f"⚠️ این شناسه هم‌اکنون برای «{KEY_TITLES.get(paired_key, paired_key)}» ثبت شده است.\n"
+            "برای مستقل‌بودن ایموجی این دکمه، یک ایموجی پرمیوم متفاوت بفرست."
+        )
+        return
+    ids[key] = value
     save(data)
     await state.clear()
     await message.answer(
