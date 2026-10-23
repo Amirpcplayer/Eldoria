@@ -31,6 +31,7 @@ def _glyph(key: str) -> str:
 def _categories() -> list[tuple[str, str]]:
     return [
         ("menu", "🏠 منوی اصلی"),
+        ("internal", "🧭 منوی داخلی و پنل‌ها"),
         ("profile", "👤 پروفایل"),
         ("inventory", "🎒 صندوقچه و تجهیزات"),
         ("adventure", "⚔️ ماجراجویی و نبرد"),
@@ -43,7 +44,15 @@ def _categories() -> list[tuple[str, str]]:
 
 def _category_keys(category: str, data: dict) -> list[str]:
     keys = list(emoji_service.GROUPS.get(category, ()))
-    # Keep all saved/known settings discoverable, including legacy keys.
+    # Surface legacy and panel/action icons that are not part of the game main menu.
+    if category == "internal":
+        main_keys = set(emoji_service.GROUPS.get("menu", ()))
+        for group_name, group_keys in emoji_service.GROUPS.items():
+            if group_name not in {"menu", "templates"}:
+                main_keys.update(group_keys)
+        known = set(emoji_service.DEFAULTS) | set(data.get("catalog", {})) | set(data.get("ids", {}))
+        keys.extend(k for k in known if k not in main_keys and not k.startswith("menu_"))
+    # Keep all saved/known template settings discoverable, including legacy keys.
     if category == "templates":
         keys.extend(k for k in data.get("ids", {}) if k not in keys and not k.startswith("menu_"))
     return list(dict.fromkeys(k for k in keys if k in emoji_service.DEFAULTS or k in data.get("catalog", {}) or k in data.get("ids", {})))
