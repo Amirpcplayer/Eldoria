@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+import hashlib
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -23,11 +24,12 @@ def _data() -> dict:
     return emoji_service.load()
 
 
-def _title(key: str) -> str:
+def _title(key: str, data: dict | None = None) -> str:
     title = emoji_service.KEY_TITLES.get(key)
     if title:
         return title
-    catalog_glyph = _data().get("catalog", {}).get(key, "")
+    data = data or _data()
+    catalog_glyph = data.get("catalog", {}).get(key, "")
     if key.startswith("menu_"):
         return f"دکمهٔ {key.removeprefix('menu_').replace('_', ' ')}"
     if key.startswith("profile_"):
@@ -70,6 +72,15 @@ def _is_registered(key: str, data: dict) -> bool:
     return str(data.get("ids", {}).get(key, "")).isdigit()
 
 
+def _key_token(key: str) -> str:
+    """Compact stable callback token; Telegram callback_data is limited to 64 bytes."""
+    return hashlib.blake2s(key.encode("utf-8"), digest_size=5).hexdigest()
+
+
+def _key_from_token(token: str, data: dict) -> str | None:
+    return next((key for key in _all_keys(data) if _key_token(key) == token), None)
+
+
 def _home_keyboard(data: dict) -> InlineKeyboardMarkup:
     main_keys = _category_keys(MAIN_CATEGORY, data)
     internal_keys = _category_keys(INTERNAL_CATEGORY, data)
@@ -103,8 +114,8 @@ def _category_keyboard(category: str, page: int, data: dict) -> InlineKeyboardMa
     for key in keys[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
         status = "✅" if _is_registered(key, data) else "▫️"
         rows.append([InlineKeyboardButton(
-            text=f"{_glyph(key, data)} {_title(key)} {status}"[:64],
-            callback_data=f"emoji:key:{key}:{page}:{category}",
+            text=f"{_glyph(key, data)} {_title(key, data)} {status}"[:64],
+            callback_data=f"emoji:key:{_key_token(key)}:{page}:{category}",
         )])
     nav = []
     if page > 0:
@@ -120,8 +131,8 @@ def _category_keyboard(category: str, page: int, data: dict) -> InlineKeyboardMa
 
 def _detail_keyboard(key: str, page: int, category: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 ثبت / جایگزینی Custom Emoji", callback_data=f"emoji:set:{key}:{page}:{category}")],
-        [InlineKeyboardButton(text="♻️ حذف تنظیم و بازگشت به پیش‌فرض", callback_data=f"emoji:reset:{key}:{page}:{category}")],
+        [InlineKeyboardButton(text="🎨 ثبت / جایگزینی Custom Emoji", callback_data=f"emoji:set:{_key_token(key)}:{page}:{category}")],
+        [InlineKeyboardButton(text="♻️ حذف تنظیم و بازگشت به پیش‌فرض", callback_data=f"emoji:reset:{_key_token(key)}:{page}:{category}")],
         [InlineKeyboardButton(text="🔙 بازگشت به فهرست", callback_data=f"emoji:cat:{category}:{page}")],
         [InlineKeyboardButton(text="🏠 مرکز مدیریت ایموجی", callback_data="emoji:home")],
     ])
@@ -219,7 +230,11 @@ async def emoji_key_detail(callback: CallbackQuery, state: FSMContext):
     if len(parts) < 5:
         await callback.answer("درخواست ناقص است.", show_alert=True)
         return
-    key = parts[2]
+    data = _data()
+    key = _key_from_token(parts[2], data)
+    if key is None:
+        await callback.answer("کلید ایموجی پیدا نشد؛ فهرست را دوباره باز کن.", show_alert=True)
+        return
     try:
         page = int(parts[3])
     except ValueError:
@@ -258,7 +273,11 @@ async def emoji_set_start(callback: CallbackQuery, state: FSMContext):
     if len(parts) < 5:
         await callback.answer("درخواست ناقص است.", show_alert=True)
         return
-    key = parts[2]
+    data = _data()
+    key = _key_from_token(parts[2], data)
+    if key is None:
+        await callback.answer("کلید ایموجی پیدا نشد؛ فهرست را دوباره باز کن.", show_alert=True)
+        return
     try:
         page = max(0, int(parts[3]))
     except ValueError:
@@ -335,7 +354,11 @@ async def emoji_reset(callback: CallbackQuery, state: FSMContext):
     if len(parts) < 5:
         await callback.answer("درخواست ناقص است.", show_alert=True)
         return
-    key = parts[2]
+    data = _data()
+    key = _key_from_token(parts[2], data)
+    if key is None:
+        await callback.answer("کلید ایموجی پیدا نشد؛ فهرست را دوباره باز کن.", show_alert=True)
+        return
     try:
         page = max(0, int(parts[3]))
     except ValueError:
@@ -394,7 +417,7 @@ async def emoji_search_finish(message: Message, state: FSMContext):
     data = _data()
     matches = [
         key for key in _all_keys(data)
-        if query in key.casefold() or query in _title(key).casefold() or query in _glyph(key, data).casefold()
+        if query in key.casefold() or query in _title(key, data).casefold() or query in _glyph(key, data).casefold()
     ][:20]
     if not matches:
         await message.answer(
@@ -411,8 +434,8 @@ async def emoji_search_finish(message: Message, state: FSMContext):
         category = MAIN_CATEGORY if key.startswith("menu_") else INTERNAL_CATEGORY
         status = "✅" if _is_registered(key, data) else "▫️"
         rows.append([InlineKeyboardButton(
-            text=f"{_glyph(key, data)} {_title(key)} {status}"[:64],
-            callback_data=f"emoji:key:{key}:0:{category}",
+            text=f"{_glyph(key, data)} {_title(key, data)} {status}"[:64],
+            callback_data=f"emoji:key:{_key_token(key)}:0:{category}",
         )])
     rows.append([InlineKeyboardButton(text="🔎 جست‌وجوی دوباره", callback_data="emoji:search")])
     rows.append([InlineKeyboardButton(text="🏠 مرکز مدیریت ایموجی", callback_data="emoji:home")])
