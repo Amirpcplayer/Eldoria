@@ -842,7 +842,7 @@ async def profile_command(message: Message):
     argument = parts[1].strip() if len(parts) > 1 else ""
     replied = message.reply_to_message
     target_user = replied.from_user if replied else None
-    target_id = target_id if target_user and not target_user.is_bot else None
+    target_id = target_user.id if target_user and not target_user.is_bot else None
 
     if replied is not None and target_id is None:
         await message.answer("❌ صاحب پیام ریپلای‌شده قابل شناسایی نیست؛ روی پیام مستقیم بازیکن ریپلای کن.")
