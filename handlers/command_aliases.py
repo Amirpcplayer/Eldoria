@@ -68,7 +68,6 @@ TEXT_ALIASES = {
     "صرافی": "exchange",
     "تنظیمات": "settings",
     "فروشگاه": "shop",
-    "منو": "main_menu",
 }
 
 def button(text: str, callback_data: str) -> InlineKeyboardButton:
