@@ -83,25 +83,17 @@ def _key_from_token(token: str, data: dict) -> str | None:
 
 
 def _home_keyboard(data: dict) -> InlineKeyboardMarkup:
+    """The manager intentionally exposes exactly two top-level sections."""
     main_keys = _category_keys(MAIN_CATEGORY, data)
     internal_keys = _category_keys(INTERNAL_CATEGORY, data)
-    registered = sum(1 for key in _all_keys(data) if _is_registered(key, data))
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"🏠 منوی اصلی · {len(main_keys)} کلید",
+            text=f"🏠 بخش اصلی · {len(main_keys)} ایموجی",
             callback_data="emoji:cat:main:0",
         )],
         [InlineKeyboardButton(
-            text=f"🧭 منوی داخلی · {len(internal_keys)} کلید",
+            text=f"🧭 بخش داخلی · {len(internal_keys)} ایموجی",
             callback_data="emoji:cat:internal:0",
-        )],
-        [InlineKeyboardButton(
-            text=f"🔎 جست‌وجوی ایموجی · {registered} ثبت‌شده",
-            callback_data="emoji:search",
-        )],
-        [InlineKeyboardButton(
-            text=("🟢 ایموجی ویژه: فعال" if data.get("enabled") else "⚪️ ایموجی ویژه: غیرفعال"),
-            callback_data="emoji:toggle",
         )],
         [InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")],
     ])
