@@ -550,6 +550,7 @@ async def emoji_management_save(message: Message, state: FSMContext):
         and getattr(entity, "custom_emoji_id", None)
     ]
     registry = premium_emoji_service.load()
+    registry["enabled"] = True
     ids = registry.setdefault("ids", {})
     if custom_ids:
         ids[key] = custom_ids[0]
