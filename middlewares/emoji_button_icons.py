@@ -11,7 +11,7 @@ from services.emoji_manager_service import ALL_BUTTONS, get_custom_emoji_id, get
 
 
 def _normalize_label(text: str) -> str:
-    return re.sub(r"\\s+", " ", (text or "").strip()).casefold()
+    return re.sub(r"\s+", " ", (text or "").strip()).casefold()
 
 
 _LABEL_ONLY_TO_KEY: dict[str, str] = {}
@@ -21,6 +21,13 @@ for _key, (_label, _default_emoji) in ALL_BUTTONS.items():
     _LABEL_ONLY_TO_KEY[_label_only] = _key
     _LABEL_TO_KEY[_label_only] = _key
     _LABEL_TO_KEY[_normalize_label(f"{_default_emoji} {_label}")] = _key
+
+
+# Alternate spellings used by different menu builders.
+for _alias in ("ماموریت ها", "ماموریت‌ها", "مأموریت ها", "مأموریت‌ها"):
+    _LABEL_ONLY_TO_KEY[_normalize_label(_alias)] = "menu:quest"
+    _LABEL_TO_KEY[_normalize_label(_alias)] = "menu:quest"
+    _LABEL_TO_KEY[_normalize_label("📜 " + _alias)] = "menu:quest"
 
 
 class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
