@@ -315,20 +315,58 @@ async def manage_action(
         except TelegramAPIError as exc:
             await message.answer("❌ عملیات ناموفق بود: " + html.escape(str(exc)))
         return
-    # برای سکوت، مدت باید صریحاً وارد شود؛ سکوت بدون عدد نباید به ۶۰ دقیقه تبدیل شود.
+    # برای سکوت، مدت باید صریحاً وارد شود؛ هدف می‌تواند ریپلای یا شناسه/یوزرنیم باشد.
+    target_arg = arg.strip()
     if command == "mute":
-        if not arg.isdigit():
+        mute_parts = target_arg.split(maxsplit=1)
+        if not mute_parts or not mute_parts[0].isdigit():
             await message.answer("⏱️ مدت سکوت را به دقیقه وارد کن. نمونه: سکوت 20")
             return
-        minutes = int(arg)
+        minutes = int(mute_parts[0])
+        target_arg = mute_parts[1].strip() if len(mute_parts) > 1 else ""
         if not 1 <= minutes <= 525600:
             await message.answer("مدت سکوت باید بین ۱ تا ۵۲۵۶۰۰ دقیقه باشد.")
             return
 
     target = None
     target_id = None
+    # پشتیبانی از شناسه یا @username مستقیم، بدون نیاز به ریپلای.
+    direct_id = re.fullmatch(r"\d{5,15}", target_arg)
+    direct_username = re.fullmatch(r"@?([A-Za-z0-9_]{5,32})", target_arg)
+    if direct_id:
+        target_id = int(direct_id.group(0))
+    elif direct_username:
+        username = direct_username.group(1).casefold()
+        cached_id = await redis.get(f"guardian:{chat_id}:username:{username}")
+        if cached_id and str(cached_id).lstrip("-").isdigit():
+            target_id = int(cached_id)
+        else:
+            try:
+                async with AsyncSessionLocal() as session:
+                    player = await session.scalar(
+                        select(Character).where(
+                            func.lower(Character.telegram_username) == username
+                        )
+                    )
+                    if player:
+                        target_id = int(player.telegram_id)
+                        await redis.set(
+                            f"guardian:{chat_id}:username:{username}",
+                            str(target_id),
+                            ex=60 * 60 * 24 * 90,
+                        )
+            except Exception:
+                target_id = None
+    if target_id is not None:
+        try:
+            member = await message.bot.get_chat_member(chat_id, target_id)
+            if member.status not in ("left", "kicked"):
+                target = member.user
+        except TelegramAPIError:
+            if command != "ban":
+                target_id = None
     replied = message.reply_to_message
-    if replied:
+    if target_id is None and replied:
         # ریپلای مستقیم به پیام عضو.
         if replied.from_user and replied.from_user.id != message.from_user.id:
             target = replied.from_user
@@ -454,7 +492,11 @@ async def manage_action(
                 "🔔 کاربر پس از پایان این مدت می‌تواند دوباره پیام بفرستد."
             )
         elif command == "unmute":
-            await message.bot.restrict_chat_member(chat_id, target.id, permissions=UNMUTE)
+            # Restore the group's configured default permissions, not every
+            # permission unconditionally.
+            chat = await message.bot.get_chat(chat_id)
+            permissions = chat.permissions or UNMUTE
+            await message.bot.restrict_chat_member(chat_id, target.id, permissions=permissions)
             await message.answer(
                 "✅ <b>سکوت کاربر برداشته شد</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
