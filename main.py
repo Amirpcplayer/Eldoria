@@ -11,6 +11,9 @@ from aiogram import Dispatcher
 from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeDefault, ErrorEvent
 
 from bot.bot import bot
+from database.database import engine
+from database.redis import redis
+from middlewares.performance_monitor import UpdateTimingMiddleware
 
 from middlewares.username_sync import UsernameSyncMiddleware
 from middlewares.panel_owner import PanelOwnerMiddleware
@@ -60,6 +63,7 @@ logging.basicConfig(
 
 logger = logging.getLogger("world_eldoria")
 dp = Dispatcher()
+dp.update.outer_middleware(UpdateTimingMiddleware())
 
 
 @dp.errors()
@@ -227,6 +231,8 @@ async def main() -> None:
         if not bot.session.closed:
             await bot.session.close()
 
+        await redis.aclose()
+        await engine.dispose()
         logger.info("World Eldoria stopped.")
 
 
