@@ -50,7 +50,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
              "menu_party", "menu_guild", "menu_ranking", "menu_forge", "menu_marketplace",
              "menu_bestiary", "menu_guide", "menu_shop", "menu_settings",
              "menu_fanart", "menu_enter_game", "menu_gold_gems"),
-    "profile": ("profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_hp_recovery", "profile_mana_recovery", "profile_titles", "profile_fanart_select", "profile_back"),
+    "profile": ("profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_fanart_select", "profile_back"),
     "inventory": ("menu_inventory", "menu_equipment", "equipment", "potion", "health", "mana", "scroll", "material"),
     "guild": ("menu_guild", "guild_members", "guild_missions", "guild_vault", "guild_buy_adventure_items"),
     "party": ("menu_party", "party_members"),
