@@ -219,35 +219,102 @@ async def capture(message: Message, state: FSMContext):
         parse_mode="HTML",
     )
 
-# The two independent archives are available for every main-menu entry.
-SECTION_GROUPS = {
-    "profile": "profile", "inventory": "inventory", "guild": "guild", "party": "party",
-    "adventure": "adventure", "pvp": "adventure", "crafting": "adventure", "pets": "adventure",
-    "events": "adventure", "skills": "adventure", "quest": "adventure", "bestiary": "adventure",
-    "shop": "economy", "exchange": "economy", "marketplace": "economy", "forge": "economy",
-    "ranking": "economy", "equipment": "inventory", "guide": "templates", "settings": "templates",
-    "fanart": "profile", "enter_game": "templates",
-    "gold_gems": "economy",
+# Internal-menu sections shown in the admin emoji manager.
+# Keep the main-menu emoji archive untouched; this list only controls navigation
+# inside the admin's "بخش‌های داخلی منو" workflow.
+SECTION_TITLES = {
+    "admin": "ادمین /admin",
+    "profile": "پروفایل",
+    "inventory": "صندوقچه",
+    "skills": "مهارت‌ها",
+    "equipment": "تجهیزات",
+    "quest": "ماموریت‌ها",
+    "adventure": "ماجراجویی",
+    "crafting": "کرفتینگ",
+    "pets": "پت",
+    "events": "ایونت",
+    "party": "پارتی",
+    "guild": "گیلد",
+    "ranking": "رتبه‌بندی",
+    "forge": "آهنگری",
+    "marketplace": "بازار بازیکنان",
+    "bestiary": "دفترچه هیولا",
+    "guide": "راهنما",
+    "gold_gems": "تبدیل گلد به جم",
+    "shop": "فروشگاه",
+    "settings": "تنظیمات",
 }
+
+# Each section currently routes to its existing emoji archive. This step changes
+# only the internal section picker; detailed per-section archives will be rebuilt
+# in the next step. The "menu" group is intentionally not edited here.
+SECTION_GROUPS = {
+    "admin": "templates",
+    "profile": "profile",
+    "inventory": "inventory",
+    "skills": "adventure",
+    "equipment": "inventory",
+    "quest": "adventure",
+    "adventure": "adventure",
+    "crafting": "adventure",
+    "pets": "adventure",
+    "events": "adventure",
+    "party": "party",
+    "guild": "guild",
+    "ranking": "economy",
+    "forge": "economy",
+    "marketplace": "economy",
+    "bestiary": "adventure",
+    "guide": "templates",
+    "gold_gems": "economy",
+    "shop": "economy",
+    "settings": "templates",
+}
+
 
 @router.callback_query(F.data == "admin:emoji:sections")
 async def sections(c: CallbackQuery):
     if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
-        await c.answer("دسترسی ندارید", show_alert=True); return
-    rows = [[_btn(KEY_TITLES.get("menu_"+name, name), "admin:emoji:section:"+name)] for name in SECTION_GROUPS]
+        await c.answer("دسترسی ندارید", show_alert=True)
+        return
+
+    rows = [
+        [_btn(title, "admin:emoji:section:" + name)]
+        for name, title in SECTION_TITLES.items()
+    ]
     rows.append([_btn("⬅️ بازگشت", "admin:emoji:home")])
-    await c.message.edit_text("<b>بخش‌های منوی اصلی</b>\nبرای هر بخش، ایموجی دکمه‌ها و قالب متن جداست.", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
+    await c.message.edit_text(
+        "<b>بخش‌های داخلی منو</b>\n\n"
+        "بخش موردنظر را انتخاب کن. این فهرست فقط برای مدیریت ایموجی منوهای داخلی است؛ "
+        "تنظیمات ایموجی منوی اصلی بدون تغییر باقی می‌ماند.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode="HTML",
+    )
     await c.answer()
+
 
 @router.callback_query(F.data.startswith("admin:emoji:section:"))
 async def section(c: CallbackQuery):
     if c.from_user.id not in (settings.admin_id, GLOBAL_BOT_OWNER_ID):
-        await c.answer("دسترسی ندارید", show_alert=True); return
+        await c.answer("دسترسی ندارید", show_alert=True)
+        return
+
     name = c.data.rsplit(":", 1)[-1]
     if name not in SECTION_GROUPS:
-        await c.answer("بخش نامعتبر", show_alert=True); return
-    rows = [[_btn("ایموجی دکمه‌های داخل بخش", "admin:emoji:group:"+SECTION_GROUPS[name])],
-            [_btn("ایموجی‌های قالب متنی بخش", "admin:emoji:group:templates")],
-            [_btn("⬅️ بخش‌های منو", "admin:emoji:sections")]]
-    await c.message.edit_text("<b>"+KEY_TITLES.get("menu_"+name,name)+"</b>\nآرشیو موردنظر را انتخاب کن.", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
+        await c.answer("بخش نامعتبر", show_alert=True)
+        return
+
+    archive_group = SECTION_GROUPS[name]
+    title = SECTION_TITLES[name]
+    rows = [
+        [_btn("ایموجی دکمه‌های داخل بخش", "admin:emoji:group:" + archive_group)],
+        [_btn("ایموجی‌های قالب متنی بخش", "admin:emoji:group:templates")],
+        [_btn("⬅️ بخش‌های داخلی منو", "admin:emoji:sections")],
+    ]
+    await c.message.edit_text(
+        f"<b>{title}</b>\n\n"
+        "آرشیو موردنظر را انتخاب کن. ساختار اختصاصی ایموجی‌های هر بخش را در مرحلهٔ بعد می‌سازیم.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode="HTML",
+    )
     await c.answer()
