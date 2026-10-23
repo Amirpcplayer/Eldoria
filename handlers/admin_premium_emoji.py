@@ -144,12 +144,6 @@ async def delete(c: CallbackQuery):
     data = load()
     data.setdefault("ids", {}).pop(key, None)
     data.setdefault("aliases", {}).pop(key, None)
-    # The Fan Art button in the profile and the main-menu Fan Art entry are
-    # one visual action: keep their emoji IDs synchronized from the admin UI.
-    if key in {"profile_fanart_select", "menu_fanart"}:
-        other_key = "menu_fanart" if key == "profile_fanart_select" else "profile_fanart_select"
-        data.setdefault("ids", {}).pop(other_key, None)
-        data.setdefault("aliases", {}).pop(other_key, None)
     save(data)
     await c.answer("ایموجی ذخیره‌شده حذف شد.")
     # Return to the category containing this key so the admin doesn't lose their place.
@@ -204,12 +198,6 @@ async def capture(message: Message, state: FSMContext):
         return
     data = load()
     data.setdefault("ids", {})[key] = value
-    # Keep the profile Fan Art button and main-menu Fan Art button in sync.
-    # This prevents the admin UI from changing one key while the profile
-    # continues using a stale ID from the other key.
-    if key in {"profile_fanart_select", "menu_fanart"}:
-        other_key = "menu_fanart" if key == "profile_fanart_select" else "profile_fanart_select"
-        data.setdefault("ids", {})[other_key] = value
     save(data)
     await state.clear()
     await message.answer(
