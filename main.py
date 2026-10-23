@@ -31,6 +31,7 @@ from handlers.character_creation import router as character_creation_router
 from handlers.race import router as race_router
 from handlers.element import router as element_router
 from handlers.admin_temp import router as admin_temp_router
+from handlers.admin_premium_emoji import router as admin_premium_emoji_router
 from handlers.admin_resource_gifts import router as admin_resource_gifts_router
 from handlers.fan_art_gifts import router as fan_art_gifts_router
 from handlers.inventory import router as inventory_router
@@ -115,6 +116,7 @@ dp.include_router(element_router)
 
 # پنل ادمین و گیفت فن‌آرت
 dp.include_router(admin_temp_router)
+dp.include_router(admin_premium_emoji_router)
 dp.include_router(admin_resource_gifts_router)
 dp.include_router(fan_art_gifts_router)
 
