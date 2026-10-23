@@ -150,7 +150,7 @@ def profile_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 button(
-                    "profile_fanart_select" if str(ids.get("profile_fanart_select", "") or "").isdigit() else "menu_fanart",
+                    "profile_fanart_select",
                     "🎨",
                     "انتخاب Fan Art پروفایل",
                     "profile:fanart",
