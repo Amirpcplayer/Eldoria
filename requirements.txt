@@ -1,5 +1,5 @@
 # Telegram bot
-aiogram>=3.7,<4.0
+aiogram>=3.25,<4.0
 
 # Configuration
 pydantic-settings>=2.0,<3.0
