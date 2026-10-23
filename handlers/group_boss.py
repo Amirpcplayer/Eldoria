@@ -1307,9 +1307,33 @@ async def _story_attack(message: Message) -> None:
     )
 
 
+def _is_plain_story_attack(text: str | None) -> bool:
+    """Match Persian attack text even if Telegram/client inserts invisible Unicode marks."""
+    if not text:
+        return False
+    normalized = (
+        text.replace("\\u200b", "")
+        .replace("\\u200c", "")
+        .replace("\\u200d", "")
+        .replace("\\ufeff", "")
+        .strip()
+        .casefold()
+    )
+    return normalized == "حمله"
+
+
 @router.message(Command("attack", ignore_case=True))
-@router.message(F.text.regexp(r"(?i)^\s*حمله\s*$"))
+@router.message(F.text.func(_is_plain_story_attack))
+@router.message(F.text.regexp(r"(?i)^\\s*حمله\\s*$"))
 async def group_boss_attack(message: Message):
+    logger.info(
+        "Attack handler received message: chat_id=%s chat_type=%s user_id=%s text=%r reply_to=%s",
+        message.chat.id,
+        message.chat.type,
+        message.from_user.id if message.from_user else None,
+        message.text,
+        message.reply_to_message.message_id if message.reply_to_message else None,
+    )
     replied = message.reply_to_message
 
     # The group-boss router is registered before the PvP router, so this
