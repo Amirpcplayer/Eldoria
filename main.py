@@ -120,12 +120,11 @@ dp.include_router(admin_emoji_manager_router)
 dp.include_router(admin_resource_gifts_router)
 dp.include_router(fan_art_gifts_router)
 
+# Route player aliases before group/world routers so profile replies cannot
+# be consumed by earlier command or text handlers.
+dp.include_router(command_aliases_router)
 dp.include_router(group_boss_router)
 dp.include_router(group_link_router)
-# Route explicit player commands before routers with stateful or broader
-# text handlers. This ensures reply-based /profile and «پروفایل» resolve the
-# replied-to user's Telegram ID instead of being consumed by another handler.
-dp.include_router(command_aliases_router)
 # Register marketplace FSM handlers before general menu/text routers so
 # active market input always reaches its state-specific handler.
 dp.include_router(advanced_world_router)
