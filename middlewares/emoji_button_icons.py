@@ -11,16 +11,13 @@ from services.emoji_manager_service import ALL_BUTTONS, get_emoji
 
 
 def _normalize_label(text: str) -> str:
-    """Normalize a button label so it can be matched even if callback_data differs."""
-    value = (text or "").strip()
-    # Remove the leading icon/token, leaving the human-readable label.
-    if " " in value:
-        value = value.split(" ", 1)[1].strip()
-    value = re.sub(r"\s+", " ", value)
-    return value.casefold()
+    return re.sub(r"\s+", " ", (text or "").strip()).casefold()
 
 
-_LABEL_TO_KEY = {_normalize_label(label): key for key, (label, _emoji) in ALL_BUTTONS.items()}
+_LABEL_TO_KEY: dict[str, str] = {}
+for _key, (_label, _default_emoji) in ALL_BUTTONS.items():
+    _LABEL_TO_KEY[_normalize_label(_label)] = _key
+    _LABEL_TO_KEY[_normalize_label(f"{_default_emoji} {_label}")] = _key
 
 
 class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
@@ -40,12 +37,16 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                 callback_data = getattr(button, "callback_data", None)
                 key = callback_data if callback_data in ALL_BUTTONS else None
                 if key is None:
-                    key = _LABEL_TO_KEY.get(_normalize_label(text))
+                    normalized = _normalize_label(text)
+                    key = _LABEL_TO_KEY.get(normalized)
+                    # If the current icon is custom/unknown, match the label without its first token.
+                    if key is None and " " in normalized:
+                        key = _LABEL_TO_KEY.get(normalized.split(" ", 1)[1])
+
                 if key is None:
                     new_row.append(button)
                     continue
 
-                # get_emoji returns the saved override or the default for this key.
                 emoji = get_emoji(key)
                 if not emoji:
                     new_row.append(button)
