@@ -32,6 +32,7 @@ from models.fan_art import FanArt
 from models.social_systems import Pet
 from models.world_systems import MarketListing, GroupBoss, GroupBossContribution
 from services.admin_permissions import add_delegated_admin, is_delegated_admin, list_delegated_admins, remove_delegated_admin
+from services import premium_emoji_service
 
 
 router = Router()
@@ -46,6 +47,7 @@ class AdminPlayerStates(StatesGroup):
     waiting_gold_search = State()
     waiting_gold_amount = State()
     waiting_admin_username = State()
+    waiting_emoji_id = State()
 
 
 # مالک ثابت ربات، مستقل از عضویت در گروه‌ها
@@ -106,7 +108,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎨 اسپان فن‌آرت", callback_data="admin:fanart:spawn"),
             ],
             [
-                InlineKeyboardButton(text="📚 منوهای داخلی", callback_data="admin:internal_menu"),
+                InlineKeyboardButton(text="🎨 مدیریت ایموجی", callback_data="admin:emoji:home"),
             ],
             [
                 InlineKeyboardButton(
@@ -436,66 +438,124 @@ async def admin_panel(
     )
 
 
-INTERNAL_MENU_SECTIONS = [
-    ("ادمین /admin", "internal:admin"),
-    ("پروفایل", "internal:profile"),
-    ("صندوقچه", "internal:inventory"),
-    ("مهارت‌ها", "internal:skills"),
-    ("تجهیزات", "internal:equipment"),
-    ("ماموریت‌ها", "internal:quest"),
-    ("ماجراجویی", "internal:adventure"),
-    ("کرفتینگ", "internal:crafting"),
-    ("پت", "internal:pets"),
-    ("ایونت", "internal:events"),
-    ("پارتی", "internal:party"),
-    ("گیلد", "internal:guild"),
-    ("رتبه‌بندی", "internal:ranking"),
-    ("آهنگری", "internal:forge"),
-    ("بازار بازیکنان", "internal:marketplace"),
-    ("دفترچه هیولا", "internal:bestiary"),
-    ("راهنما", "internal:guide"),
-    ("تبدیل گلد به جم", "internal:gold_gems"),
-    ("فروشگاه", "internal:shop"),
-    ("تنظیمات", "internal:settings"),
+MAIN_MENU_EMOJI_KEYS = [
+    ("پروفایل", "menu_profile"), ("صندوقچه", "menu_inventory"),
+    ("مهارت‌ها", "menu_skills"), ("تجهیزات", "menu_equipment"),
+    ("ماموریت‌ها", "menu_quest"), ("ماجراجویی", "menu_adventure"),
+    ("کرفتینگ", "menu_crafting"), ("پت", "menu_pets"), ("ایونت", "menu_events"),
+    ("پارتی", "menu_party"), ("رتبه‌بندی", "menu_ranking"), ("گیلد", "menu_guild"),
+    ("بازار بازیکنان", "menu_marketplace"), ("آهنگری", "menu_forge"),
+    ("دفترچه هیولا", "menu_bestiary"), ("راهنما", "menu_guide"),
+    ("تبدیل گلد به جم", "menu_exchange"), ("فروشگاه", "menu_shop"),
+    ("تنظیمات", "menu_settings"),
+]
+INTERNAL_EMOJI_KEYS = [
+    (label, key) for key, label in premium_emoji_service.KEY_TITLES.items()
+    if not key.startswith("menu_")
 ]
 
+def emoji_management_home_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎮 منو اصلی", callback_data="admin:emoji:main")],
+        [InlineKeyboardButton(text="🧩 منو داخلی", callback_data="admin:emoji:internal")],
+        [InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")],
+    ])
 
-def internal_menu_keyboard() -> InlineKeyboardMarkup:
+def emoji_keys_keyboard(items, prefix: str = "") -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=label, callback_data=callback_data)]
-        for label, callback_data in INTERNAL_MENU_SECTIONS
+        [InlineKeyboardButton(
+            text=f"{premium_emoji_service.DEFAULTS.get(key, '✨')} {label}",
+            callback_data=f"admin:emoji:edit:{key}",
+        )]
+        for label, key in items
     ]
-    rows.append([InlineKeyboardButton(text="🔙 بازگشت به پنل ادمین", callback_data="admin:home")])
+    rows.append([InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin:emoji:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-
-@router.callback_query(F.data == "admin:internal_menu")
-async def internal_menu_callback(callback: CallbackQuery):
+@router.callback_query(F.data == "admin:emoji:home")
+async def emoji_management_home(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
         return
+    await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "📚 <b>منوهای داخلی World Eldoria</b>\\n\\n"
-            "بخش موردنظر را انتخاب کن. زیرساخت هر بخش در مراحل بعدی جداگانه ساخته می‌شود.",
-            reply_markup=internal_menu_keyboard(),
-            parse_mode="HTML",
+            "🎨 <b>مدیریت ایموجی اِلدوریا</b>\n\nبخش موردنظرت را انتخاب کن.",
+            reply_markup=emoji_management_home_keyboard(), parse_mode="HTML",
         )
     await callback.answer()
 
-
-@router.callback_query(F.data.startswith("internal:"))
-async def internal_menu_section_placeholder(callback: CallbackQuery):
+@router.callback_query(F.data == "admin:emoji:main")
+async def emoji_management_main(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ فقط مالک ربات به این بخش دسترسی دارد.", show_alert=True)
+        await callback.answer("⛔ فقط مالک ربات دسترسی دارد.", show_alert=True)
         return
-    selected = (callback.data or "").split(":", 1)[1]
-    labels = dict((key.split(":", 1)[1], label) for label, key in INTERNAL_MENU_SECTIONS)
-    if selected not in labels:
-        await callback.answer("بخش نامعتبر است.", show_alert=True)
-        return
-    await callback.answer(f"«{labels[selected]}» هنوز ساخته نشده؛ مرحله‌به‌مرحله می‌سازیم.", show_alert=True)
+    if callback.message:
+        await callback.message.edit_text(
+            "🎮 <b>ایموجی‌های منوی اصلی</b>\n\nروی گزینه بزن و شناسهٔ عددی ایموجی اختصاصی تلگرام را بفرست. برای برگشت به ایموجی عادی، «پیش‌فرض» را بفرست.",
+            reply_markup=emoji_keys_keyboard(MAIN_MENU_EMOJI_KEYS), parse_mode="HTML",
+        )
+    await callback.answer()
 
+@router.callback_query(F.data == "admin:emoji:internal")
+async def emoji_management_internal(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات دسترسی دارد.", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.edit_text(
+            "🧩 <b>ایموجی‌های منوهای داخلی</b>\n\nهر مورد، ایموجی بخش‌های داخلی و قالب‌های مرتبط را تنظیم می‌کند.",
+            reply_markup=emoji_keys_keyboard(INTERNAL_EMOJI_KEYS), parse_mode="HTML",
+        )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("admin:emoji:edit:"))
+async def emoji_management_edit(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک ربات دسترسی دارد.", show_alert=True)
+        return
+    key = (callback.data or "").split(":", 3)[-1]
+    allowed = {k for _, k in MAIN_MENU_EMOJI_KEYS} | {k for _, k in INTERNAL_EMOJI_KEYS}
+    if key not in allowed:
+        await callback.answer("این ایموجی قابل ویرایش نیست.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(AdminPlayerStates.waiting_emoji_id)
+    await state.update_data(emoji_key=key)
+    if callback.message:
+        await callback.message.answer(
+            f"🎨 ایموجی جدید برای «{premium_emoji_service.KEY_TITLES.get(key, key)}» را بفرست.\n\nشناسهٔ عددی ایموجی اختصاصی تلگرام را ارسال کن؛ برای برگشت به حالت عادی بنویس: پیش‌فرض",
+        )
+    await callback.answer()
+
+@router.message(AdminPlayerStates.waiting_emoji_id)
+async def emoji_management_save(message: Message, state: FSMContext):
+    if message.from_user is None or not is_admin(message.from_user.id):
+        await state.clear()
+        return
+    value = (message.text or "").strip()
+    data = await state.get_data()
+    key = str(data.get("emoji_key", ""))
+    allowed = {k for _, k in MAIN_MENU_EMOJI_KEYS} | {k for _, k in INTERNAL_EMOJI_KEYS}
+    if key not in allowed:
+        await state.clear()
+        await message.answer("❌ گزینهٔ ایموجی معتبر نیست.")
+        return
+    registry = premium_emoji_service.load()
+    ids = registry.setdefault("ids", {})
+    if value.casefold() in {"پیش‌فرض", "default", "حذف"}:
+        ids.pop(key, None)
+    elif value.isdigit():
+        ids[key] = value
+    else:
+        await message.answer("❌ شناسه باید فقط عدد باشد؛ یا «پیش‌فرض» را بفرست.")
+        return
+    premium_emoji_service.save(registry)
+    await state.clear()
+    await message.answer(
+        f"✅ ایموجی «{premium_emoji_service.KEY_TITLES.get(key, key)}» ذخیره شد.",
+        reply_markup=emoji_management_home_keyboard(),
+    )
 
 @router.callback_query(F.data == "admin:fanart:close")
 async def fanart_admin_close(callback: CallbackQuery, state: FSMContext):
