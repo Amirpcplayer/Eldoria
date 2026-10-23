@@ -43,6 +43,17 @@ class CharacterRequiredMiddleware(BaseMiddleware):
                 return await handler(event, data)
         elif isinstance(event, CallbackQuery):
             cb = event.data or ""
+            # Character-creation keyboards are owner-protected by panel_image_service.
+            # The outer middleware may see eo:<owner_id>:race:* before PanelOwner
+            # unwraps it; recognize only the current user's own protected callback.
+            if cb.startswith("eo:"):
+                parts = cb.split(":", 2)
+                if len(parts) == 3:
+                    try:
+                        if int(parts[1]) == user.id:
+                            cb = parts[2]
+                    except ValueError:
+                        pass
             if cb.startswith("gap:") or cb.startswith("gapwelcome:") or cb in CREATE_CALLBACKS or cb.startswith(CREATE_CALLBACK_PREFIXES):
                 return await handler(event, data)
         else:
