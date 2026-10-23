@@ -618,7 +618,6 @@ async def show_profile(
 # COMPACT PROFILE COMMAND (self / replied-to player)
 # ============================================================
 
-@router.message(F.text.regexp(r"^(?:/profile(?:@\w+)?(?:\s+.*)?|پروفایل(?:\s+.*)?)$"))
 async def compact_profile_command(message: Message) -> None:
     """نمایش پروفایل خود بازیکن، صاحب پیام ریپلای‌شده، یا شناسه/یوزرنیم صریح."""
     if message.from_user is None or not message.text:
