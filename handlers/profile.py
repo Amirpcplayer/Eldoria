@@ -149,9 +149,11 @@ def profile_keyboard() -> InlineKeyboardMarkup:
                 button("profile_stats", "📊", "آمار کامل", "profile:stats"),
             ],
             [
+                # Use the same dedicated Fan Art icon as the Fan Art menu entry,
+                # not the profile-specific icon.
                 button(
-                    "profile_fanart_select",
-                    "🖼️",
+                    "menu_fanart",
+                    "🎨",
                     "انتخاب Fan Art پروفایل",
                     "profile:fanart",
                 ),
