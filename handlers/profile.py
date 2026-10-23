@@ -833,34 +833,52 @@ async def clear_profile_fan_art_handler(
     await show_profile(callback)
     await callback.answer("🚫 Fan Art فعال حذف شد.")
 
-@router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() == "\u067e\u0631\u0648\u0641\u0627\u06cc\u0644"))
-@router.message(Command("profile", ignore_case=True))
+@router.message(F.text.regexp(r"^(?:/profile(?:@\\w+)?(?:\\s+.*)?|پروفایل(?:\\s+.*)?)$"))
 async def profile_command(message: Message):
-    """نمایش پروفایل خود یا صاحب پیامی که دستور به آن ریپلای شده است."""
-    if not message.from_user:
+    """نمایش پروفایل خود، صاحب پیام ریپلای‌شده یا هدف صریح."""
+    if not message.from_user or not message.text:
         return
-    target_user = message.reply_to_message.from_user if message.reply_to_message else message.from_user
-    if target_user is None or target_user.is_bot:
-        await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
-        return
+    parts = message.text.strip().split(maxsplit=1)
+    argument = parts[1].strip() if len(parts) > 1 else ""
+    replied = message.reply_to_message
+    target_user = replied.from_user if replied else None
+    target_id = target_id if target_user and not target_user.is_bot else None
 
+    if replied is not None and target_id is None:
+        await message.answer("❌ صاحب پیام ریپلای‌شده قابل شناسایی نیست؛ روی پیام مستقیم بازیکن ریپلای کن.")
+        return
+    if replied is None and argument:
+        if argument.isdigit():
+            target_id = int(argument)
+        else:
+            username = argument.lstrip("@").strip()
+            if not username or any(ch.isspace() for ch in username):
+                await message.answer("❌ هدف معتبر نیست. نمونه: /profile 123456789 یا /profile @username")
+                return
+            async with AsyncSessionLocal() as session:
+                target_id = await session.scalar(select(Character.telegram_id).where(Character.telegram_username.ilike(username)).limit(1))
+            if target_id is None:
+                await message.answer("❌ این یوزرنیم در اطلاعات بازیکنان پیدا نشد؛ شناسهٔ عددی را امتحان کن.")
+                return
+    elif replied is None:
+        target_id = message.from_user.id
+
+    logger.info("Profile target resolved: chat_id=%s caller_id=%s target_id=%s replied_message_id=%s explicit_argument=%s", message.chat.id, message.from_user.id, target_id, replied.message_id if replied else None, bool(argument))
     async with AsyncSessionLocal() as session:
-        character = await session.scalar(
-            select(Character).where(Character.telegram_id == target_user.id)
-        )
+        character = await session.scalar(select(Character).where(Character.telegram_id == target_id))
     if character is None:
         await message.answer("این بازیکن هنوز حساب World Eldoria نساخته است.")
         return
 
     try:
-        stats = await get_profile_stats(target_user.id, character)
-        active_fan_art = await get_active_fan_art(target_user.id)
+        stats = await get_profile_stats(target_id, character)
+        active_fan_art = await get_active_fan_art(target_id)
         text = build_profile_text(character, active_fan_art, stats)
-        text = await append_profile_social_and_scrolls(text, target_user.id)
+        text = await append_profile_social_and_scrolls(text, target_id)
     except Exception:
         logger.exception(
             "Failed to render /profile for telegram_id=%s",
-            target_user.id,
+            target_id,
         )
         await message.answer(
             "❌ پروفایل به‌دلیل خطای داخلی کامل باز نشد. جزئیات خطا در ترمینال ربات ثبت شد."
@@ -871,7 +889,7 @@ async def profile_command(message: Message):
     photo = active_fan_art.image_file_id if active_fan_art and active_fan_art.image_file_id else None
     if photo is None:
         try:
-            photos = await message.bot.get_user_profile_photos(target_user.id, limit=1)
+            photos = await message.bot.get_user_profile_photos(target_id, limit=1)
             if photos.total_count and photos.photos:
                 photo = photos.photos[0][-1].file_id
         except Exception:
