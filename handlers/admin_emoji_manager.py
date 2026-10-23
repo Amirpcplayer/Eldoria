@@ -6,7 +6,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import settings
-from services.admin_permissions import is_delegated_admin
 from services.emoji_manager_service import (
     ALL_BUTTONS, MAIN_BUTTONS, INTERNAL_BUTTONS, DEFAULTS,
     load_config, reset_all, reset_emoji, set_emoji,
@@ -59,10 +58,6 @@ def edit_keyboard(key: str) -> InlineKeyboardMarkup:
     ])
 
 
-async def _authorized(user_id: int) -> bool:
-    return _is_owner(user_id) or await is_delegated_admin(user_id)
-
-
 @router.callback_query(F.data == "admin:emoji:open")
 async def emoji_manager_open(callback: CallbackQuery, state: FSMContext):
     if not _is_owner(callback.from_user.id):
@@ -74,8 +69,8 @@ async def emoji_manager_open(callback: CallbackQuery, state: FSMContext):
             "🎨 <b>مرکز مدیریت ایموجی</b>\n\n"
             "ایموجی هر دکمه را جداگانه تنظیم کن. تغییرات ذخیره می‌شوند و پس از ثبت، "
             "در پیام‌های بعدی اعمال خواهند شد.\n\n"
-            "نکته: دکمه‌های تلگرام از ایموجی معمولی پشتیبانی می‌کنند؛ ایموجی پریمیوم "
-            "به‌صورت خودکار به شکل نماد عادی ذخیره می‌شود.",
+            "برای ایموجی پریمیوم، خود ایموجی را مستقیماً از پنل ایموجی تلگرام ارسال کن. "
+            "شناسهٔ اختصاصی آن ذخیره می‌شود و روی دکمه‌ها از قابلیت رسمی تلگرام استفاده خواهد شد.",
             reply_markup=home_keyboard(), parse_mode="HTML")
     await callback.answer()
 
@@ -161,7 +156,17 @@ async def emoji_manager_save(message: Message, state: FSMContext):
     if not message.from_user or not _is_owner(message.from_user.id):
         await state.clear()
         return
-    value = (message.text or message.caption or "").strip()
+    raw_value = message.text or message.caption or ""
+    value = raw_value.strip()
+    entities = message.entities or message.caption_entities or []
+    custom_emoji_id = next(
+        (
+            entity.custom_emoji_id
+            for entity in entities
+            if entity.type == "custom_emoji" and entity.custom_emoji_id
+        ),
+        None,
+    )
     data = await state.get_data()
     key = data.get("emoji_callback_key")
     if value in {"/cancel", "لغو"}:
@@ -176,13 +181,14 @@ async def emoji_manager_save(message: Message, state: FSMContext):
         await message.answer("❌ فقط یک ایموجی بفرست؛ متن یا چند ایموجی پذیرفته نمی‌شود.")
         return
     try:
-        set_emoji(key, value)
+        set_emoji(key, value, custom_emoji_id=custom_emoji_id)
     except ValueError:
         await message.answer("❌ ایموجی معتبر نیست؛ دوباره تلاش کن.")
         return
     await state.clear()
+    suffix = " (شناسهٔ ایموجی پریمیوم هم ذخیره شد)" if custom_emoji_id else " (ایموجی معمولی)"
     await message.answer(
-        f"✅ ایموجی دکمه «{ALL_BUTTONS[key][0]}» ثبت شد: {value}",
+        f"✅ ایموجی دکمه «{ALL_BUTTONS[key][0]}» ثبت شد: {value}{suffix}",
         reply_markup=edit_keyboard(key))
 
 
