@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from aiogram import F, Router
 import hashlib
+
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -252,7 +253,7 @@ async def emoji_key_detail(callback: CallbackQuery, state: FSMContext):
     if callback.message:
         await callback.message.edit_text(
             "╭━━━ ✦ 🧩 جزئیات ایموجی ✦ ━━━╮\n"
-            f"{_glyph(key, data)}  {_title(key)}\n"
+            f"{_glyph(key, data)}  {_title(key, data)}\n"
             "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
             f"🔑 کلید پایدار: {key}\n"
             f"🎭 ایموجی پیش‌فرض: {_glyph(key, data)}\n"
@@ -285,7 +286,7 @@ async def emoji_set_start(callback: CallbackQuery, state: FSMContext):
     category = parts[4] if parts[4] in {MAIN_CATEGORY, INTERNAL_CATEGORY} else (
         MAIN_CATEGORY if key.startswith("menu_") else INTERNAL_CATEGORY
     )
-    if not _valid_key(key, _data()):
+    if not _valid_key(key, data):
         await callback.answer("کلید نامعتبر است.", show_alert=True)
         return
     await state.clear()
@@ -366,7 +367,6 @@ async def emoji_reset(callback: CallbackQuery, state: FSMContext):
     category = parts[4] if parts[4] in {MAIN_CATEGORY, INTERNAL_CATEGORY} else (
         MAIN_CATEGORY if key.startswith("menu_") else INTERNAL_CATEGORY
     )
-    data = _data()
     if not _valid_key(key, data):
         await callback.answer("کلید نامعتبر است.", show_alert=True)
         return
