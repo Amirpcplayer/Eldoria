@@ -127,7 +127,7 @@ async def emoji_manager_button(callback: CallbackQuery):
             f"🎨 <b>تنظیم ایموجی دکمه</b>\n\n"
             f"دکمه: <b>{label}</b>\n"
             f"ایموجی فعلی: {current}\n\n"
-            "برای تغییر، دکمه ثبت ایموجی جدید را بزن و فقط یک ایموجی ارسال کن.",
+            "برای تغییر، دکمه ثبت ایموجی جدید را بزن و فقط یک ایموجی پریمیوم را مستقیماً از پنل ایموجی تلگرام بفرست. ایموجی معمولی پذیرفته نمی‌شود.",
             reply_markup=edit_keyboard(key), parse_mode="HTML")
     await callback.answer()
 
@@ -146,8 +146,9 @@ async def emoji_manager_set_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EmojiManagerStates.waiting_emoji)
     if callback.message:
         await callback.message.answer(
-            f"ایموجی جدید برای «{ALL_BUTTONS[key][0]}» را در یک پیام بفرست.\n"
-            "برای لغو /cancel را بفرست.")
+            f"ایموجی پریمیوم موردنظر برای «{ALL_BUTTONS[key][0]}» را مستقیماً از پنل ایموجی تلگرام بفرست.\n"
+            "شناسهٔ اختصاصی (custom_emoji_id) به‌صورت خودکار از پیام دریافت و ذخیره می‌شود.\n"
+            "ایموجی معمولی پذیرفته نمی‌شود. برای لغو /cancel را بفرست.")
     await callback.answer()
 
 
@@ -178,7 +179,14 @@ async def emoji_manager_save(message: Message, state: FSMContext):
         await message.answer("❌ نشست تنظیم ایموجی معتبر نیست؛ دوباره از پنل شروع کن.")
         return
     if not value or len(value) > 16 or len(value.split()) != 1:
-        await message.answer("❌ فقط یک ایموجی بفرست؛ متن یا چند ایموجی پذیرفته نمی‌شود.")
+        await message.answer("❌ فقط یک ایموجی پریمیوم بفرست؛ متن یا چند ایموجی پذیرفته نمی‌شود.")
+        return
+    if not custom_emoji_id:
+        await message.answer(
+            "❌ این پیام شناسهٔ ایموجی پریمیوم ندارد؛ چیزی ذخیره نشد.\n"
+            "ایموجی را مستقیماً از پنل ایموجی‌های پریمیوم تلگرام انتخاب و ارسال کن. "
+            "فرستادن ایموجی معمولی یا کپیِ شکل ظاهری آن کافی نیست."
+        )
         return
     try:
         set_emoji(key, value, custom_emoji_id=custom_emoji_id)
@@ -186,10 +194,11 @@ async def emoji_manager_save(message: Message, state: FSMContext):
         await message.answer("❌ ایموجی معتبر نیست؛ دوباره تلاش کن.")
         return
     await state.clear()
-    suffix = " (شناسهٔ ایموجی پریمیوم هم ذخیره شد)" if custom_emoji_id else " (ایموجی معمولی)"
     await message.answer(
-        f"✅ ایموجی دکمه «{ALL_BUTTONS[key][0]}» ثبت شد: {value}{suffix}",
-        reply_markup=edit_keyboard(key))
+        f"✅ ایموجی پریمیوم دکمه «{ALL_BUTTONS[key][0]}» ثبت شد.\n"
+        f"🆔 شناسهٔ اختصاصی: <code>{custom_emoji_id}</code>\n"
+        "این شناسه برای آیکن دکمه استفاده می‌شود؛ ایموجی معمولی ذخیره نشده است.",
+        reply_markup=edit_keyboard(key), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("admin:emoji:reset:"))
