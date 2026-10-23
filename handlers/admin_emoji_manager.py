@@ -43,6 +43,8 @@ def section_keyboard(section: str) -> InlineKeyboardMarkup:
     entries = MAIN_BUTTONS if section == "main" else {}
     rows = [[_button(f"{DEFAULTS[key]} {label}", f"admin:emoji:button:{key}")]
             for key, (label, _) in entries.items()]
+    if section == "internal":
+        rows = [[_button(f"{title} · {len(keys)} دکمه", f"admin:emoji:archive:{category}")] for category, (title, keys) in INTERNAL_CATEGORIES.items()]
     rows.append([_button("🔙 بازگشت", "admin:emoji:open")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -123,7 +125,7 @@ async def emoji_manager_archive(callback: CallbackQuery):
     rows = [[_button(f"{DEFAULTS[key]} {ALL_BUTTONS[key][0]}", f"admin:emoji:button:{key}")] for key in keys]
     rows.append([_button("🔙 آرشیو منوهای داخلی", "admin:emoji:section:internal")])
     if callback.message:
-        await callback.message.edit_text(f"🎨 <b>{title}</b>\\n\\nدکمه موردنظر را انتخاب کن:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
+        await callback.message.edit_text(f"🎨 <b>{title}</b>\n\nدکمه موردنظر را انتخاب کن:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML")
     await callback.answer()
 
 
