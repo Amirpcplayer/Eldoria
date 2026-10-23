@@ -1,0 +1,29 @@
+name: Python validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      BOT_TOKEN: "123456:TEST_TOKEN"
+      DATABASE_URL: "postgresql+asyncpg://test:test@127.0.0.1:5432/test"
+      REDIS_URL: "redis://127.0.0.1:6379/0"
+      ADMIN_ID: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Run battle-index regression tests
+        run: python -m pytest -q tests/test_active_battle_index.py tests/test_active_battle_index_edges.py tests/test_battle_creation_lock.py
