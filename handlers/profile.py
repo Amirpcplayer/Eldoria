@@ -862,6 +862,11 @@ async def profile_command(message: Message):
                 await message.answer("❌ این یوزرنیم در اطلاعات بازیکنان پیدا نشد؛ شناسهٔ عددی را امتحان کن.")
                 return
     elif replied is None:
+        if message.chat.type != "private":
+            await message.answer(
+                "⚠️ تلگرام این دستور را به‌صورت ریپلای به من نرسانده؛ برای اینکه پروفایل اشتباهی نمایش داده نشود، دستور متوقف شد. روی پیام خودِ بازیکن Reply بزن و دستور /profile را داخل همان کادر پاسخ، دستی تایپ و ارسال کن؛ یا از /profile @username استفاده کن."
+            )
+            return
         target_id = message.from_user.id
 
     logger.info("Profile target resolved: chat_id=%s caller_id=%s target_id=%s replied_message_id=%s explicit_argument=%s", message.chat.id, message.from_user.id, target_id, replied.message_id if replied else None, bool(argument))
