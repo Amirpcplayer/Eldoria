@@ -563,37 +563,54 @@ async def show_profile(
     if message is None:
         return
 
-    if (
-        active_fan_art is not None
-        and active_fan_art.image_file_id
-    ):
-        await message.answer_photo(
-            photo=active_fan_art.image_file_id,
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
+    # وقتی پروفایل از منوی اصلی باز می‌شود، همان پیام منو را حذف کن
+    # تا با هر بار جابه‌جایی بین بخش‌ها چت پر از پنل‌های قدیمی نشود.
+    try:
+        await message.delete()
+    except Exception:
+        logger.debug(
+            "Could not delete the previous menu message before opening profile",
+            exc_info=True,
         )
-        return
+
+    photo_id = (
+        active_fan_art.image_file_id
+        if active_fan_art is not None and active_fan_art.image_file_id
+        else None
+    )
 
     # اگر فن‌آرت فعال نیست، از عکس اکانت تلگرام بازیکن استفاده کن.
-    try:
-        photos = await callback.bot.get_user_profile_photos(telegram_id, limit=1)
-        if photos.total_count and photos.photos and message is not None:
+    if photo_id is None:
+        try:
+            photos = await callback.bot.get_user_profile_photos(telegram_id, limit=1)
+            if photos.total_count and photos.photos:
+                photo_id = photos.photos[0][-1].file_id
+        except Exception:
+            # نبودن عکس یا خطای API نباید مانع نمایش پروفایل شود.
+            pass
+
+    if photo_id:
+        # کپشن عکس تلگرام حداکثر ۱۰۲۴ کاراکتر است؛ متن بلند را جدا بفرست.
+        if len(text) <= 1024:
             await message.answer_photo(
-                photo=photos.photos[0][-1].file_id,
+                photo=photo_id,
                 caption=text,
                 reply_markup=keyboard,
                 parse_mode=ParseMode.HTML,
             )
-            return
-    except Exception:
-        # نبودن عکس یا خطای API نباید مانع نمایش پروفایل شود.
-        pass
+        else:
+            await message.answer_photo(photo=photo_id)
+            await message.answer(
+                text,
+                reply_markup=keyboard,
+                parse_mode=ParseMode.HTML,
+            )
+        return
 
-    await replace_with_text_panel(
-        callback,
+    await message.answer(
         text,
-        profile_keyboard(language),
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML,
     )
 
 
