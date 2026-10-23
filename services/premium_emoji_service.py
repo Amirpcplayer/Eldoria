@@ -48,14 +48,14 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "menu": ("menu_profile", "menu_inventory", "menu_skills", "menu_equipment", "menu_quest",
              "menu_adventure", "menu_pvp", "menu_crafting", "menu_pets", "menu_events",
              "menu_party", "menu_guild", "menu_ranking", "menu_forge", "menu_marketplace",
-             "menu_bestiary", "menu_exchange", "menu_guide", "menu_shop", "menu_settings",
+             "menu_bestiary", "menu_guide", "menu_shop", "menu_settings",
              "menu_fanart", "menu_enter_game", "menu_blacksmith", "menu_gold_gems", "menu_market", "menu_quick_progress"),
     "profile": ("profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_hp_recovery", "profile_mana_recovery", "profile_titles", "profile_fanart_select", "profile_back"),
     "inventory": ("menu_inventory", "menu_equipment", "equipment", "potion", "health", "mana", "scroll", "material"),
     "guild": ("menu_guild", "guild_members", "guild_missions", "guild_vault", "guild_buy_adventure_items"),
     "party": ("menu_party", "party_members"),
     "adventure": ("menu_adventure", "menu_quest", "menu_pvp", "menu_crafting", "menu_pets", "menu_events", "boss", "dungeon", "pvp"),
-    "economy": ("menu_shop", "menu_exchange", "menu_marketplace", "menu_forge", "menu_ranking", "gold", "gems", "shop", "rank", "xp"),
+    "economy": ("menu_shop", "menu_marketplace", "menu_forge", "menu_ranking", "gold", "gems", "shop", "rank", "xp"),
     "templates": ("gold", "gems", "boss", "dungeon", "pet", "pvp", "health", "mana", "potion", "shop", "rank", "xp", "title", "equipment", "scroll", "material", "profile_name", "profile_race", "profile_gender", "profile_level", "profile_title", "profile_combat_power", "profile_gold", "profile_gems", "profile_hp_label", "profile_hp_fill", "profile_hp_empty", "profile_mana_label", "profile_mana_fill", "profile_mana_empty", "profile_attack", "profile_magic", "profile_defense", "profile_magic_defense", "profile_speed", "profile_accuracy", "profile_luck", "profile_critical", "profile_identity_heading", "profile_vitals_heading", "profile_combat_heading", "profile_journey_heading", "profile_guild", "profile_party", "profile_scrolls", "profile_no_scrolls", "profile_xp_fill", "profile_xp_empty"),
 }
 GROUP_TITLES = {
@@ -73,7 +73,7 @@ KEY_TITLES = {
     "menu_pets":"دکمه همراهان", "menu_events":"دکمه رویدادها", "menu_party":"دکمه پارتی",
     "menu_guild":"دکمه گیلد", "menu_ranking":"دکمه رتبه‌بندی", "menu_forge":"دکمه آهنگری",
     "menu_marketplace":"دکمه بازار بازیکنان", "menu_bestiary":"دکمه دانشنامه هیولاها",
-    "menu_exchange":"دکمه تبدیل طلا و جم", "menu_guide":"دکمه راهنما", "menu_shop":"دکمه فروشگاه",
+    "menu_exchange":"دکمه تبدیل طلا و جم (قدیمی)", "menu_guide":"دکمه راهنما", "menu_shop":"دکمه فروشگاه",
     "menu_settings":"دکمه تنظیمات", "menu_fanart":"دکمه فن‌آرت", "menu_enter_game":"دکمه ورود به بازی",
     "profile_stats":"دکمه آمار در پروفایل", "profile_fanart_select":"دکمه انتخاب فن‌آرت در پروفایل",
     "profile_inventory":"دکمه صندوقچه داخل پروفایل", "profile_equipment":"دکمه تجهیزات داخل پروفایل",
@@ -98,7 +98,7 @@ KEY_TITLES = {
     "profile_hp_recovery":"بازیابی سلامت",
     "profile_mana_recovery":"بازیابی مانا", "guild_members":"اعضای گیلد", "guild_missions":"مأموریت‌های گیلد",
     "guild_vault":"خزانه گیلد", "guild_buy_adventure_items":"خرید آیتم‌های ماجراجویی",
-    "party_members":"اعضای پارتی", "menu_blacksmith":"دکمه آهنگر", "menu_gold_gems":"دکمه تبدیل طلا و جم",
+    "party_members":"اعضای پارتی", "menu_blacksmith":"دکمه آهنگر", "menu_gold_gems":"دکمه تبدیل گلد به جم",
     "menu_market":"دکمه بازار", "menu_quick_progress":"دکمه پیشرفت سریع",
 }
 
@@ -115,6 +115,12 @@ def load() -> dict[str, Any]:
     data.setdefault("ids", {})
     data.setdefault("catalog", {})
     data.setdefault("aliases", {})
+    # One canonical admin setting for the main-menu Gold -> Gems button.
+    # Preserve older installations by migrating the previous menu_exchange ID
+    # only when the canonical menu_gold_gems key has not been configured.
+    ids = data.setdefault("ids", {})
+    if not str(ids.get("menu_gold_gems", "")).isdigit() and str(ids.get("menu_exchange", "")).isdigit():
+        ids["menu_gold_gems"] = str(ids["menu_exchange"])
     return data
 
 def save(data: dict[str, Any]) -> None:
