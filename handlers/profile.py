@@ -324,19 +324,30 @@ def build_profile_text(
     active_fan_art: FanArt | None,
     stats: dict[str, int],
 ) -> str:
-    """نمایش پروفایل فارسی با قالب مینیمال و نوارهای متنی."""
-    final_hp = max(1, int(stats.get("hp", 1)))
-    final_mana = max(1, int(stats.get("mana", 1)))
+    """ساخت پروفایل کامل قهرمان برای پنل اصلی منو."""
+    final_hp = max(1, int(stats.get("hp", 1) or 1))
+    final_mana = max(1, int(stats.get("mana", 1) or 1))
     current_hp = max(0, min(int(character.hp or 0), final_hp))
     current_mana = max(0, min(int(character.mana or 0), final_mana))
 
-    def bar(current: int, maximum: int, width: int = 10) -> str:
-        ratio = max(0.0, min(1.0, current / max(1, maximum)))
-        count = min(width, int(ratio * width))
-        return "▰" * count + "▱" * (width - count)
+    def percentage(current: int, maximum: int) -> int:
+        return max(0, min(100, int(current * 100 / max(1, maximum))))
+
+    def colored_bar(current: int, maximum: int, filled_emoji: str, width: int = 8) -> str:
+        filled = min(width, int(percentage(current, maximum) * width / 100))
+        return filled_emoji * filled + "⬜️" * (width - filled)
 
     level = max(1, int(character.level or 1))
-    xp_progress = build_xp_progress_bar(level=level, xp=int(character.xp or 0))
+    xp = max(0, int(character.xp or 0))
+    at_max_level = level >= MAX_CHARACTER_LEVEL
+    required_xp = max(0, int(get_required_xp(level) or 0)) if not at_max_level else 0
+    xp_percent = 100 if at_max_level else (
+        min(100, int(min(xp, required_xp) * 100 / required_xp))
+        if required_xp > 0 else 100
+    )
+    xp_filled = 10 if at_max_level else min(10, int(xp_percent * 10 / 100))
+    xp_bar = "🟩" * xp_filled + "⬜️" * (10 - xp_filled)
+
     combat_power = (
         int(stats.get("attack", 0))
         + int(stats.get("magic_power", 0))
@@ -347,37 +358,50 @@ def build_profile_text(
     name = html.escape(str(character.name or "قهرمان بی‌نام"))
     race = html.escape(str(character.race or "نامشخص"))
     title = html.escape(str(character.active_title or title_for_level(level)))
+    gender_value = str(getattr(character, "gender", "") or "").strip().lower()
+    gender_labels = {
+        "male": "مرد",
+        "female": "زن",
+        "other": "ثبت نشده",
+        "unknown": "ثبت نشده",
+        "": "ثبت نشده",
+    }
+    gender = html.escape(gender_labels.get(gender_value, gender_value or "ثبت نشده"))
 
     lines = [
-        "✦ 𓂃 <b>قهرمان اِلدوریا</b> 𓂃 ✦",
+        "╗═══════ ✦ اِلدوریا ✦ ═══════╔",
+        "⚔️ <b>قهرمان اِلدوریا</b> ⚔️",
         "",
-        f"👤 {name}",
-        f"♛ لقب: {title}",
-        f"✧ سطح: {level}",
-        f"✧ نژاد: {race}",
+        f"🧙 نام قهرمان: <b>{name}</b>",
+        f"🎖️ لقب: {title}",
+        f"🏅 سطح: Lv. {level}",
+        f"🧬 نژاد: {race}  ·  ⚧️ جنسیت: {gender}",
         "",
-        "━━━━━━━━━━━━━━",
+        "━━━━━━━━ ⚜️ هویت قهرمان ⚜️ ━━━━━━━━",
         "",
-        f"⚔️ <b>قدرت مبارزه</b>",
-        f"└ {combat_power:,}",
+        f"⚔️ قدرت رزمی: <b>{combat_power:,}</b>",
+        f"💰 طلا: <b>{int(character.gold or 0):,}</b>  ·  💎 جم: <b>{int(character.gems or 0):,}</b>",
         "",
-        "❤️ <b>سلامت</b>",
-        f"└ {current_hp:,} / {final_hp:,}",
-        f"{bar(current_hp, final_hp)} {int(current_hp * 100 / final_hp)}٪",
+        "━━━━━━━━ 💧 وضعیت حیاتی 💧 ━━━━━━━━",
         "",
-        "✧ <b>مانا</b>",
-        f"└ {current_mana:,} / {final_mana:,}",
-        f"{bar(current_mana, final_mana)} {int(current_mana * 100 / final_mana)}٪",
+        f"❤️ سلامت (HP): <b>{current_hp:,} / {final_hp:,}</b>",
+        colored_bar(current_hp, final_hp, "🟥"),
         "",
-        "━━━━━━━━━━━━━━",
+        f"💧 مانا (Mana): <b>{current_mana:,} / {final_mana:,}</b>",
+        colored_bar(current_mana, final_mana, "🟦"),
         "",
-        "✧ <b>تجربه قهرمان</b>",
-        xp_progress,
+        "━━━━━━━━ ⚔️ ویژگی‌های رزمی ⚔️ ━━━━━━━━",
         "",
-        "━━━━━━━━━━━━━━",
+        f"⚔️ حمله: <b>{int(stats.get('attack', 0)):,}</b>  ·  🔮 قدرت جادو: <b>{int(stats.get('magic_power', 0)):,}</b>",
+        f"🛡️ دفاع: <b>{int(stats.get('defense', 0)):,}</b>  ·  ✨ دفاع جادویی: <b>{int(stats.get('magic_defense', 0)):,}</b>",
+        f"💨 سرعت: <b>{int(stats.get('speed', 0)):,}</b>  ·  🎯 دقت: <b>{int(stats.get('accuracy', 0)):,}</b>",
+        f"🍀 شانس: <b>{int(getattr(character, 'luck', stats.get('luck', 0)) or 0):,}</b>  ·  💥 ضربه بحرانی: <b>{int(stats.get('critical', 0))}%</b>",
         "",
-        f"🪙 طلا: {int(character.gold or 0):,}",
-        f"💎 جم: {int(character.gems or 0):,}",
+        "━━━━━━━━ 🌟 مسیر قهرمانی 🌟 ━━━━━━━━",
+        "",
+        xp_bar,
+        f"📈 پیشرفت سطح: {xp_percent}٪" + (" (حداکثر سطح)" if at_max_level else ""),
+        "🏆 به حداکثر سطح رسیده‌ای!" if at_max_level else f"└ تجربه فعلی: {xp:,} XP · باقی‌مانده تا سطح بعد: {max(0, required_xp - xp):,} XP",
         "",
     ]
     return "\n".join(lines)
