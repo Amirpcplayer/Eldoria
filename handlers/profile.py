@@ -43,7 +43,7 @@ from services.title_service import TITLES, sync_unlocked_titles, title_for_level
 from services.vitals_recovery_service import recover_character_vitals
 from models.social_systems import Guild, GuildMember, Party, PartyMember
 from services.scroll_service import active_buffs, SCROLLS
-from services.premium_emoji_service import emoji
+from services.premium_emoji_service import emoji, load
 
 
 router = Router()
@@ -118,43 +118,44 @@ def build_xp_progress_bar(
 # ============================================================
 
 def profile_keyboard() -> InlineKeyboardMarkup:
+    # This is the keyboard actually used by handlers/profile.py for both the
+    # /profile flow and returning to the profile from the main menu (/menu).
+    # Read the IDs configured in the emoji admin archive here, at render time.
+    data = load()
+    ids = data.get("ids", {})
+    enabled = bool(data.get("enabled"))
+
+    def button(key: str, fallback: str, label: str, callback_data: str) -> InlineKeyboardButton:
+        emoji_id = str(ids.get(key, "") or "")
+        if enabled and emoji_id.isdigit():
+            return InlineKeyboardButton(
+                text=label,
+                callback_data=callback_data,
+                icon_custom_emoji_id=emoji_id,
+            )
+        return InlineKeyboardButton(
+            text=f"{fallback} {label}",
+            callback_data=callback_data,
+        )
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="📦 صندوقچه",
-                    callback_data="menu:inventory",
-                ),
-                InlineKeyboardButton(
-                    text="🛡️ تجهیزات",
-                    callback_data="menu:equipment",
-                ),
+                button("profile_inventory", "🗃️", "صندوقچه", "menu:inventory"),
+                button("profile_equipment", "🗡️", "تجهیزات", "menu:equipment"),
             ],
             [
-                InlineKeyboardButton(
-                    text="⚔️ مهارت‌ها",
-                    callback_data="menu:skills",
-                ),
-                InlineKeyboardButton(
-                    text="📊 آمار کامل",
-                    callback_data="profile:stats",
-                ),
+                button("profile_skills", "⚔️", "مهارت‌ها", "menu:skills"),
+                button("profile_stats", "📊", "آمار کامل", "profile:stats"),
             ],
             [
-                InlineKeyboardButton(
-                    text="🎨 انتخاب Fan Art پروفایل",
-                    callback_data="profile:fanart",
-                ),
+                button("profile_fanart_select", "🎨", "انتخاب Fan Art پروفایل", "profile:fanart"),
             ],
             [
-                InlineKeyboardButton(
-                    text="🔙 بازگشت",
-                    callback_data="menu:back",
-                ),
+                button("profile_back", "🔙", "بازگشت", "menu:back"),
             ],
         ]
     )
-
 
 def profile_fan_art_keyboard(
     fan_arts: list[FanArt],
