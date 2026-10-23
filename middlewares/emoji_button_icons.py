@@ -14,9 +14,12 @@ def _normalize_label(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip()).casefold()
 
 
+_LABEL_ONLY_TO_KEY: dict[str, str] = {}
 _LABEL_TO_KEY: dict[str, str] = {}
 for _key, (_label, _default_emoji) in ALL_BUTTONS.items():
-    _LABEL_TO_KEY[_normalize_label(_label)] = _key
+    _label_only = _normalize_label(_label)
+    _LABEL_ONLY_TO_KEY[_label_only] = _key
+    _LABEL_TO_KEY[_label_only] = _key
     _LABEL_TO_KEY[_normalize_label(f"{_default_emoji} {_label}")] = _key
 
 
@@ -36,10 +39,12 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                 text = button.text or ""
                 callback_data = getattr(button, "callback_data", None)
                 key = callback_data if callback_data in ALL_BUTTONS else None
+                normalized = _normalize_label(text)
+                exact_label_match = normalized in _LABEL_ONLY_TO_KEY
+
                 if key is None:
-                    normalized = _normalize_label(text)
                     key = _LABEL_TO_KEY.get(normalized)
-                    # If the current icon is custom/unknown, match the label without its first token.
+                    # Support a current icon that differs from the default icon.
                     if key is None and " " in normalized:
                         key = _LABEL_TO_KEY.get(normalized.split(" ", 1)[1])
 
@@ -53,11 +58,15 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                     continue
 
                 stripped = text.lstrip()
-                first_space = stripped.find(" ")
-                if first_space >= 0:
-                    new_text = emoji + " " + stripped[first_space + 1:].lstrip()
-                else:
+                if exact_label_match:
+                    # This button had no leading icon; keep the complete label.
                     new_text = emoji + " " + stripped
+                else:
+                    first_space = stripped.find(" ")
+                    if first_space >= 0:
+                        new_text = emoji + " " + stripped[first_space + 1:].lstrip()
+                    else:
+                        new_text = emoji + " " + stripped
                 if new_text != text:
                     button = button.model_copy(update={"text": new_text})
                     changed = True
