@@ -152,18 +152,12 @@ async def emoji_home(callback: CallbackQuery, state: FSMContext):
         return
     await state.clear()
     data = _data()
-    all_keys = _all_keys(data)
-    registered = sum(1 for key in all_keys if _is_registered(key, data))
     if callback.message:
         await callback.message.edit_text(
-            "╭━━━ ✦ 🎨 مرکز فرماندهی ایموجی ✦ ━━━╮\n"
-            "مدیریت یکپارچهٔ ظاهر World Eldoria\n"
+            "╭━━━ ✦ 🎨 مدیریت ایموجی اِلدوریا ✦ ━━━╮\n"
             "╰━━━━━━━━━━━━━━━━━━━━╯\n\n"
-            f"🧩 کل کلیدهای قابل مدیریت: {len(all_keys)}\n"
-            f"💠 ایموجی‌های ویژهٔ ثبت‌شده: {registered}\n"
-            f"⚙️ وضعیت سراسری: {'فعال' if data.get('enabled') else 'غیرفعال'}\n\n"
-            "یکی از دو بخش اصلی را باز کن. هر کلید مستقل است؛ تغییر یک مورد تنظیم بقیه را دست‌کاری نمی‌کند.\n"
-            "✅ ثبت‌شده · ▫️ پیش‌فرض",
+            "یکی از دو بخش را انتخاب کن. داخل هر بخش می‌توانی ایموجی هر مورد را جداگانه ثبت، جایگزین یا به پیش‌فرض برگردانی.\n\n"
+            "🟢 ایموجی اختصاصی ثبت‌شده · ▫️ استفاده از پیش‌فرض",
             reply_markup=_home_keyboard(data),
         )
     await callback.answer()
