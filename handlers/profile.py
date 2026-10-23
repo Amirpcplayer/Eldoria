@@ -626,6 +626,23 @@ async def compact_profile_command(message: Message) -> None:
     parts = message.text.strip().split(maxsplit=1)
     argument = parts[1].strip() if len(parts) > 1 else ""
     replied_message = message.reply_to_message
+    logger.info(
+        "Profile command received: chat_id=%s chat_type=%s caller_id=%s "
+        "message_id=%s text=%r reply_to_message_id=%s reply_from_user_id=%s "
+        "reply_sender_chat_id=%s",
+        message.chat.id,
+        message.chat.type,
+        message.from_user.id,
+        message.message_id,
+        message.text,
+        replied_message.message_id if replied_message is not None else None,
+        replied_message.from_user.id
+        if replied_message is not None and replied_message.from_user is not None
+        else None,
+        replied_message.sender_chat.id
+        if replied_message is not None and replied_message.sender_chat is not None
+        else None,
+    )
     replied_user = replied_message.from_user if replied_message is not None else None
 
     if replied_user is None and replied_message is not None:
