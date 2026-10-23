@@ -80,8 +80,17 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
         if isinstance(markup, InlineKeyboardMarkup):
             data = load()
             if data.get("enabled") and data.get("ids"):
-                outgoing_text = str(getattr(method, "text", None) or getattr(method, "caption", None) or "")
-                is_profile_panel = "قهرمان اِلدوریا" in outgoing_text or "قهرمان الدوردیا" in outgoing_text
+                # Detect the profile keyboard by its distinctive callbacks rather
+                # than panel text: /menu and the main-menu route can render the same
+                # profile with different text/edit methods.
+                keyboard_callbacks = {
+                    str(getattr(button, "callback_data", "") or "").lower()
+                    for row in (getattr(markup, "inline_keyboard", None) or [])
+                    for button in row
+                }
+                is_profile_panel = bool(
+                    {"profile:stats", "profile:fanart"} & keyboard_callbacks
+                )
                 def resolve(callback_data: str | None, text: str) -> str | None:
                     callback = (callback_data or "").lower()
                     if is_profile_panel:
@@ -89,8 +98,10 @@ class PremiumEmojiButtonsMiddleware(BaseRequestMiddleware):
                             "menu:inventory": "profile_inventory",
                             "menu:equipment": "profile_equipment",
                             "menu:skills": "profile_skills",
-                            "profile:titles": "profile_titles",
+                            "profile:stats": "profile_stats",
+                            "profile:fanart": "profile_fanart_select",
                             "menu:back": "profile_back",
+                            "profile:back": "profile_back",
                         }
                         if callback in profile_exact:
                             return profile_exact[callback]
