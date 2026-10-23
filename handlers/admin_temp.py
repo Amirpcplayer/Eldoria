@@ -902,7 +902,6 @@ async def admin_player_profile_view(callback: CallbackQuery, state: FSMContext):
             "<b>🎨 فن‌آرت‌ها</b>\n" + ("\n".join(fan_art_text) if fan_art_text else "فن‌آرتی ندارد")
         )
         markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💰 دادن گلد", callback_data=f"admin:gold:select:{telegram_id}")],
             [InlineKeyboardButton(text="🔎 جست‌وجوی بازیکن دیگر", callback_data="admin:players:search")],
             [InlineKeyboardButton(text="📚 بازگشت به لیست بازیکنان", callback_data="admin:players:list:0")],
             [InlineKeyboardButton(text="🗑 حذف بازیکن", callback_data=f"admin:delete:select:{telegram_id}")],
