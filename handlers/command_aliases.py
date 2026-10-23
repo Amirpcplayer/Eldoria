@@ -128,7 +128,7 @@ async def render_command_panel(message: Message, section: str) -> None:
         "party": ("👥 <b>پارتی اِلدوریا</b>\n\nپارتی بساز، به پارتی بپیوند یا اعضا را مدیریت کن.", keyboard([button("➕ ساخت پارتی", "party:create")], [button("🔗 پیوستن به پارتی", "party:join")], [button("👥 اطلاعات و اعضای پارتی", "party:members")], [button("🔙 منوی اصلی", "menu:back")]), "party"),
         "marketplace": ("🏪 <b>بازار بازیکنان اِلدوریا</b>\n\nآگهی‌ها را بررسی کن یا آیتم‌هایت را برای فروش ثبت کن.", keyboard([button("🛒 آگهی‌های بازار", "market:browse")], [button("📦 آگهی‌های من", "market:mine")], [button("➕ ثبت آگهی از صندوقچه", "market:sell:home")], [button("❔ راهنمای بازار", "market:help")], [button("🔙 منوی اصلی", "menu:back")]), "marketplace"),
         "forge": ("⚒️ <b>آهنگری اِلدوریا</b>\n\nتجهیزاتت را انتخاب و با گلد و مواد اولیه ارتقا بده.", keyboard([button("⚒️ باز کردن آهنگری", "menu:forge")], [button("🛡️ تجهیزات", "menu:equipment")], [button("🔙 منوی اصلی", "menu:back")]), "forge"),
-        "guide": ("📖 <b>کتاب راهنمای اِلدوریا</b>\\n\\nیکی از دو مسیر زیر را انتخاب کن تا سفر خود را آسان‌تر آغاز کنی.", guide_keyboard(), "guide"),
+        "guide": ("📖 <b>کتاب راهنمای اِلدوریا</b>\\n\\nمسیر دلخواهت را انتخاب کن تا سفر خود را آسان‌تر آغاز کنی.", guide_keyboard(), "guide"),
         "exchange": ("💱 <b>صرافی اِلدوریا</b>\n\nنرخ تبدیل: ۱۰٬۰۰۰ گلد = ۱ جم. مقدار موردنظر را انتخاب کن؛ موجودی هنگام تأیید دوباره بررسی می‌شود.", keyboard([button("💱 تبدیل ۱ جم", "exchange:confirm:1")], [button("💱 تبدیل ۵ جم", "exchange:confirm:5")], [button("💱 تبدیل ۱۰ جم", "exchange:confirm:10")], [button("🔙 منوی اصلی", "menu:back")]), "exchange"),
         "settings": ("⚙️ <b>تنظیمات اِلدوریا</b>\n\nتنظیمات قابل‌دسترسی حساب خود را مدیریت کن.", keyboard([button("✍️ تغییر نام قهرمان · ۲٬۰۰۰ Gold", "settings:rename")], [button("🔙 منوی اصلی", "menu:back")]), "settings"),
     }
@@ -191,10 +191,28 @@ FULL_GUIDE_TEXT = (
     "✦ <i>یادآوری: دکمه‌ها و توضیحات هر پنل، شرایط فعلی همان قابلیت را مشخص می‌کنند.</i>"
 )
 
+FAST_PROGRESS_TEXT = (
+    "╭─── ✦ 🌟 ✦ ───╮\n"
+    "   <b>مسیر پیشرفت سریع در اِلدوریا</b>\n"
+    "╰─── ✦ 🌟 ✦ ───╯\n\n"
+    "⚔️ <b>گام اول | قدرت جادویی‌ات را بیدار کن</b>\n"
+    "وارد بخش «مهارت‌ها» شو و یک جادو انتخاب کن تا برای نبرد آماده شوی.\n\n"
+    "🗺️ <b>گام دوم | شکار را آغاز کن</b>\n"
+    "به «ماجراجویی» برو، هیولاها را شکار کن و تجربه، گلد و منابع به دست بیاور.\n\n"
+    "🔨 <b>گام سوم | غنیمت‌ها را به قدرت تبدیل کن</b>\n"
+    "با پاداش‌های شکار، از «کرفتینگ» یا «شاپ» سلاح، معجون، اسکرول و طومار موردنیازت را تهیه کن.\n\n"
+    "👥 <b>گام چهارم | تنها سفر نکن</b>\n"
+    "به یک گیلد و پارتی بپیوند تا برای فعالیت‌های گروهی و ماجراجویی‌های بزرگ‌تر آماده شوی.\n\n"
+    "📜 <b>گام پنجم | مأموریت‌ها را کامل کن</b>\n"
+    "وارد بخش «مأموریت‌ها» شو، هدف‌ها را انجام بده و پاداش‌هایت را دریافت کن.\n\n"
+    "✨ <i>مهارت یاد بگیر، شکار کن، قوی‌تر شو و افسانه‌ات را بساز!</i>"
+)
+
 def guide_keyboard() -> InlineKeyboardMarkup:
     return keyboard(
         [button("⚡ راهنمای پیشرفت سریع", "guide:quick")],
         [button("📚 راهنمای جامع", "guide:full")],
+        [button("🌟 پیشرفت سریع", "guide:progress")],
         [button("🔙 منوی اصلی", "menu:back")],
     )
 
@@ -235,6 +253,20 @@ async def full_guide_callback(callback: CallbackQuery) -> None:
         ),
     )
     await callback.answer()
+
+@router.callback_query(F.data == "guide:progress")
+async def fast_progress_callback(callback: CallbackQuery) -> None:
+    await show_panel(
+        callback=callback,
+        panel_name="guide",
+        text=FAST_PROGRESS_TEXT,
+        reply_markup=keyboard(
+            [button("↩️ بازگشت به راهنما", "guide:back")],
+            [button("🔙 منوی اصلی", "menu:back")],
+        ),
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data == "guide:back")
 async def guide_back_callback(callback: CallbackQuery) -> None:
