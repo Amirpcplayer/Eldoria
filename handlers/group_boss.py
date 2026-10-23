@@ -1245,7 +1245,16 @@ async def _story_attack(message: Message) -> None:
 
     telegram_id = message.from_user.id
     cooldown_key = f"eldoria:story_attack_cooldown:{telegram_id}"
-    acquired = await redis.set(cooldown_key, "1", ex=300, nx=True)
+    # If Redis is temporarily unavailable, do not silently swallow the encounter.
+    # Continue without cooldown for this request and log the infrastructure failure.
+    cooldown_enabled = True
+    try:
+        acquired = await redis.set(cooldown_key, "1", ex=300, nx=True)
+    except Exception:
+        logger.exception("Story encounter cooldown Redis check failed; continuing without cooldown")
+        cooldown_enabled = False
+        acquired = True
+
     if not acquired:
         try:
             remaining = max(1, int(await redis.ttl(cooldown_key)))
@@ -1273,7 +1282,11 @@ async def _story_attack(message: Message) -> None:
             select(Character).where(Character.telegram_id == telegram_id).with_for_update()
         )
         if character is None:
-            await redis.delete(cooldown_key)
+            if cooldown_enabled:
+                try:
+                    await redis.delete(cooldown_key)
+                except Exception:
+                    logger.exception("Could not release story cooldown for missing character")
             await message.reply("ابتدا با /start قهرمانت را بساز، بعد می‌توانی وارد نبرد داستانی شوی.")
             return
         character.gold = int(character.gold or 0) + gold_reward
@@ -1316,7 +1329,21 @@ async def group_boss_attack(message: Message):
             return
 
     if replied is None:
-        await _story_attack(message)
+        try:
+            await _story_attack(message)
+        except Exception:
+            logger.exception(
+                "Story encounter failed for telegram_id=%s chat_id=%s",
+                message.from_user.id if message.from_user else None,
+                message.chat.id,
+            )
+            # Make failures visible instead of leaving the player with no response.
+            try:
+                await message.reply(
+                    "⚠️ برخورد داستانی به خطای موقت برخورد کرد. خطا در گزارش ربات ثبت شد؛ کمی بعد دوباره امتحان کن."
+                )
+            except Exception:
+                logger.exception("Could not send story encounter failure notice")
         return
 
     await _attack(message)
