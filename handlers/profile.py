@@ -924,10 +924,15 @@ async def clear_profile_fan_art_handler(
 @router.message(F.text.func(lambda text: bool(text) and text.strip().casefold() == "\u067e\u0631\u0648\u0641\u0627\u06cc\u0644"))
 @router.message(Command("profile", ignore_case=True))
 async def profile_command(message: Message):
-    """نمایش پروفایل خود یا صاحب پیامی که دستور به آن ریپلای شده است."""
+    """نمایش پروفایل جمع‌وجور خود یا بازیکن ریپلای‌شده، همراه با Fan Art."""
     if not message.from_user:
         return
-    target_user = message.reply_to_message.from_user if message.reply_to_message else message.from_user
+
+    target_user = (
+        message.reply_to_message.from_user
+        if message.reply_to_message
+        else message.from_user
+    )
     if target_user is None or target_user.is_bot:
         await message.answer("❌ نمی‌توان پروفایل این حساب را نمایش داد.")
         return
@@ -943,20 +948,48 @@ async def profile_command(message: Message):
     try:
         stats = await get_profile_stats(target_user.id, character)
         active_fan_art = await get_active_fan_art(target_user.id)
-        text = build_profile_text(character, active_fan_art, stats)
-        text = await append_profile_social_and_scrolls(text, target_user.id)
+
+        name = html.escape(str(character.name or "قهرمان"))
+        title = html.escape(str(character.active_title or "بدون لقب"))
+        level = int(character.level or 1)
+        gold = int(character.gold or 0)
+        gems = int(character.gems or 0)
+        max_hp = int(stats.get("hp", 0) or 0)
+        max_mana = int(stats.get("mana", 0) or 0)
+        hp = min(int(character.hp or 0), max_hp)
+        mana = min(int(character.mana or 0), max_mana)
+
+        text = (
+            "✦ <b>پروفایل قهرمان</b> ✦\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"👤 نام  ·  <b>{name}</b>\n"
+            f"♛ لقب  ·  <b>{title}</b>\n"
+            f"✧ سطح  ·  <b>{level:,}</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🪙 طلا  ·  <b>{gold:,}</b>\n"
+            f"💎 جم  ·  <b>{gems:,}</b>\n"
+            f"❤️ سلامتی  ·  <b>{hp:,} / {max_hp:,}</b>\n"
+            f"💧 مانا  ·  <b>{mana:,} / {max_mana:,}</b>"
+        )
+        social = await append_profile_social_and_scrolls("", target_user.id)
+        social = social.split("\n\n📜 <b>اسکرول‌های فعال</b>", 1)[0]
+        text += social
     except Exception:
         logger.exception(
             "Failed to render /profile for telegram_id=%s",
             target_user.id,
         )
         await message.answer(
-            "❌ پروفایل به‌دلیل خطای داخلی کامل باز نشد. جزئیات خطا در ترمینال ربات ثبت شد."
+            "❌ نمایش پروفایل با خطای داخلی روبه‌رو شد. جزئیات در ترمینال ربات ثبت شد."
         )
         return
 
-    # فن‌آرت انتخاب‌شده همیشه اولویت دارد؛ در نبود آن عکس پروفایل تلگرام استفاده می‌شود.
-    photo = active_fan_art.image_file_id if active_fan_art and active_fan_art.image_file_id else None
+    # Fan Art انتخاب‌شده اولویت دارد؛ در نبود آن از عکس پروفایل تلگرام استفاده می‌شود.
+    photo = (
+        active_fan_art.image_file_id
+        if active_fan_art and active_fan_art.image_file_id
+        else None
+    )
     if photo is None:
         try:
             photos = await message.bot.get_user_profile_photos(target_user.id, limit=1)
@@ -965,11 +998,11 @@ async def profile_command(message: Message):
         except Exception:
             photo = None
 
-    # Telegram photo captions are limited to 1024 characters. Never drop
-    # guild, party or active-scroll details to make a profile fit a caption.
     if photo:
         if len(text) <= 1024:
-            await message.answer_photo(photo=photo, caption=text, parse_mode=ParseMode.HTML)
+            await message.answer_photo(
+                photo=photo, caption=text, parse_mode=ParseMode.HTML
+            )
         else:
             await message.answer_photo(photo=photo)
             await message.answer(text, parse_mode=ParseMode.HTML)
