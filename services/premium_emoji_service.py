@@ -41,6 +41,7 @@ DEFAULTS: dict[str, str] = {
     "guild_members": "🤝", "guild_missions": "🎯", "guild_vault": "🏦",
     "guild_buy_adventure_items": "📦", "party_members": "🧑‍🤝‍🧑",
     "menu_blacksmith": "🧰", "menu_gold_gems": "💱", "menu_market": "🏷️",
+    "menu_quick_progress": "🌟",
 }
 # Human-readable categories used by the admin archive.
 GROUPS: dict[str, tuple[str, ...]] = {
@@ -48,7 +49,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
              "menu_adventure", "menu_pvp", "menu_crafting", "menu_pets", "menu_events",
              "menu_party", "menu_guild", "menu_ranking", "menu_forge", "menu_marketplace",
              "menu_bestiary", "menu_exchange", "menu_guide", "menu_shop", "menu_settings",
-             "menu_fanart", "menu_enter_game", "menu_blacksmith", "menu_gold_gems", "menu_market"),
+             "menu_fanart", "menu_enter_game", "menu_blacksmith", "menu_gold_gems", "menu_market", "menu_quick_progress"),
     "profile": ("profile_inventory", "profile_equipment", "profile_skills", "profile_stats", "profile_hp_recovery", "profile_mana_recovery", "profile_titles", "profile_fanart_select", "profile_back"),
     "inventory": ("menu_inventory", "menu_equipment", "equipment", "potion", "health", "mana", "scroll", "material"),
     "guild": ("menu_guild", "guild_members", "guild_missions", "guild_vault", "guild_buy_adventure_items"),
@@ -98,7 +99,7 @@ KEY_TITLES = {
     "profile_mana_recovery":"بازیابی مانا", "guild_members":"اعضای گیلد", "guild_missions":"مأموریت‌های گیلد",
     "guild_vault":"خزانه گیلد", "guild_buy_adventure_items":"خرید آیتم‌های ماجراجویی",
     "party_members":"اعضای پارتی", "menu_blacksmith":"دکمه آهنگر", "menu_gold_gems":"دکمه تبدیل طلا و جم",
-    "menu_market":"دکمه بازار",
+    "menu_market":"دکمه بازار", "menu_quick_progress":"دکمه پیشرفت سریع",
 }
 
 def load() -> dict[str, Any]:
@@ -261,8 +262,15 @@ def apply_keyboard_icons(markup: Any, data: dict[str, Any] | None = None,
                 callback_data = getattr(button, "callback_data", None)
                 key = category_resolver(callback_data, text) if category_resolver else None
                 if not key and callback_data:
-                    callback_key = str(callback_data).lower().split(":")[-1]
-                    if callback_key in DEFAULTS:
+                    raw_callback = str(callback_data).lower()
+                    callback_key = raw_callback.split(":")[-1]
+                    # Main-menu buttons use menu:<section>, while the emoji
+                    # registry intentionally stores independent menu_* keys.
+                    if raw_callback.startswith("menu:") and f"menu_{callback_key}" in DEFAULTS:
+                        key = f"menu_{callback_key}"
+                    elif raw_callback == "guide:progress":
+                        key = "menu_quick_progress"
+                    elif callback_key in DEFAULTS:
                         key = callback_key
                     elif callback_key in {"ranking", "leaderboard"}:
                         key = "rank"
