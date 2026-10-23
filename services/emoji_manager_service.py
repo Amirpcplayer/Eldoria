@@ -52,7 +52,7 @@ INTERNAL_BUTTONS: dict[str, tuple[str, str]] = {
 }
 # Categorized internal archive. Keys are real callback_data values.
 INTERNAL_CATEGORIES = {
-    "profile": ("👤 پروفایل", ["profile:stats", "profile:fanart", "profile:titles"]),
+    "profile": ("👤 پروفایل", ["profile:stats", "potion:choose:hp", "potion:choose:mana", "profile:titles", "profile:fanart", "profile:clearfanart", "profile:setfanart:", "profile:settitle:", "profile:titlepage:"]),
     "inventory": ("🗃️ صندوقچه", ["inventory:equipment", "inventory:scrolls", "inventory:potions", "inventory:materials", "inventory:all", "inventory:fanart"]),
     "quest": ("📜 مأموریت‌ها", ["quest:list:story", "quest:list:daily", "quest:list:achievement", "quest:current_list", "quest:menu"]),
     "skills": ("✨ مهارت‌ها", ["skills:list", "skills:learn", "skills:upgrade"]),
@@ -62,9 +62,13 @@ INTERNAL_CATEGORIES = {
     "social": ("👥 اجتماعی", ["party:members", "guild:members", "guild:missions", "guild:vault"]),
     "market": ("🏪 بازار", ["market:browse", "market:mine", "market:help"]),
     "guide": ("📖 راهنما", ["guide:quick", "guide:full"]),
-    "other": ("⚙️ سایر", ["potion:choose:hp", "potion:choose:mana", "menu:back", "worldboss:attack", "menu:worldboss"]),
+    "other": ("⚙️ سایر", ["menu:back", "worldboss:attack", "menu:worldboss"]),
 }
 INTERNAL_BUTTONS.update({
+    "profile:clearfanart": ("حذف فن‌آرت فعال", "🚫"),
+    "profile:setfanart:": ("انتخاب فن‌آرت از فهرست", "🎨"),
+    "profile:settitle:": ("انتخاب لقب از فهرست", "🎖️"),
+    "profile:titlepage:": ("صفحه‌بندی لقب‌ها", "➡️"),
     "inventory:potions": ("معجون‌ها", "🧪"), "inventory:materials": ("متریال‌ها", "🗃️"),
     "inventory:all": ("همه آیتم‌ها", "📦"), "inventory:fanart": ("فن‌آرت‌های من", "🎨"),
     "quest:list:story": ("داستانی", "📖"), "quest:list:daily": ("روزانه", "📅"),
