@@ -533,7 +533,6 @@ async def emoji_management_save(message: Message, state: FSMContext):
     if message.from_user is None or not is_admin(message.from_user.id):
         await state.clear()
         return
-    value = (message.text or "").strip()
     data = await state.get_data()
     key = str(data.get("emoji_key", ""))
     allowed = {k for _, k in MAIN_MENU_EMOJI_KEYS} | {k for _, k in INTERNAL_EMOJI_KEYS}
@@ -541,15 +540,29 @@ async def emoji_management_save(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("❌ گزینهٔ ایموجی معتبر نیست.")
         return
+
+    # Accept a custom emoji sent directly by the owner, rather than asking for its ID.
+    entities = list(message.entities or []) + list(message.caption_entities or [])
+    custom_ids = [
+        str(entity.custom_emoji_id)
+        for entity in entities
+        if getattr(entity, "type", None) == "custom_emoji"
+        and getattr(entity, "custom_emoji_id", None)
+    ]
     registry = premium_emoji_service.load()
     ids = registry.setdefault("ids", {})
-    if value.casefold() in {"پیش‌فرض", "default", "حذف"}:
-        ids.pop(key, None)
-    elif value.isdigit():
-        ids[key] = value
+    if custom_ids:
+        ids[key] = custom_ids[0]
     else:
-        await message.answer("❌ شناسه باید فقط عدد باشد؛ یا «پیش‌فرض» را بفرست.")
-        return
+        value = (message.text or message.caption or "").strip()
+        if value.casefold() in {"پیش‌فرض", "default", "حذف"}:
+            ids.pop(key, None)
+        else:
+            await message.answer(
+                "ایموجی اختصاصی را همین‌جا مستقیماً بفرست؛ لازم نیست شناسه‌اش را وارد کنی. "
+                "اگر ایموجی معمولی می‌خواهی، بنویس «پیش‌فرض»."
+            )
+            return
     premium_emoji_service.save(registry)
     await state.clear()
     await message.answer(
