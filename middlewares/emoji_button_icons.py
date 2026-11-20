@@ -66,6 +66,8 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                 special_key = None
                 if lookup_data == "race:confirm":
                     special_key = "race_confirm_button"
+                elif lookup_data == "menu:enter_game":
+                    special_key = "race_enter_game_button"
                 elif label_without_icon.startswith(("بازگشت", "برگشت", "back", "назад")):
                     special_key = "global_back_button"
 
@@ -79,9 +81,13 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                     new_row.append(button)
                     continue
 
-                if key in {"global_back_button", "race_confirm_button"}:
+                if key in {"global_back_button", "race_confirm_button", "race_enter_game_button"}:
                     custom_emoji_id = get_start_emoji_ids().get(key)
-                    emoji = "🔙" if key == "global_back_button" else "✅"
+                    emoji = {
+                        "global_back_button": "🔙",
+                        "race_confirm_button": "✅",
+                        "race_enter_game_button": "🎮",
+                    }[key]
                 else:
                     custom_emoji_id = get_custom_emoji_id(key)
                     emoji = get_emoji(key)
