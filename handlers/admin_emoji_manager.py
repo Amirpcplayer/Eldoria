@@ -44,6 +44,28 @@ def start_emoji_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+GENDER_EMOJI_OPTIONS = {
+    "gender_check": ("ثبت نام", "✅"),
+    "gender_sword": ("انتخاب و داستان", "⚔️"),
+    "gender_symbol": ("جنسیت", "⚧"),
+}
+
+
+def gender_emoji_keyboard() -> InlineKeyboardMarkup:
+    from services.start_premium_emoji_service import get_start_emoji_ids
+
+    ids = get_start_emoji_ids()
+    rows = [
+        [_button(
+            f"{label} {fallback}" + (" · ثبت‌شده" if ids.get(key) else ""),
+            f"admin:premium_emoji:gender:set:{key}",
+        )]
+        for key, (label, fallback) in GENDER_EMOJI_OPTIONS.items()
+    ]
+    rows.append([_button("🔙 بازگشت", "admin:premium_emoji:open")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def _is_owner(user_id: int) -> bool:
     return user_id in OWNER_IDS
 
@@ -97,6 +119,7 @@ async def premium_emoji_eldoria_open(callback: CallbackQuery, state: FSMContext)
             "✨ <b>ایموجی پرمیوم اِلدوریا</b>\n\nبخش موردنظر را انتخاب کن:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [_button("📝 متن استارت", "admin:premium_emoji:start")],
+                [_button("⚧ انتخاب جنسیت", "admin:premium_emoji:gender")],
                 [_button("🔙 بازگشت به پنل ادمین", "admin:home")],
             ]),
             parse_mode="HTML",
@@ -117,6 +140,44 @@ async def premium_emoji_start_menu(callback: CallbackQuery, state: FSMContext):
             "شناسه‌ها ذخیره می‌شوند و در پیام شروع بازی نمایش داده خواهند شد.",
             reply_markup=start_emoji_keyboard(),
             parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:gender")
+async def premium_emoji_gender_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "⚧ <b>ایموجی‌های انتخاب جنسیت</b>\\n\\n"
+            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\\n"
+            "شناسه‌ها ذخیره می‌شوند و در پیام پیمان سرنوشت نمایش داده خواهند شد.",
+            reply_markup=gender_emoji_keyboard(),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:premium_emoji:gender:set:"))
+async def premium_emoji_gender_set(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    key = callback.data.removeprefix("admin:premium_emoji:gender:set:")
+    if key not in GENDER_EMOJI_OPTIONS:
+        await callback.answer("نماد نامعتبر است.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(gender_emoji_key=key)
+    await state.set_state(EldoriaStartEmojiStates.waiting_emoji)
+    label, fallback = GENDER_EMOJI_OPTIONS[key]
+    if callback.message:
+        await callback.message.answer(
+            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\\n"
+            "فقط یک ایموجی پرمیوم پذیرفته می‌شود. برای لغو /cancel را بفرست."
         )
     await callback.answer()
 
@@ -155,12 +216,13 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
         None,
     )
     data = await state.get_data()
-    key = data.get("start_emoji_key")
+    key = data.get("start_emoji_key") or data.get("gender_emoji_key")
+    options = {**START_EMOJI_OPTIONS, **GENDER_EMOJI_OPTIONS}
     if value.casefold() in {"/cancel", "لغو"}:
         await state.clear()
         await message.answer("عملیات لغو شد.", reply_markup=start_emoji_keyboard())
         return
-    if key not in START_EMOJI_OPTIONS:
+    if key not in options:
         await state.clear()
         await message.answer("❌ نشست معتبر نیست؛ دوباره از پنل شروع کن.")
         return
