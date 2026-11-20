@@ -8,6 +8,7 @@ from aiogram.methods import TelegramMethod
 from aiogram.types import InlineKeyboardMarkup
 
 from services.emoji_manager_service import ALL_BUTTONS, get_custom_emoji_id, get_emoji
+from services.start_premium_emoji_service import get_start_emoji_ids
 
 
 def _normalize_label(text: str) -> str:
@@ -59,18 +60,31 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                     ), None)
                 normalized = _normalize_label(text)
                 exact_label_match = normalized in _LABEL_ONLY_TO_KEY
+                # Global premium icons: every back button shares one setting;
+                # the race confirmation button has its own setting in the race submenu.
+                label_without_icon = re.sub(r"^[^\\w]+", "", normalized)
+                special_key = None
+                if lookup_data == "race:confirm":
+                    special_key = "race_confirm_button"
+                elif label_without_icon.startswith(("بازگشت", "برگشت", "back", "назад")):
+                    special_key = "global_back_button"
 
-                if key is None:
+                if key is None and special_key is None:
                     key = _LABEL_TO_KEY.get(normalized)
                     if key is None and " " in normalized:
                         key = _LABEL_TO_KEY.get(normalized.split(" ", 1)[1])
 
+                key = special_key or key
                 if key is None:
                     new_row.append(button)
                     continue
 
-                custom_emoji_id = get_custom_emoji_id(key)
-                emoji = get_emoji(key)
+                if key in {"global_back_button", "race_confirm_button"}:
+                    custom_emoji_id = get_start_emoji_ids().get(key)
+                    emoji = "🔙" if key == "global_back_button" else "✅"
+                else:
+                    custom_emoji_id = get_custom_emoji_id(key)
+                    emoji = get_emoji(key)
                 if not emoji:
                     new_row.append(button)
                     continue
