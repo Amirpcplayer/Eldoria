@@ -35,6 +35,7 @@ def test_set_and_render_custom_emoji(tmp_path, monkeypatch):
     [
         ("unknown", "123"),
         ("gender_symbol", "not-an-id"),
+        ("race_werewolf_button", "not-an-id"),
         ("sword", "abc"),
         ("pen", ""),
         ("scroll", "000"),
