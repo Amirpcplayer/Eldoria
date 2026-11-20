@@ -94,7 +94,7 @@ async def premium_emoji_eldoria_open(callback: CallbackQuery, state: FSMContext)
     await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "✨ <b>ایموجی پرمیوم اِلدوریا</b>\\n\\nبخش موردنظر را انتخاب کن:",
+            "✨ <b>ایموجی پرمیوم اِلدوریا</b>\n\nبخش موردنظر را انتخاب کن:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [_button("📝 متن استارت", "admin:premium_emoji:start")],
                 [_button("🔙 بازگشت به پنل ادمین", "admin:home")],
@@ -112,8 +112,8 @@ async def premium_emoji_start_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "📝 <b>ایموجی‌های متن استارت</b>\\n\\n"
-            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\\n"
+            "📝 <b>ایموجی‌های متن استارت</b>\n\n"
+            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\n"
             "شناسه‌ها ذخیره می‌شوند و در پیام شروع بازی نمایش داده خواهند شد.",
             reply_markup=start_emoji_keyboard(),
             parse_mode="HTML",
@@ -136,7 +136,7 @@ async def premium_emoji_start_set(callback: CallbackQuery, state: FSMContext):
     label, fallback = START_EMOJI_OPTIONS[key]
     if callback.message:
         await callback.message.answer(
-            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\\n"
+            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\n"
             "فقط یک ایموجی پرمیوم پذیرفته می‌شود. برای لغو /cancel را بفرست."
         )
     await callback.answer()
@@ -166,7 +166,7 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
         return
     if not custom_emoji_id:
         await message.answer(
-            "❌ پیام ارسالی شناسه ایموجی پرمیوم ندارد؛ چیزی ذخیره نشد.\\n"
+            "❌ پیام ارسالی شناسه ایموجی پرمیوم ندارد؛ چیزی ذخیره نشد.\n"
             "ایموجی را مستقیماً از پنل ایموجی‌های پرمیوم تلگرام انتخاب و ارسال کن."
         )
         return
@@ -176,7 +176,7 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
     label, fallback = START_EMOJI_OPTIONS[key]
     await state.clear()
     await message.answer(
-        f"✅ ایموجی پرمیوم «{label} {fallback}» برای متن استارت ذخیره شد.\\n"
+        f"✅ ایموجی پرمیوم «{label} {fallback}» برای متن استارت ذخیره شد.\n"
         "از این پس در پیام شروع بازی استفاده می‌شود.",
         reply_markup=start_emoji_keyboard(),
     )
