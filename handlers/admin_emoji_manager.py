@@ -18,6 +18,31 @@ OWNER_IDS = {settings.admin_id, 8537258392}
 class EmojiManagerStates(StatesGroup):
     waiting_emoji = State()
 
+class EldoriaStartEmojiStates(StatesGroup):
+    waiting_emoji = State()
+
+
+START_EMOJI_OPTIONS = {
+    "sword": ("شمشیر", "⚔️"),
+    "scroll": ("طومار", "📜"),
+    "pen": ("قلم", "✍️"),
+}
+
+
+def start_emoji_keyboard() -> InlineKeyboardMarkup:
+    from services.start_premium_emoji_service import get_start_emoji_ids
+
+    ids = get_start_emoji_ids()
+    rows = [
+        [_button(
+            f"{label} {fallback}" + (" · ثبت‌شده" if ids.get(key) else ""),
+            f"admin:premium_emoji:start:set:{key}",
+        )]
+        for key, (label, fallback) in START_EMOJI_OPTIONS.items()
+    ]
+    rows.append([_button("🔙 بازگشت", "admin:premium_emoji:open")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
 
 def _is_owner(user_id: int) -> bool:
     return user_id in OWNER_IDS
@@ -58,6 +83,103 @@ def edit_keyboard(key: str) -> InlineKeyboardMarkup:
         [_button("↩️ بازگشت به ایموجی پیش‌فرض", f"admin:emoji:reset:{key}")],
         [_button("🔙 بازگشت به فهرست", "admin:emoji:section:" + ("main" if key in MAIN_BUTTONS else "internal"))],
     ])
+
+
+
+@router.callback_query(F.data == "admin:premium_emoji:open")
+async def premium_emoji_eldoria_open(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "✨ <b>ایموجی پرمیوم اِلدوریا</b>\\n\\nبخش موردنظر را انتخاب کن:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [_button("📝 متن استارت", "admin:premium_emoji:start")],
+                [_button("🔙 بازگشت به پنل ادمین", "admin:home")],
+            ]),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:start")
+async def premium_emoji_start_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>ایموجی‌های متن استارت</b>\\n\\n"
+            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\\n"
+            "شناسه‌ها ذخیره می‌شوند و در پیام شروع بازی نمایش داده خواهند شد.",
+            reply_markup=start_emoji_keyboard(),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:premium_emoji:start:set:"))
+async def premium_emoji_start_set(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    key = callback.data.removeprefix("admin:premium_emoji:start:set:")
+    if key not in START_EMOJI_OPTIONS:
+        await callback.answer("نماد نامعتبر است.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(start_emoji_key=key)
+    await state.set_state(EldoriaStartEmojiStates.waiting_emoji)
+    label, fallback = START_EMOJI_OPTIONS[key]
+    if callback.message:
+        await callback.message.answer(
+            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\\n"
+            "فقط یک ایموجی پرمیوم پذیرفته می‌شود. برای لغو /cancel را بفرست."
+        )
+    await callback.answer()
+
+
+@router.message(EldoriaStartEmojiStates.waiting_emoji)
+async def premium_emoji_start_save(message: Message, state: FSMContext):
+    if not message.from_user or not _is_owner(message.from_user.id):
+        await state.clear()
+        return
+    value = (message.text or message.caption or "").strip()
+    entities = message.entities or message.caption_entities or []
+    custom_emoji_id = next(
+        (entity.custom_emoji_id for entity in entities
+         if entity.type == "custom_emoji" and entity.custom_emoji_id),
+        None,
+    )
+    data = await state.get_data()
+    key = data.get("start_emoji_key")
+    if value.casefold() in {"/cancel", "لغو"}:
+        await state.clear()
+        await message.answer("عملیات لغو شد.", reply_markup=start_emoji_keyboard())
+        return
+    if key not in START_EMOJI_OPTIONS:
+        await state.clear()
+        await message.answer("❌ نشست معتبر نیست؛ دوباره از پنل شروع کن.")
+        return
+    if not custom_emoji_id:
+        await message.answer(
+            "❌ پیام ارسالی شناسه ایموجی پرمیوم ندارد؛ چیزی ذخیره نشد.\\n"
+            "ایموجی را مستقیماً از پنل ایموجی‌های پرمیوم تلگرام انتخاب و ارسال کن."
+        )
+        return
+    from services.start_premium_emoji_service import set_start_emoji_id
+
+    set_start_emoji_id(key, custom_emoji_id)
+    label, fallback = START_EMOJI_OPTIONS[key]
+    await state.clear()
+    await message.answer(
+        f"✅ ایموجی پرمیوم «{label} {fallback}» برای متن استارت ذخیره شد.\\n"
+        "از این پس در پیام شروع بازی استفاده می‌شود.",
+        reply_markup=start_emoji_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "admin:emoji:open")
