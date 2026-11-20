@@ -152,8 +152,8 @@ async def premium_emoji_gender_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "⚧ <b>ایموجی‌های انتخاب جنسیت</b>\\n\\n"
-            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\\n"
+            "⚧ <b>ایموجی‌های انتخاب جنسیت</b>\n\n"
+            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\n"
             "شناسه‌ها ذخیره می‌شوند و در پیام پیمان سرنوشت نمایش داده خواهند شد.",
             reply_markup=gender_emoji_keyboard(),
             parse_mode="HTML",
@@ -176,7 +176,7 @@ async def premium_emoji_gender_set(callback: CallbackQuery, state: FSMContext):
     label, fallback = GENDER_EMOJI_OPTIONS[key]
     if callback.message:
         await callback.message.answer(
-            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\\n"
+            f"ایموجی پرمیوم «{label} {fallback}» را مستقیماً از پنل ایموجی تلگرام ارسال کن.\n"
             "فقط یک ایموجی پرمیوم پذیرفته می‌شود. برای لغو /cancel را بفرست."
         )
     await callback.answer()
