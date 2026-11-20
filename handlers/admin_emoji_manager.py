@@ -240,7 +240,7 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
     label, fallback = options[key]
     await state.clear()
     await message.answer(
-        f"✅ ایموجی پرمیوم «{label} {fallback}» ذخیره شد.\\n"
+        f"✅ ایموجی پرمیوم «{label} {fallback}» ذخیره شد.\n"
         + ("از این پس در پیام پیمان سرنوشت استفاده می‌شود." if is_gender else "از این پس در پیام شروع بازی استفاده می‌شود."),
         reply_markup=gender_emoji_keyboard() if is_gender else start_emoji_keyboard(),
     )
