@@ -15,6 +15,7 @@ _ALLOWED_KEYS = {
     "race_human_button", "race_elf_button", "race_demon_button",
     "race_dwarf_button", "race_fairy_button", "race_dragonite_button",
     "race_werewolf_button", "race_vampire_button",
+    "global_back_button", "race_confirm_button",
 }
 _LOCK = RLock()
 
