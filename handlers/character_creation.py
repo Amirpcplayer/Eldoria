@@ -40,7 +40,7 @@ TEXT = {
         "name_taken": "༺ 🕯️ This Name Is Taken 🕯️ ༻\n\n👤 Chosen name: {name}\n\nChoose another name to begin your legend with a unique identity.\n✍️ Enter a new name:",
         "gender_intro": "༺ 📜 Pact of Fate 📜 ༻\n\n✅ Your hero's name is recorded in the ancient ledger: <b>{name}</b>\n\nBefore you begin your path to power, reveal your hero's identity.\n\n⚔️ Your choice will become part of the story you forge in Eldoria.\n\n⚧ <b>Choose your hero's gender:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Your fate is not yet written ✦",
         "incomplete": "Character creation data is incomplete. Please use /start again.",
-        "race_intro": "༺ 🧬 Ancestral Legacy 🧬 ༻\n\n✅ Hero gender: <b>{gender}</b>\n\nDeep in Eldoria, ancestral blood still holds forgotten power. Each race has its own roots and story.\n\n🌑 Your choice is the first step in shaping your hero's identity.\n\n🧬 <b>Choose your hero's race:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Choose your legacy, hero ✦",
+        "race_intro": "༺ Ancestral Legacy ༻\n\n✅ Hero gender: <b>{gender}</b>\n\nDeep in Eldoria, ancestral blood still holds forgotten power. Each race has its own roots and story.\n\n🌑 Your choice is the first step in shaping your hero's identity.\n\n🧬 <b>Choose your hero's race:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Choose your legacy, hero ✦",
     },
     "ru": {
         "text_only": "❌ Введи имя героя текстом.",
@@ -51,7 +51,7 @@ TEXT = {
         "name_taken": "༺ 🕯️ Это имя уже занято 🕯️ ༻\n\n👤 Выбранное имя: {name}\n\nВыбери другое имя, чтобы начать легенду с уникальной личностью.\n✍️ Введи новое имя:",
         "gender_intro": "༺ 📜 Договор судьбы 📜 ༻\n\n✅ Имя героя внесено в древний свиток: <b>{name}</b>\n\nПрежде чем встать на путь силы, раскрой личность своего героя.\n\n⚔️ Твой выбор станет частью истории, которую ты создашь в Эльдории.\n\n⚧ <b>Выбери пол героя:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Твоя судьба ещё не написана ✦",
         "incomplete": "Данные персонажа неполные. Запусти /start ещё раз.",
-        "race_intro": "༺ 🧬 Наследие предков 🧬 ༻\n\n✅ Пол героя: <b>{gender}</b>\n\nВ глубинах Эльдории кровь предков всё ещё хранит забытую силу. У каждой расы свои корни и история.\n\n🌑 Твой выбор — первый шаг к формированию личности героя.\n\n🧬 <b>Выбери расу своего героя:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Выбери своё наследие, герой ✦",
+        "race_intro": "༺ Наследие предков ༻\n\n✅ Пол героя: <b>{gender}</b>\n\nВ глубинах Эльдории кровь предков всё ещё хранит забытую силу. У каждой расы свои корни и история.\n\n🌑 Твой выбор — первый шаг к формированию личности героя.\n\n🧬 <b>Выбери расу своего героя:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ Выбери своё наследие, герой ✦",
     },
 }
 
