@@ -202,15 +202,28 @@ async def premium_emoji_gender_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     if callback.message:
         await callback.message.edit_text(
-            "⚧ <b>ایموجی‌های انتخاب جنسیت</b>\n\n"
-            "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\n"
-            "شناسه‌ها ذخیره می‌شوند و در پیام پیمان سرنوشت نمایش داده خواهند شد.",
+            "⚧ <b>انتخاب جنسیت</b>\n\nبخش موردنظر را انتخاب کن:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [_button("📝 ایموجی‌های متن", "admin:premium_emoji:gender")],
+                [_button("📝 ایموجی‌های متن پیمان سرنوشت", "admin:premium_emoji:gender_text")],
                 [_button("🎛️ ایموجی دکمه‌های مرد و زن", "admin:premium_emoji:gender_button")],
                 [_button("🔙 بازگشت", "admin:premium_emoji:open")],
             ]),
             parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:gender_text")
+async def premium_emoji_gender_text_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>ایموجی‌های متن پیمان سرنوشت</b>\n\n"
+            "هر نماد را جداگانه تنظیم کن.",
+            reply_markup=gender_emoji_keyboard(), parse_mode="HTML",
         )
     await callback.answer()
 
