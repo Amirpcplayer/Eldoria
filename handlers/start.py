@@ -10,6 +10,7 @@ from database.database import AsyncSessionLocal
 from models.character import Character
 from states.character import CharacterCreation
 from services.vitals_recovery_service import recover_character_vitals
+from services.start_premium_emoji_service import render_start_emoji
 
 
 router = Router()
@@ -68,13 +69,13 @@ async def start_handler(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(CharacterCreation.waiting_for_name)
     await message.answer(
-        "༺ 🌌 دروازه‌های اِلدوریا 🌌 ༻\n\n"
+        "༺ دروازه‌های اِلدوریا ༻\n\n"
         "سکوتِ کهن شکسته است...\n"
         "ستارگان از سرنوشتی تازه خبر می‌دهند و دروازه‌های جهانی فراموش‌شده، بار دیگر گشوده می‌شوند.\n\n"
-        "⚔️ <b>مسافر، سرنوشتت تو را فرا می‌خواند.</b>\n\n"
+        f"{render_start_emoji('sword', '⚔️')} <b>مسافر، سرنوشتت تو را فرا می‌خواند.</b>\n\n"
         "در سرزمینی که قدرت با اراده سنجیده می‌شود و نام قهرمانان در افسانه‌ها جاودانه می‌ماند، نخستین قدم را تو برمی‌داری.\n\n"
-        "📜 نامی برای قهرمانت برگزین؛ نامی که روزی در تالار افسانه‌های اِلدوریا طنین‌انداز شود.\n\n"
-        "✍️ <b>نام قهرمانت را وارد کن:</b>\n\n"
+        f"{render_start_emoji('scroll', '📜')} نامی برای قهرمانت برگزین؛ نامی که روزی در تالار افسانه‌های اِلدوریا طنین‌انداز شود.\n\n"
+        f"{render_start_emoji('pen', '✍️')} <b>نام قهرمانت را وارد کن:</b>\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "✦ دفتر سرنوشت اِلدوریا ✦",
         parse_mode="HTML",
