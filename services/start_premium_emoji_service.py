@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import RLock
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "start_premium_emojis.json"
-_ALLOWED_KEYS = {"sword", "scroll", "pen"}
+_ALLOWED_KEYS = {"sword", "scroll", "pen", "gender_check", "gender_sword", "gender_symbol"}
 _LOCK = RLock()
 
 
