@@ -219,8 +219,9 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
     key = data.get("start_emoji_key") or data.get("gender_emoji_key")
     options = {**START_EMOJI_OPTIONS, **GENDER_EMOJI_OPTIONS}
     if value.casefold() in {"/cancel", "لغو"}:
+        is_gender = bool(data.get("gender_emoji_key"))
         await state.clear()
-        await message.answer("عملیات لغو شد.", reply_markup=start_emoji_keyboard())
+        await message.answer("عملیات لغو شد.", reply_markup=gender_emoji_keyboard() if is_gender else start_emoji_keyboard())
         return
     if key not in options:
         await state.clear()
@@ -235,12 +236,13 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
     from services.start_premium_emoji_service import set_start_emoji_id
 
     set_start_emoji_id(key, custom_emoji_id)
-    label, fallback = START_EMOJI_OPTIONS[key]
+    is_gender = key in GENDER_EMOJI_OPTIONS
+    label, fallback = options[key]
     await state.clear()
     await message.answer(
-        f"✅ ایموجی پرمیوم «{label} {fallback}» برای متن استارت ذخیره شد.\n"
-        "از این پس در پیام شروع بازی استفاده می‌شود.",
-        reply_markup=start_emoji_keyboard(),
+        f"✅ ایموجی پرمیوم «{label} {fallback}» ذخیره شد.\\n"
+        + ("از این پس در پیام پیمان سرنوشت استفاده می‌شود." if is_gender else "از این پس در پیام شروع بازی استفاده می‌شود."),
+        reply_markup=gender_emoji_keyboard() if is_gender else start_emoji_keyboard(),
     )
 
 
