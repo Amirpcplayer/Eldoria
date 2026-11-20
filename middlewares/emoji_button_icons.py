@@ -62,7 +62,7 @@ class EmojiButtonIconsMiddleware(BaseRequestMiddleware):
                 exact_label_match = normalized in _LABEL_ONLY_TO_KEY
                 # Global premium icons: every back button shares one setting;
                 # the race confirmation button has its own setting in the race submenu.
-                label_without_icon = re.sub(r"^[^\\w]+", "", normalized)
+                label_without_icon = re.sub(r"^[^\w]+", "", normalized)
                 special_key = None
                 if lookup_data == "race:confirm":
                     special_key = "race_confirm_button"
