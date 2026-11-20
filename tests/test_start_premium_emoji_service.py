@@ -16,10 +16,18 @@ def test_set_and_render_custom_emoji(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "DATA_FILE", tmp_path / "start.json")
     service.set_start_emoji_id("sword", "123456789")
     service.set_start_emoji_id("gender_check", "987654321")
-    assert service.get_start_emoji_ids() == {"sword": "123456789", "gender_check": "987654321"}
+    service.set_start_emoji_id("gender_male_button", "111222333")
+    service.set_start_emoji_id("race_dna", "444555666")
+    assert service.get_start_emoji_ids() == {
+        "sword": "123456789",
+        "gender_check": "987654321",
+        "gender_male_button": "111222333",
+        "race_dna": "444555666",
+    }
     assert service.render_start_emoji("sword", "⚔️") == '<tg-emoji emoji-id="123456789">⚔️</tg-emoji>'
     assert service.render_start_emoji("scroll", "📜") == "📜"
     assert service.render_start_emoji("gender_check", "✅") == '<tg-emoji emoji-id="987654321">✅</tg-emoji>'
+    assert service.render_start_emoji("race_dna", "🧬") == '<tg-emoji emoji-id="444555666">🧬</tg-emoji>'
 
 
 @pytest.mark.parametrize(
