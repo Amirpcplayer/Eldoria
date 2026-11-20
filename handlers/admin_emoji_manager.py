@@ -50,6 +50,28 @@ GENDER_EMOJI_OPTIONS = {
     "gender_symbol": ("جنسیت", "⚧"),
 }
 
+GENDER_BUTTON_EMOJI_OPTIONS = {
+    "gender_male_button": ("دکمه انتخاب مرد", "⚔️"),
+    "gender_female_button": ("دکمه انتخاب زن", "🌙"),
+}
+
+RACE_EMOJI_OPTIONS = {
+    "race_check": ("جنسیت قهرمان", "✅"),
+    "race_moon": ("انتخاب و هویت", "🌑"),
+    "race_dna": ("انتخاب نژاد", "🧬"),
+}
+
+RACE_BUTTON_EMOJI_OPTIONS = {
+    "race_human_button": ("دکمه انسان", "👤"),
+    "race_elf_button": ("دکمه الف", "🧝"),
+    "race_demon_button": ("دکمه شیطان", "😈"),
+    "race_dwarf_button": ("دکمه دورف", "⛏️"),
+    "race_fairy_button": ("دکمه پری", "🧚"),
+    "race_dragonite_button": ("دکمه درگونایت", "🐉"),
+    "race_werewolf_button": ("دکمه گرگینه", "🐺"),
+    "race_vampire_button": ("دکمه خون‌آشام", "🧛"),
+}
+
 
 def gender_emoji_keyboard() -> InlineKeyboardMarkup:
     from services.start_premium_emoji_service import get_start_emoji_ids
@@ -64,6 +86,33 @@ def gender_emoji_keyboard() -> InlineKeyboardMarkup:
     ]
     rows.append([_button("🔙 بازگشت", "admin:premium_emoji:open")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _premium_options_keyboard(options: dict[str, tuple[str, str]], prefix: str) -> InlineKeyboardMarkup:
+    from services.start_premium_emoji_service import get_start_emoji_ids
+
+    ids = get_start_emoji_ids()
+    rows = [
+        [_button(
+            f"{label} {fallback}" + (" · ثبت‌شده" if ids.get(key) else ""),
+            f"admin:premium_emoji:{prefix}:set:{key}",
+        )]
+        for key, (label, fallback) in options.items()
+    ]
+    rows.append([_button("🔙 بازگشت", "admin:premium_emoji:open")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def gender_button_emoji_keyboard() -> InlineKeyboardMarkup:
+    return _premium_options_keyboard(GENDER_BUTTON_EMOJI_OPTIONS, "gender_button")
+
+
+def race_text_emoji_keyboard() -> InlineKeyboardMarkup:
+    return _premium_options_keyboard(RACE_EMOJI_OPTIONS, "race_text")
+
+
+def race_button_emoji_keyboard() -> InlineKeyboardMarkup:
+    return _premium_options_keyboard(RACE_BUTTON_EMOJI_OPTIONS, "race_button")
 
 
 def _is_owner(user_id: int) -> bool:
@@ -120,6 +169,7 @@ async def premium_emoji_eldoria_open(callback: CallbackQuery, state: FSMContext)
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [_button("📝 متن استارت", "admin:premium_emoji:start")],
                 [_button("⚧ انتخاب جنسیت", "admin:premium_emoji:gender")],
+                [_button("🧬 انتخاب نژاد", "admin:premium_emoji:race")],
                 [_button("🔙 بازگشت به پنل ادمین", "admin:home")],
             ]),
             parse_mode="HTML",
@@ -158,6 +208,120 @@ async def premium_emoji_gender_menu(callback: CallbackQuery, state: FSMContext):
             reply_markup=gender_emoji_keyboard(),
             parse_mode="HTML",
         )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:gender_button")
+async def premium_emoji_gender_button_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "🎛️ <b>ایموجی دکمه‌های جنسیت</b>\n\nایموجی مرد و زن را جداگانه تنظیم کن.",
+            reply_markup=gender_button_emoji_keyboard(), parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:race")
+async def premium_emoji_race_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "🧬 <b>انتخاب نژاد</b>\n\nبخش موردنظر را انتخاب کن:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [_button("📝 ایموجی‌های متن", "admin:premium_emoji:race_text")],
+                [_button("🎛️ ایموجی ۸ دکمه نژاد", "admin:premium_emoji:race_buttons")],
+                [_button("🔙 بازگشت", "admin:premium_emoji:open")],
+            ]), parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:race_text")
+async def premium_emoji_race_text_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>ایموجی‌های متن انتخاب نژاد</b>",
+            reply_markup=race_text_emoji_keyboard(), parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:premium_emoji:race_buttons")
+async def premium_emoji_race_button_menu(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_text(
+            "🎛️ <b>ایموجی دکمه‌های نژاد</b>",
+            reply_markup=race_button_emoji_keyboard(), parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:premium_emoji:gender_button:set:"))
+async def premium_emoji_gender_button_set(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    key = callback.data.removeprefix("admin:premium_emoji:gender_button:set:")
+    if key not in GENDER_BUTTON_EMOJI_OPTIONS:
+        await callback.answer("نماد نامعتبر است.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(gender_button_emoji_key=key)
+    await state.set_state(EldoriaStartEmojiStates.waiting_emoji)
+    label, fallback = GENDER_BUTTON_EMOJI_OPTIONS[key]
+    if callback.message:
+        await callback.message.answer(f"ایموجی پرمیوم «{label} {fallback}» را ارسال کن. برای لغو /cancel را بفرست.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:premium_emoji:race_text:set:"))
+async def premium_emoji_race_text_set(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    key = callback.data.removeprefix("admin:premium_emoji:race_text:set:")
+    if key not in RACE_EMOJI_OPTIONS:
+        await callback.answer("نماد نامعتبر است.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(race_emoji_key=key)
+    await state.set_state(EldoriaStartEmojiStates.waiting_emoji)
+    label, fallback = RACE_EMOJI_OPTIONS[key]
+    if callback.message:
+        await callback.message.answer(f"ایموجی پرمیوم «{label} {fallback}» را ارسال کن. برای لغو /cancel را بفرست.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:premium_emoji:race_button:set:"))
+async def premium_emoji_race_button_set(callback: CallbackQuery, state: FSMContext):
+    if not _is_owner(callback.from_user.id):
+        await callback.answer("⛔ فقط مالک اصلی ربات به این بخش دسترسی دارد.", show_alert=True)
+        return
+    key = callback.data.removeprefix("admin:premium_emoji:race_button:set:")
+    if key not in RACE_BUTTON_EMOJI_OPTIONS:
+        await callback.answer("نماد نامعتبر است.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(race_button_emoji_key=key)
+    await state.set_state(EldoriaStartEmojiStates.waiting_emoji)
+    label, fallback = RACE_BUTTON_EMOJI_OPTIONS[key]
+    if callback.message:
+        await callback.message.answer(f"ایموجی پرمیوم «{label} {fallback}» را ارسال کن. برای لغو /cancel را بفرست.")
     await callback.answer()
 
 
@@ -216,12 +380,29 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
         None,
     )
     data = await state.get_data()
-    key = data.get("start_emoji_key") or data.get("gender_emoji_key")
-    options = {**START_EMOJI_OPTIONS, **GENDER_EMOJI_OPTIONS}
+    key = (
+        data.get("start_emoji_key") or data.get("gender_emoji_key")
+        or data.get("gender_button_emoji_key") or data.get("race_emoji_key")
+        or data.get("race_button_emoji_key")
+    )
+    options = {
+        **START_EMOJI_OPTIONS, **GENDER_EMOJI_OPTIONS,
+        **GENDER_BUTTON_EMOJI_OPTIONS, **RACE_EMOJI_OPTIONS,
+        **RACE_BUTTON_EMOJI_OPTIONS,
+    }
     if value.casefold() in {"/cancel", "لغو"}:
-        is_gender = bool(data.get("gender_emoji_key"))
+        if data.get("gender_button_emoji_key"):
+            target_keyboard = gender_button_emoji_keyboard()
+        elif data.get("race_emoji_key"):
+            target_keyboard = race_text_emoji_keyboard()
+        elif data.get("race_button_emoji_key"):
+            target_keyboard = race_button_emoji_keyboard()
+        elif data.get("gender_emoji_key"):
+            target_keyboard = gender_emoji_keyboard()
+        else:
+            target_keyboard = start_emoji_keyboard()
         await state.clear()
-        await message.answer("عملیات لغو شد.", reply_markup=gender_emoji_keyboard() if is_gender else start_emoji_keyboard())
+        await message.answer("عملیات لغو شد.", reply_markup=target_keyboard)
         return
     if key not in options:
         await state.clear()
@@ -236,13 +417,26 @@ async def premium_emoji_start_save(message: Message, state: FSMContext):
     from services.start_premium_emoji_service import set_start_emoji_id
 
     set_start_emoji_id(key, custom_emoji_id)
-    is_gender = key in GENDER_EMOJI_OPTIONS
+    if key in GENDER_BUTTON_EMOJI_OPTIONS:
+        target_keyboard = gender_button_emoji_keyboard()
+        usage = "از این پس روی دکمه‌های انتخاب جنسیت نمایش داده می‌شود."
+    elif key in RACE_EMOJI_OPTIONS:
+        target_keyboard = race_text_emoji_keyboard()
+        usage = "از این پس در متن انتخاب نژاد نمایش داده می‌شود."
+    elif key in RACE_BUTTON_EMOJI_OPTIONS:
+        target_keyboard = race_button_emoji_keyboard()
+        usage = "از این پس روی دکمه‌های انتخاب نژاد نمایش داده می‌شود."
+    elif key in GENDER_EMOJI_OPTIONS:
+        target_keyboard = gender_emoji_keyboard()
+        usage = "از این پس در پیام پیمان سرنوشت استفاده می‌شود."
+    else:
+        target_keyboard = start_emoji_keyboard()
+        usage = "از این پس در پیام شروع بازی استفاده می‌شود."
     label, fallback = options[key]
     await state.clear()
     await message.answer(
-        f"✅ ایموجی پرمیوم «{label} {fallback}» ذخیره شد.\n"
-        + ("از این پس در پیام پیمان سرنوشت استفاده می‌شود." if is_gender else "از این پس در پیام شروع بازی استفاده می‌شود."),
-        reply_markup=gender_emoji_keyboard() if is_gender else start_emoji_keyboard(),
+        f"✅ ایموجی پرمیوم «{label} {fallback}» ذخیره شد.\n{usage}",
+        reply_markup=target_keyboard,
     )
 
 
