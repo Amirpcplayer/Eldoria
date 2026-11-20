@@ -29,7 +29,7 @@ TEXT = {
         "name_taken": "༺ 🕯️ این نام پیش‌تر ثبت شده است 🕯️ ༻\n\n👤 نام انتخابی: {name}\n\nنام دیگری برگزین تا افسانه‌ات با هویتی یگانه آغاز شود.\n✍️ نام تازه را وارد کن:",
         "gender_intro": "༺ 📜 پیمان سرنوشت 📜 ༻\n\n✅ نام قهرمان در دفتر کهن ثبت شد: <b>{name}</b>\n\nاما پیش از آن‌که قدم در مسیر قدرت بگذاری، باید هویت قهرمانت را آشکار کنی.\n\n⚔️ انتخاب تو، بخشی از داستانی خواهد بود که در اِلدوریا رقم می‌زنی.\n\n⚧ <b>جنسیت قهرمانت را انتخاب کن:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ سرنوشت هنوز نوشته نشده است ✦",
         "incomplete": "اطلاعات ساخت قهرمان ناقص است؛ دوباره /start را بزن.",
-        "race_intro": "༺ 🧬 میراث نیاکان 🧬 ༻\n\n✅ جنسیت قهرمان: <b>{gender}</b>\n\nدر اعماق اِلدوریا، خون نیاکان هنوز قدرتی فراموش‌نشده در خود دارد. هر نژاد، ریشه‌ای متفاوت و داستانی ویژه دارد.\n\n🌑 انتخاب تو، نخستین گام در شکل‌گیری هویت قهرمانت خواهد بود.\n\n🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ میراثت را برگزین، قهرمان ✦",
+        "race_intro": "༺ میراث نیاکان ༻\n\n✅ جنسیت قهرمان: <b>{gender}</b>\n\nدر اعماق اِلدوریا، خون نیاکان هنوز قدرتی فراموش‌نشده در خود دارد. هر نژاد، ریشه‌ای متفاوت و داستانی ویژه دارد.\n\n🌑 انتخاب تو، نخستین گام در شکل‌گیری هویت قهرمانت خواهد بود.\n\n🧬 <b>نژاد قهرمانت را انتخاب کن:</b>\n\n━━━━━━━━━━━━━━━━━━\n✦ میراثت را برگزین، قهرمان ✦",
     },
     "en": {
         "text_only": "❌ Please enter your hero's name as text.",
@@ -116,8 +116,12 @@ async def character_gender_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(gender=gender_id)
+    race_intro = t["race_intro"].format(gender=escape(gender_name))
+    race_intro = race_intro.replace("✅", render_start_emoji("race_check", "✅"), 1)
+    race_intro = race_intro.replace("🌑", render_start_emoji("race_moon", "🌑"), 1)
+    race_intro = race_intro.replace("🧬", render_start_emoji("race_dna", "🧬"), 1)
     await callback.message.answer(
-        t["race_intro"].format(gender=escape(gender_name)),
+        race_intro,
         reply_markup=race_keyboard(language),
         parse_mode=ParseMode.HTML,
     )
