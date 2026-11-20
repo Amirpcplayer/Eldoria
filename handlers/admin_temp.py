@@ -81,6 +81,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="✨ ایموجی پرمیوم اِلدوریا",
+                    callback_data="admin:premium_emoji:open",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎨 مدیریت فن‌آرت شاپ",
                     callback_data="admin:fanart:manage",
                 )
@@ -137,6 +143,7 @@ def delegated_admin_keyboard() -> InlineKeyboardMarkup:
     blocked = {
         "admin:admins:add",
         "admin:admins:remove",
+        "admin:premium_emoji:open",
         "admin:fanart_gifts",
         "admin:fanart:manage",
         "admin:fanart:add",
