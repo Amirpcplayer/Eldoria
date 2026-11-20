@@ -205,7 +205,11 @@ async def premium_emoji_gender_menu(callback: CallbackQuery, state: FSMContext):
             "⚧ <b>ایموجی‌های انتخاب جنسیت</b>\n\n"
             "هر نماد را جداگانه انتخاب کن و ایموجی پرمیوم متناظر را از پنل تلگرام بفرست.\n"
             "شناسه‌ها ذخیره می‌شوند و در پیام پیمان سرنوشت نمایش داده خواهند شد.",
-            reply_markup=gender_emoji_keyboard(),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [_button("📝 ایموجی‌های متن", "admin:premium_emoji:gender")],
+                [_button("🎛️ ایموجی دکمه‌های مرد و زن", "admin:premium_emoji:gender_button")],
+                [_button("🔙 بازگشت", "admin:premium_emoji:open")],
+            ]),
             parse_mode="HTML",
         )
     await callback.answer()
