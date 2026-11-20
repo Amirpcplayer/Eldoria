@@ -63,6 +63,7 @@ RACE_EMOJI_OPTIONS = {
 
 RACE_BUTTON_EMOJI_OPTIONS = {
     "race_confirm_button": ("دکمه تأیید نژاد", "✅"),
+    "race_enter_game_button": ("دکمه ورود به بازی", "🎮"),
     "race_human_button": ("دکمه انسان", "👤"),
     "race_elf_button": ("دکمه الف", "🧝"),
     "race_demon_button": ("دکمه شیطان", "😈"),
