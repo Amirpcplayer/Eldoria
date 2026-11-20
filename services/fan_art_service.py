@@ -1,0 +1,481 @@
+from __future__ import annotations
+
+from decimal import Decimal
+from uuid import uuid4
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
+
+from database.database import AsyncSessionLocal
+from models.character import Character
+from models.fan_art import FanArt, FanArtOrder, FanArtOwnership
+
+
+PENDING_PAYMENT = "PENDING_PAYMENT"
+WAITING_RECEIPT = "WAITING_RECEIPT"
+UNDER_REVIEW = "UNDER_REVIEW"
+APPROVED = "APPROVED"
+REJECTED = "REJECTED"
+CANCELLED = "CANCELLED"
+
+ACTIVE_ORDER_STATUSES = (
+    PENDING_PAYMENT,
+    WAITING_RECEIPT,
+    UNDER_REVIEW,
+)
+
+
+async def get_active_fan_arts() -> list[FanArt]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArt)
+            .where(FanArt.is_active.is_(True))
+            .order_by(FanArt.display_order.asc(), FanArt.id.asc())
+        )
+        return list(result.scalars().all())
+
+
+async def get_fan_art(fan_art_id: int) -> FanArt | None:
+    async with AsyncSessionLocal() as session:
+        return await session.scalar(
+            select(FanArt).where(FanArt.id == fan_art_id)
+        )
+
+
+async def owns_fan_art(telegram_id: int, fan_art_id: int) -> bool:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArtOwnership.id)
+            .where(
+                FanArtOwnership.telegram_id == telegram_id,
+                FanArtOwnership.fan_art_id == fan_art_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+
+async def get_owned_fan_arts(telegram_id: int) -> list[FanArt]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArt)
+            .join(FanArtOwnership, FanArtOwnership.fan_art_id == FanArt.id)
+            .where(FanArtOwnership.telegram_id == telegram_id)
+            .order_by(
+                FanArtOwnership.acquired_at.desc(),
+                FanArt.id.desc(),
+            )
+        )
+        return list(result.scalars().all())
+
+
+async def get_active_fan_art(telegram_id: int) -> FanArt | None:
+    """Return the player's selected Fan Art only when they still own it."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArt)
+            .join(
+                FanArtOwnership,
+                FanArtOwnership.fan_art_id == FanArt.id,
+            )
+            .join(
+                Character,
+                Character.active_fan_art_id == FanArt.id,
+            )
+            .where(
+                Character.telegram_id == telegram_id,
+                FanArtOwnership.telegram_id == telegram_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+async def set_active_fan_art(
+    telegram_id: int,
+    fan_art_id: int,
+) -> tuple[bool, str]:
+    """Select an owned Fan Art as the player's active profile artwork."""
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == telegram_id).with_for_update()
+        )
+        if character is None:
+            return False, "❌ قهرمان پیدا نشد."
+
+        ownership = await session.scalar(
+            select(FanArtOwnership.id)
+            .where(
+                FanArtOwnership.telegram_id == telegram_id,
+                FanArtOwnership.fan_art_id == fan_art_id,
+            )
+            .limit(1)
+        )
+        if ownership is None:
+            return False, "❌ این Fan Art متعلق به شما نیست."
+
+        fan_art = await session.scalar(
+            select(FanArt).where(FanArt.id == fan_art_id)
+        )
+        if fan_art is None:
+            return False, "❌ Fan Art پیدا نشد."
+
+        character.active_fan_art_id = fan_art_id
+        name = fan_art.name
+        await session.commit()
+
+        return True, f"✅ Fan Art «{name}» فعال شد."
+
+
+async def clear_active_fan_art(telegram_id: int) -> tuple[bool, str]:
+    """Remove the active Fan Art without affecting ownership."""
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(
+            select(Character).where(Character.telegram_id == telegram_id).with_for_update()
+        )
+        if character is None:
+            return False, "❌ قهرمان پیدا نشد."
+
+        character.active_fan_art_id = None
+        await session.commit()
+        return True, "✅ Fan Art فعال حذف شد."
+
+
+async def get_active_order(telegram_id: int) -> FanArtOrder | None:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.telegram_id == telegram_id,
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            )
+            .order_by(FanArtOrder.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+async def create_order(telegram_id: int, fan_art_id: int) -> FanArtOrder:
+    async with AsyncSessionLocal() as session:
+        # Serialize even when there is no existing order/ownership row to lock.
+        character = await session.scalar(
+            select(Character.id).where(Character.telegram_id == telegram_id).with_for_update()
+        )
+        if character is None:
+            raise ValueError("CHARACTER_NOT_FOUND")
+        active_result = await session.execute(
+            select(FanArtOrder)
+            .where(
+                FanArtOrder.telegram_id == telegram_id,
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            )
+            .limit(1)
+        )
+        if active_result.scalar_one_or_none() is not None:
+            raise ValueError("ACTIVE_ORDER_EXISTS")
+
+        fan_art = await session.scalar(
+            select(FanArt).where(
+                FanArt.id == fan_art_id,
+                FanArt.is_active.is_(True),
+            )
+        )
+        if fan_art is None:
+            raise ValueError("FAN_ART_NOT_FOUND")
+
+        if fan_art.is_limited and (fan_art.stock is None or fan_art.stock <= 0):
+            raise ValueError("OUT_OF_STOCK")
+
+        ownership = await session.scalar(
+            select(FanArtOwnership.id)
+            .where(
+                FanArtOwnership.telegram_id == telegram_id,
+                FanArtOwnership.fan_art_id == fan_art_id,
+            )
+            .limit(1)
+        )
+        if ownership is not None:
+            raise ValueError("ALREADY_OWNED")
+
+        # Preserve the old 18-character length, without millisecond collisions.
+        order_code = f"ELD-{uuid4().hex[:14].upper()}"
+
+        order = FanArtOrder(
+            order_code=order_code,
+            telegram_id=telegram_id,
+            fan_art_id=fan_art.id,
+            price_snapshot=Decimal(fan_art.price),
+            status=PENDING_PAYMENT,
+        )
+        session.add(order)
+        await session.commit()
+        await session.refresh(order)
+
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order.id)
+        )
+        return result.scalar_one()
+
+
+async def set_waiting_receipt(order_id: int, telegram_id: int) -> FanArtOrder | None:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.telegram_id == telegram_id,
+                FanArtOrder.status == PENDING_PAYMENT,
+            ).with_for_update()
+        )
+        if order is None:
+            return None
+
+        order.status = WAITING_RECEIPT
+        await session.commit()
+
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def attach_receipt(
+    order_id: int,
+    telegram_id: int,
+    receipt_file_id: str,
+) -> FanArtOrder | None:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.telegram_id == telegram_id,
+                FanArtOrder.status == WAITING_RECEIPT,
+            ).with_for_update()
+        )
+        if order is None:
+            return None
+
+        order.receipt_file_id = receipt_file_id
+        order.status = UNDER_REVIEW
+        await session.commit()
+
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def cancel_active_order(telegram_id: int) -> bool:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .where(
+                FanArtOrder.telegram_id == telegram_id,
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            )
+            .order_by(FanArtOrder.id.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        if order is None:
+            return False
+
+        order.status = CANCELLED
+        await session.commit()
+        return True
+
+
+async def cancel_all_active_orders() -> int:
+    """Cancel every active Fan Art order while preserving order history."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(FanArtOrder).where(
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES)
+            ).order_by(FanArtOrder.id).with_for_update()
+        )
+        orders = list(result.scalars().all())
+        for order in orders:
+            order.status = CANCELLED
+        if orders:
+            await session.commit()
+        return len(orders)
+
+
+async def approve_order(order_id: int) -> FanArtOrder | None:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.status == UNDER_REVIEW,
+            ).with_for_update()
+        )
+        if order is None:
+            return None
+
+        # Lock order -> character -> catalog -> ownership consistently.
+        character = await session.scalar(
+            select(Character.id).where(Character.telegram_id == order.telegram_id).with_for_update()
+        )
+        if character is None:
+            raise ValueError("CHARACTER_NOT_FOUND")
+        fan_art = await session.scalar(
+            select(FanArt).where(FanArt.id == order.fan_art_id)
+            .with_for_update().execution_options(populate_existing=True)
+        )
+        if fan_art is None:
+            raise ValueError("FAN_ART_NOT_FOUND")
+
+        ownership = await session.scalar(
+            select(FanArtOwnership.id)
+            .where(
+                FanArtOwnership.telegram_id == order.telegram_id,
+                FanArtOwnership.fan_art_id == order.fan_art_id,
+            )
+            .limit(1)
+        )
+
+        if ownership is None:
+            if fan_art.is_limited:
+                if fan_art.stock is None or fan_art.stock <= 0:
+                    raise ValueError("OUT_OF_STOCK")
+                fan_art.stock -= 1
+
+            session.add(
+                FanArtOwnership(
+                    telegram_id=order.telegram_id,
+                    fan_art_id=order.fan_art_id,
+                    order_id=order.id,
+                )
+            )
+
+        order.status = APPROVED
+        await session.commit()
+
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def reject_order(order_id: int, reason: str) -> FanArtOrder | None:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.status == UNDER_REVIEW,
+            ).with_for_update()
+        )
+        if order is None:
+            return None
+
+        order.status = REJECTED
+        order.rejection_reason = reason
+        await session.commit()
+
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def get_order_for_admin(identifier: str) -> FanArtOrder | None:
+    """Find an order by its transfer/order code or numeric database ID."""
+    value = identifier.strip()
+    if not value:
+        return None
+    conditions = [func.lower(FanArtOrder.order_code) == value.lower()]
+    if value.isdigit():
+        conditions.append(FanArtOrder.id == int(value))
+    async with AsyncSessionLocal() as session:
+        return await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(or_(*conditions))
+            .limit(1)
+        )
+
+
+async def admin_cancel_order(order_id: int) -> FanArtOrder | None:
+    """Soft-cancel an active order; preserve payment history."""
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(
+                FanArtOrder.id == order_id,
+                FanArtOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            ).with_for_update()
+        )
+        if order is None:
+            return None
+        order.status = CANCELLED
+        await session.commit()
+        result = await session.execute(
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .where(FanArtOrder.id == order_id)
+        )
+        return result.scalar_one()
+
+
+async def get_orders(status: str | None = None, limit: int | None = None, offset: int = 0) -> list[FanArtOrder]:
+    async with AsyncSessionLocal() as session:
+        query = (
+            select(FanArtOrder)
+            .options(selectinload(FanArtOrder.fan_art))
+            .order_by(FanArtOrder.id.desc())
+        )
+        if status is not None:
+            query = query.where(FanArtOrder.status == status)
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+async def sell_owned_fan_art(telegram_id: int, fan_art_id: int) -> tuple[bool, str]:
+    """Sell an owned Fan Art for the gold equivalent of its real price.
+    
+    Conversion rate: 50,000 toman = 2,000 gold. This intentionally derives
+    the value from price so older records cannot retain a mismatched value_gold.
+    """
+    async with AsyncSessionLocal() as session:
+        character = await session.scalar(select(Character).where(Character.telegram_id == telegram_id).with_for_update())
+        if character is None: return False, "قهرمان پیدا نشد."
+        fan_art = await session.scalar(select(FanArt).where(FanArt.id == fan_art_id).with_for_update())
+        if fan_art is None: return False, "فن‌آرت پیدا نشد."
+        ownership = await session.scalar(select(FanArtOwnership).where(FanArtOwnership.telegram_id == telegram_id, FanArtOwnership.fan_art_id == fan_art_id).with_for_update())
+        if ownership is None: return False, "این فن‌آرت در مجموعهٔ تو نیست."
+        value = max(0, (int(fan_art.price) * 2000) // 50000)
+        if value <= 0: return False, "قیمت این فن‌آرت برای تبدیل به طلا کافی نیست."
+        old_gold = int(character.gold or 0)
+        if old_gold + value > 2_147_483_647:
+            return False, "موجودی طلا به سقف مجاز می‌رسد؛ فن‌آرت فروخته نشد."
+        character.gold = old_gold + value
+        received = int(character.gold) - old_gold
+        if character.active_fan_art_id == fan_art_id: character.active_fan_art_id = None
+        name = fan_art.name
+        await session.delete(ownership)
+        await session.commit()
+        return True, f"فن‌آرت «{name}» فروخته شد؛ +{received:,} طلا دریافت کردی."

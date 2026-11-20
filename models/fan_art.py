@@ -1,0 +1,213 @@
+from __future__ import annotations
+from utils.clock import utcnow_naive
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from database.database import Base
+
+
+class FanArt(Base):
+    __tablename__ = "fan_arts"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+    )
+
+    description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    image_file_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    rarity: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    value_gold: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    is_limited: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    stock: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    display_order: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+    orders: Mapped[list["FanArtOrder"]] = relationship(
+        "FanArtOrder",
+        back_populates="fan_art",
+        cascade="all, delete-orphan",
+    )
+
+    ownerships: Mapped[list["FanArtOwnership"]] = relationship(
+        "FanArtOwnership",
+        back_populates="fan_art",
+        cascade="all, delete-orphan",
+    )
+
+
+class FanArtOrder(Base):
+    __tablename__ = "fan_art_orders"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    order_code: Mapped[str] = mapped_column(
+        String(40),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        index=True,
+    )
+
+    fan_art_id: Mapped[int] = mapped_column(
+        ForeignKey("fan_arts.id"),
+        nullable=False,
+    )
+
+    price_snapshot: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    receipt_file_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    rejection_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    fan_art: Mapped["FanArt"] = relationship(
+        "FanArt",
+        back_populates="orders",
+    )
+
+
+class FanArtOwnership(Base):
+    __tablename__ = "fan_art_ownerships"
+    __table_args__ = (UniqueConstraint("telegram_id", "fan_art_id", name="uq_fan_art_owner_art"),)
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        index=True,
+    )
+
+    fan_art_id: Mapped[int] = mapped_column(
+        ForeignKey("fan_arts.id"),
+        nullable=False,
+    )
+
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("fan_art_orders.id"),
+        nullable=True,
+    )
+
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+    fan_art: Mapped["FanArt"] = relationship(
+        "FanArt",
+        back_populates="ownerships",
+    )
+
+class GroupFanArtSpawn(Base):
+    """Current collectible fan-art spawn for each Telegram group."""
+    __tablename__ = "group_fan_art_spawns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    fan_art_id: Mapped[int] = mapped_column(ForeignKey("fan_arts.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    spawned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive, index=True)
+    claimed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

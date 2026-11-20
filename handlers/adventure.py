@@ -1,0 +1,587 @@
+from aiogram import F, Router
+from aiogram.types import CallbackQuery
+from sqlalchemy import select
+
+from database.database import AsyncSessionLocal
+from models.monster import Monster
+
+from keyboards.adventure import (
+    adventure_main_keyboard,
+    adventure_areas_keyboard,
+    adventure_area_keyboard,
+    adventure_encounter_keyboard,
+    adventure_enemies_keyboard,
+    adventure_enemy_keyboard,
+)
+from keyboards.main_menu import main_menu_keyboard
+
+from services.adventure_service import (
+    get_character,
+    get_active_areas,
+    get_area,
+    get_area_enemies,
+    get_enemy,
+    is_area_unlocked,
+)
+
+from services.panel_image_service import show_panel as _show_panel
+from services.language_service import get_language
+
+
+router = Router()
+
+_ADVENTURE_TEXT = {
+"en": [
+("ماجراجویی","Adventure"),("در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.","Explore the lands of Eldoria."),("سطح قهرمان:","Hero level:"),("یک بخش را انتخاب کن:","Choose a section:"),("مناطق ماجراجویی","Adventure Areas"),("در حال حاضر هیچ منطقه‌ای فعال نیست.","No adventure areas are currently active."),("سطح فعلی تو:","Your current level:"),("منطقه‌ای را برای مشاهده جزئیات انتخاب کن.","Select an area to view details."),("قابل ورود","Available"),("قفل","Locked"),("سطح پیشنهادی:","Recommended level:"),("محدوده سطح:","Level range:"),("پاداش پایه","Base rewards"),("آیتم‌های احتمالی مبارزه","Possible battle drops"),("غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود.","Each enemy's special loot and drop chance are shown on that enemy's page."),("برای ورود حداقل Level","Minimum level required to enter:"),("لازم است.","is required."),("وارد منطقه شدی.","You entered the area."),("در حال حاضر هیچ دشمن فعالی در این منطقه وجود ندارد.","There are currently no active enemies in this area."),("دشمنان این منطقه را مشاهده کن و حریف خود را انتخاب کن.","View the enemies in this area and choose your opponent."),("دشمنان","Enemies"),("در حال حاضر دشمنی در این منطقه ثبت نشده است.","No enemies are currently listed in this area."),("حریف موردنظر را انتخاب کن:","Choose your opponent:"),("دشمن پیدا نشد.","Enemy not found."),("منطقه دشمن پیدا نشد.","Enemy's area not found."),("پاداش پیروزی","Victory rewards"),("غنیمت‌های احتمالی این مبارزه","Possible loot from this battle"),("مواد جانبی","Additional materials"),("(در هر مبارزه یکی انتخاب می‌شود):","(one is selected per battle):"),("شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.","These are base chances; the Explorer Scroll and hero luck can increase drop chances."),("❌ قهرمان پیدا نشد.","❌ Hero not found."),("❌ منطقه نامعتبر است.","❌ Invalid area."),("❌ منطقه پیدا نشد.","❌ Area not found."),("❌ دشمن نامعتبر است.","❌ Invalid enemy."),("🔒 این منطقه برای تو قفل است.","🔒 This area is locked for you.")
+],
+"ru": [
+("ماجراجویی","Приключение"),("در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.","Исследуй земли Эльдории."),("سطح قهرمان:","Уровень героя:"),("یک بخش را انتخاب کن:","Выбери раздел:"),("مناطق ماجراجویی","Области приключений"),("در حال حاضر هیچ منطقه‌ای فعال نیست.","Сейчас нет активных областей приключений."),("سطح فعلی تو:","Твой текущий уровень:"),("منطقه‌ای را برای مشاهده جزئیات انتخاب کن.","Выбери область, чтобы увидеть подробности."),("قابل ورود","Доступно"),("قفل","Закрыто"),("سطح پیشنهادی:","Рекомендуемый уровень:"),("محدوده سطح:","Диапазон уровней:"),("پاداش پایه","Базовые награды"),("آیتم‌های احتمالی مبارزه","Возможная добыча в бою"),("غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود.","Особая добыча каждого врага и шанс её получения указаны на странице врага."),("برای ورود حداقل Level","Для входа требуется минимум уровень"),("لازم است.","."),("وارد منطقه شدی.","Ты вошёл в область."),("در حال حاضر هیچ دشمن فعالی در این منطقه وجود ندارد.","В этой области сейчас нет активных врагов."),("دشمنان این منطقه را مشاهده کن و حریف خود را انتخاب کن.","Посмотри врагов этой области и выбери противника."),("دشمنان","Враги"),("در حال حاضر دشمنی در این منطقه ثبت نشده است.","В этой области пока нет зарегистрированных врагов."),("حریف موردنظر را انتخاب کن:","Выбери противника:"),("دشمن پیدا نشد.","Враг не найден."),("منطقه دشمن پیدا نشد.","Область врага не найдена."),("پاداش پیروزی","Награда за победу"),("غنیمت‌های احتمالی این مبارزه","Возможная добыча в этом бою"),("مواد جانبی","Дополнительные материалы"),("(در هر مبارزه یکی انتخاب می‌شود):","(в каждом бою выбирается один предмет):"),("شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.","Это базовые шансы; свиток исследователя и удача героя могут повысить шанс добычи."),("❌ قهرمان پیدا نشد.","❌ Герой не найден."),("❌ منطقه نامعتبر است.","❌ Некорректная область."),("❌ منطقه پیدا نشد.","❌ Область не найдена."),("❌ دشمن نامعتبر است.","❌ Некорректный враг."),("🔒 این منطقه برای تو قفل است.","🔒 Эта область закрыта.")
+]
+}
+def _localize_adventure_text(text: str, language: str) -> str:
+    if language not in ("en", "ru"): return text
+    for source, translated in _ADVENTURE_TEXT[language]:
+        text = text.replace(source, translated)
+    return text
+
+async def show_panel(*, callback, panel_name, text, reply_markup):
+    language = await get_language(callback.from_user.id)
+    text = _localize_adventure_text(text, language)
+    if language in ("en", "ru") and reply_markup is not None:
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        rows = []
+        for row in reply_markup.inline_keyboard:
+            translated_row = []
+            for b in row:
+                translated_row.append(InlineKeyboardButton(text=_localize_adventure_text(b.text, language), callback_data=b.callback_data, url=b.url, web_app=b.web_app, login_url=b.login_url, switch_inline_query=b.switch_inline_query, switch_inline_query_current_chat=b.switch_inline_query_current_chat, callback_game=b.callback_game, pay=b.pay, icon_custom_emoji_id=b.icon_custom_emoji_id, style=b.style))
+            rows.append(translated_row)
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=rows)
+    return await _show_panel(callback=callback, panel_name=panel_name, text=text, reply_markup=reply_markup)
+
+
+
+async def _adventure_drop_preview(enemy, character) -> str:
+    """Describe every item that can drop from this enemy, matching the real loot logic."""
+    family = "default"
+    if enemy.monster_id:
+        async with AsyncSessionLocal() as session:
+            monster = await session.scalar(
+                select(Monster).where(Monster.id == enemy.monster_id)
+            )
+        if monster:
+            family = (monster.family or "").lower()
+            variant = (monster.variant or "").lower()
+            if any(token in family or token in variant for token in ("dragon", "drake")):
+                family = "dragon"
+
+    family_drops = {
+        "wolf": ("🦴 پنجهٔ گرگ", 0.42),
+        "goblin": ("⛏️ تکه‌آهن گابلین", 0.36),
+        "golem": ("🗃 سنگ جادویی", 0.30),
+        "dragon": ("🔥 فلس اژدها", 0.16),
+        "default": ("🌿 گیاه اِلدوریا", 0.24),
+    }
+    family_name, family_chance = family_drops.get(family, family_drops["default"])
+    luck_bonus = 1 + min(int(getattr(character, "luck", 0) or 0), 100) / 250
+    family_chance = min(0.8, family_chance * luck_bonus)
+
+    # The real reward logic chooses one of these five materials at random per fight.
+    gathering_drops = [
+        ("🪵 چوب اِلدوری", 0.12),
+        ("⛓️ سنگ آهن", 0.12),
+        ("💎 کریستال جادویی", 0.055),
+        ("🌿 گیاه اِلدوریا", 0.16),
+        ("🗃 سنگ جادویی", 0.08 if family == "golem" else 0.025),
+    ]
+    lines = [
+        "🎁 <b>غنیمت‌های احتمالی این مبارزه</b>",
+        f"• {family_name} — احتمال پایه: حدود {family_chance * 100:.1f}٪",
+        "",
+        "🔎 <b>مواد جانبی</b> (در هر مبارزه یکی انتخاب می‌شود):",
+    ]
+    for name, chance in gathering_drops:
+        actual_chance = chance / len(gathering_drops)
+        lines.append(f"• {name} — حدود {actual_chance * 100:.1f}٪")
+    lines.append("")
+    lines.append("💡 شانس‌ها پایه هستند؛ طومار کاوشگر و شانس قهرمان می‌توانند شانس دریافت را افزایش دهند.")
+    return "\n".join(lines)
+
+
+async def show_adventure_menu(
+    callback: CallbackQuery,
+):
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    text = (
+        "🗺️ <b>ماجراجویی</b>\n\n"
+        "🌌 در سرزمین‌های اِلدوریا به ماجراجویی بپرداز.\n\n"
+        f"⭐ سطح قهرمان: {character.level}\n\n"
+        "یک بخش را انتخاب کن:"
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_main_keyboard(),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data == "menu:adventure"
+)
+async def adventure_menu(
+    callback: CallbackQuery,
+):
+    await show_adventure_menu(callback)
+
+
+@router.callback_query(
+    F.data == "adventure:menu"
+)
+async def adventure_menu_back(
+    callback: CallbackQuery,
+):
+    await show_adventure_menu(callback)
+
+
+@router.callback_query(
+    F.data == "adventure:areas"
+)
+async def adventure_areas(
+    callback: CallbackQuery,
+):
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    areas = await get_active_areas()
+
+    if not areas:
+        text = (
+            "🌲 <b>مناطق ماجراجویی</b>\n\n"
+            "🗃 در حال حاضر هیچ منطقه‌ای فعال نیست."
+        )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
+            reply_markup=adventure_main_keyboard(),
+        )
+
+        await callback.answer()
+        return
+
+    text = (
+        "🌲 <b>مناطق ماجراجویی</b>\n\n"
+        f"⭐ سطح فعلی تو: {character.level}\n\n"
+        "🔓 منطقه‌ای را برای مشاهده جزئیات انتخاب کن."
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_areas_keyboard(areas),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith("adventure:area:")
+)
+async def adventure_area_details(
+    callback: CallbackQuery,
+):
+    try:
+        area_id = int(
+            callback.data.split(":")[2]
+        )
+    except (ValueError, IndexError):
+        await callback.answer(
+            "❌ منطقه نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    area = await get_area(area_id)
+
+    if area is None:
+        await callback.answer(
+            "❌ منطقه پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    unlocked = is_area_unlocked(
+        character,
+        area,
+    )
+
+    status = (
+        "🔓 قابل ورود"
+        if unlocked
+        else "🔒 قفل"
+    )
+
+    text = (
+        f"{area.name}\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"📖 {area.description}\n\n"
+        f"{status}\n"
+        f"⭐ سطح پیشنهادی: {area.recommended_level}\n"
+        f"📈 محدوده سطح: {area.min_level} تا {area.max_level}\n\n"
+        "🎁 <b>پاداش پایه</b>\n"
+        f"✨ XP: +{area.xp_reward}\n"
+        f"💰 Gold: +{area.gold_reward}"
+    )
+
+    # Materials are chance-based battle drops, not guaranteed area rewards.
+    # Display the actual shared gathering pool; enemy-specific loot is
+    # detailed on each enemy's page by _adventure_drop_preview.
+    enemies = await get_area_enemies(area.id)
+    if enemies:
+        text += (
+            "\n\n🗃 <b>آیتم‌های احتمالی مبارزه</b>\n"
+            "• 🪵 چوب اِلدوری\n"
+            "• ⛓️ سنگ آهن\n"
+            "• 💎 کریستال جادویی\n"
+            "• 🌿 گیاه اِلدوریا\n"
+            "• 🗃 سنگ جادویی\n"
+            "🔎 غنیمت ویژهٔ هر دشمن و احتمال دریافت آن در صفحهٔ همان دشمن نمایش داده می‌شود."
+        )
+
+    if not unlocked:
+        text += (
+            "\n\n"
+            f"🔒 برای ورود حداقل Level {area.min_level} "
+            "لازم است."
+        )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_area_keyboard(
+            area.id,
+            unlocked,
+        ),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith("adventure:start:")
+)
+async def adventure_start(
+    callback: CallbackQuery,
+):
+    try:
+        area_id = int(
+            callback.data.split(":")[2]
+        )
+    except (ValueError, IndexError):
+        await callback.answer(
+            "❌ منطقه نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    area = await get_area(area_id)
+
+    if area is None:
+        await callback.answer(
+            "❌ منطقه پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    if not is_area_unlocked(
+        character,
+        area,
+    ):
+        await callback.answer(
+            f"🔒 برای ورود به این منطقه "
+            f"حداقل Level {area.min_level} لازم است.",
+            show_alert=True,
+        )
+        return
+
+    enemies = await get_area_enemies(
+        area.id
+    )
+
+    if not enemies:
+        text = (
+            f"⚔️ <b>{area.name}</b>\n\n"
+            "🌌 وارد منطقه شدی.\n\n"
+            "🗃 در حال حاضر هیچ دشمن فعالی "
+            "در این منطقه وجود ندارد."
+        )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
+            reply_markup=adventure_area_keyboard(
+                area.id,
+                True,
+            ),
+        )
+
+        await callback.answer()
+        return
+
+    text = (
+        f"⚔️ <b>{area.name}</b>\n\n"
+        "🌌 وارد منطقه شدی.\n\n"
+        " دشمنان این منطقه را مشاهده کن "
+        "و حریف خود را انتخاب کن."
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_encounter_keyboard(
+            area.id,
+        ),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith("adventure:enemies:")
+)
+async def adventure_enemies(
+    callback: CallbackQuery,
+):
+    try:
+        area_id = int(
+            callback.data.split(":")[2]
+        )
+    except (ValueError, IndexError):
+        await callback.answer(
+            "❌ منطقه نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    area = await get_area(area_id)
+
+    if area is None:
+        await callback.answer(
+            "❌ منطقه پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    if not is_area_unlocked(
+        character,
+        area,
+    ):
+        await callback.answer(
+            "🔒 این منطقه برای تو قفل است.",
+            show_alert=True,
+        )
+        return
+
+    enemies = await get_area_enemies(
+        area.id
+    )
+
+    if not enemies:
+        text = (
+            f" <b>دشمنان {area.name}</b>\n\n"
+            "در حال حاضر دشمنی در این منطقه ثبت نشده است."
+        )
+
+        await show_panel(
+            callback=callback,
+            panel_name="adventure",
+            text=text,
+            reply_markup=adventure_area_keyboard(
+                area.id,
+                True,
+            ),
+        )
+
+        await callback.answer()
+        return
+
+    text = (
+        f" <b>دشمنان {area.name}</b>\n\n"
+        "حریف موردنظر را انتخاب کن:"
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_enemies_keyboard(
+            enemies,
+            area.id,
+        ),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith("adventure:enemy:")
+)
+async def adventure_enemy_details(
+    callback: CallbackQuery,
+):
+    try:
+        enemy_id = int(
+            callback.data.split(":")[2]
+        )
+    except (ValueError, IndexError):
+        await callback.answer(
+            "❌ دشمن نامعتبر است.",
+            show_alert=True,
+        )
+        return
+
+    enemy = await get_enemy(enemy_id)
+
+    if enemy is None:
+        await callback.answer(
+            "❌ دشمن پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    area = await get_area(enemy.area_id)
+
+    if area is None:
+        await callback.answer(
+            "❌ منطقه دشمن پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    character = await get_character(
+        callback.from_user.id
+    )
+
+    if character is None:
+        await callback.answer(
+            "❌ قهرمان پیدا نشد.",
+            show_alert=True,
+        )
+        return
+
+    if not is_area_unlocked(
+        character,
+        area,
+    ):
+        await callback.answer(
+            "🔒 این منطقه برای تو قفل است.",
+            show_alert=True,
+        )
+        return
+
+    drop_preview = await _adventure_drop_preview(enemy, character)
+    text = (
+        f"⚔️ <b>{enemy.name}</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"📖 {enemy.description}\n\n"
+        f"⭐ Level: {enemy.level}\n"
+        f"❤️ HP: {enemy.hp:,}\n"
+        f"⚔️ Attack: {enemy.attack:,}\n"
+        f"🛡️ Defense: {enemy.defense:,}\n\n"
+        "🎁 <b>پاداش پیروزی</b>\n"
+        f"✨ XP: +{enemy.xp_reward:,}\n"
+        f"💰 Gold: +{enemy.gold_reward:,}\n\n"
+        f"{drop_preview}"
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="adventure",
+        text=text,
+        reply_markup=adventure_enemy_keyboard(
+            enemy.id,
+            area.id,
+        ),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data == "adventure:back"
+)
+async def adventure_back(
+    callback: CallbackQuery,
+):
+    text = (
+        "🎮 <b>منوی اصلی World Eldoria</b>\n\n"
+        "🌌 ماجراجویی تو در اِلدوریا ادامه دارد..."
+    )
+
+    await show_panel(
+        callback=callback,
+        panel_name="main_menu",
+        text=text,
+        reply_markup=main_menu_keyboard(),
+    )
+
+    await callback.answer()
