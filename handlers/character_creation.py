@@ -11,6 +11,7 @@ from models.character import Character
 from states.character import CharacterCreation
 from keyboards.character import gender_keyboard, race_keyboard
 from services.language_service import get_language
+from services.start_premium_emoji_service import render_start_emoji
 
 router = Router()
 
@@ -89,8 +90,14 @@ async def character_name_handler(message: Message, state: FSMContext):
 
     await state.update_data(name=name)
     await state.set_state(CharacterCreation.waiting_for_gender)
+    gender_intro = t["gender_intro"].format(name=escape(name))
+    if language == "fa":
+        gender_intro = gender_intro.replace("༺ 📜 پیمان سرنوشت 📜 ༻", "༺ پیمان سرنوشت ༻")
+    gender_intro = gender_intro.replace("✅", render_start_emoji("gender_check", "✅"), 1)
+    gender_intro = gender_intro.replace("⚔️", render_start_emoji("gender_sword", "⚔️"), 1)
+    gender_intro = gender_intro.replace("⚧", render_start_emoji("gender_symbol", "⚧"), 1)
     await message.answer(
-        t["gender_intro"].format(name=escape(name)),
+        gender_intro,
         reply_markup=gender_keyboard(language),
         parse_mode=ParseMode.HTML,
     )
